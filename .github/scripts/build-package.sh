@@ -14,6 +14,28 @@ pacman -Syu --noconfirm
 # by the user it runs as instead
 chown -R builder:builder .
 
+# A package we author has no upstream release to take a version from, and a
+# hardcoded one silently strands every update: publishing edited content at
+# an unchanged pkgver means pacman -Syu sees the same version and does
+# nothing. Stamp the version derived from the package's own git history
+# instead - date of the last commit, count of all commits touching it, both
+# monotonic. Vendored packages keep upstream's version and are left alone.
+version=$(python3 scripts/package_version.py "$pkg_dir") && stamp=0 || stamp=$?
+case "$stamp" in
+0)
+  echo "## $pkg_dir: stamping version $version"
+  sed -i -E "s/^pkgver=.*/pkgver=${version%-*}/; s/^pkgrel=.*/pkgrel=${version##*-}/" \
+    "$pkg_dir/PKGBUILD"
+  ;;
+1) ;; # vendored: keeps upstream's version
+*)
+  # a broken or shallow checkout. Building anyway would publish a wrong
+  # version, which either strands the update or overwrites a package.
+  echo "::error::cannot derive a version for $pkg_dir"
+  exit 1
+  ;;
+esac
+
 cd "$pkg_dir"
 
 # a PKGBUILD that verifies an upstream release signature needs that author's

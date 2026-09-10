@@ -35,6 +35,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 import tarfile
 import urllib.error
@@ -129,6 +130,22 @@ def declared_version(text: str) -> str | None:
     return f"{epoch}:{pkgver}-{pkgrel}" if epoch else f"{pkgver}-{pkgrel}"
 
 
+def authored_version(directory: Path) -> str | None:
+    """The version a package we author will be built with.
+
+    build-package.sh stamps this into the PKGBUILD from the package's git
+    history, so the PKGBUILD on disk still carries the previous one. Asking
+    the same question here is what keeps the skip honest: without it a
+    payload edit would compare the OLD version against the published OLD
+    version, match, and skip the very rebuild that edit needs.
+    """
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "package_version.py"), str(directory)],
+        capture_output=True, text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
 def source_hash(directory: Path) -> str:
     """A digest of everything in the package directory.
 
@@ -194,7 +211,7 @@ def main() -> int:
             "pkgname": pkgname_of(pkgbuild, text),
             "any": field(ARCH_RE, text) == ["any"],
             "depends": field(DEPENDS_RE, text),
-            "version": declared_version(text),
+            "version": authored_version(pkgbuild.parent) or declared_version(text),
             "source": source_hash(pkgbuild.parent),
         }
 

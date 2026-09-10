@@ -62,7 +62,14 @@ Packages are built and published by `.github/workflows/build-packages.yml`,
 in dependency waves: a package that needs another built here waits for it to
 be published first.
 
-`packages/*/PKGBUILD` are ours. The rest are vendored from the AUR, because
+`packages/ashlaros-*` are ours, and their versions are derived rather than
+written down: `pkgver` is the date of the last commit touching the package
+directory and `pkgrel` the number of such commits, both stamped at build
+time by `scripts/package_version.py`. Editing a config under
+`packages/ashlaros-settings/payload/` and committing is therefore the whole
+release process — the version moves, so `pacman -Syu` sees an upgrade. A
+hardcoded version would strand that edit: pacman compares versions, not
+contents. The rest are vendored from the AUR, because
 an AUR PKGBUILD can be force-pushed between two builds of the same version.
 `packages/upstreams.yml` records where each came from — the AUR for most,
 GitHub for three — and `.github/workflows/track-upstreams.yml` checks all of
