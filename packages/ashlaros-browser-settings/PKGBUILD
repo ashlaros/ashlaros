@@ -22,10 +22,12 @@ sha256sums=('aff36dc3c0ae45a95844d59dd7517525c30c5ee0832c59fab0236a0c97a412b3'
             'cbf247e3cdd6c318c7985ddf7ce489ce56a1654d717a9691aaa689c6a5f24168')
 package() {
   # firefox overwrites its own distribution directory on every upgrade, so
-  # the settings live in /etc and the post-transaction hook puts them back
+  # the settings live in /etc and the post-transaction hook puts them back.
+  # This package must not own the installed path as well: firefox owns
+  # /usr/lib/firefox/distribution/distribution.ini, and two packages owning
+  # one file is a failed transaction, not an override - it failed pacstrap
+  # with "exists in both 'ashlaros-browser-settings' and 'firefox'".
   install -Dm644 firefox-distribution.ini "${pkgdir}/etc/ashlaros-firefox.ini"
-  install -Dm644 firefox-distribution.ini \
-    "${pkgdir}/usr/lib/firefox/distribution/distribution.ini"
   install -Dm644 all-ashlaros.js \
     "${pkgdir}/usr/lib/firefox/browser/defaults/preferences/all-ashlaros.js"
 
