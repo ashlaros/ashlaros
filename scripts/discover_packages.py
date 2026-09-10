@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Split packages/ into build waves, and within a wave into `any` and compiled.
+"""Decide what needs building, and in what order.
 
-Two things decide the shape of a run:
+Three things shape a run:
 
   - `arch=any` packages build once and are registered in both databases;
     anything else builds per architecture. Read out of each PKGBUILD's own
@@ -13,22 +13,59 @@ Two things decide the shape of a run:
     Wave 0 is everything with no such dependency; wave 1 is what depends on
     wave 0, and so on.
 
+  - A package already published at the version its PKGBUILD declares is
+    skipped. Rebuilding it is not free and not harmless: makepkg is not
+    reproducible - two builds of one version differ in .BUILDINFO
+    timestamps - so republishing replaces an object the worker serves as
+    `immutable, max-age=31536000` and changes the %SHA256SUM% the database
+    records for it. A client holding the cached old bytes then fails the
+    checksum on install.
+
+Skipping is by declared version AND source hash: the version alone would
+miss a PKGBUILD edit that changes what gets built without touching pkgver
+(wluma's dropped man-page step did exactly that, and needed pkgrel bumped
+by hand). Set REBUILD_ALL=1 to ignore what is published and build
+everything, which is what a toolchain change needs.
+
 Writes GitHub Actions outputs on stdout.
 """
 
+import hashlib
+import io
 import json
 import os
 import re
 import sys
+import tarfile
+import urllib.error
+import urllib.request
 from pathlib import Path
 
-PACKAGES = Path(__file__).resolve().parent.parent / "packages"
+ROOT = Path(__file__).resolve().parent.parent
+PACKAGES = ROOT / "packages"
 
 ARCH_RE = re.compile(r"^arch=\((.*?)\)", re.MULTILINE | re.DOTALL)
 # depends and makedepends both have to exist before the build starts;
 # optdepends do not, so they are deliberately absent here
 DEPENDS_RE = re.compile(r"^(?:make)?depends=\((.*?)\)", re.MULTILINE | re.DOTALL)
 PKGNAME_RE = re.compile(r"^pkgname=(.+)$", re.MULTILINE)
+PKGVER_RE = re.compile(r"^pkgver=(.+)$", re.MULTILINE)
+PKGREL_RE = re.compile(r"^pkgrel=(.+)$", re.MULTILINE)
+EPOCH_RE = re.compile(r"^epoch=(.+)$", re.MULTILINE)
+# a pinned revision makes a pkgver() deterministic
+COMMIT_RE = re.compile(r"^_commit=[\"']?[0-9a-f]{40}", re.MULTILINE)
+
+REPO_URL = os.environ.get("REPO_URL", "https://packages.ashlaros.download")
+FIELD = re.compile(r"%([A-Z0-9]+)%\n([^\n]*)")
+
+# What the repository records for a package we built, so a rebuild can be
+# recognised as unnecessary. Not a pacman field - it goes in %PACKAGER%,
+# which repo-add copies from the package and nothing else reads.
+SOURCE_MARK = "ashlaros-src:"
+
+
+def log(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
 
 
 def field(pattern: re.Pattern, text: str) -> list[str]:
@@ -40,30 +77,103 @@ def field(pattern: re.Pattern, text: str) -> list[str]:
     return re.findall(r"[\w.+-]+", body.replace("'", " ").replace('"', " "))
 
 
-def pkgname_of(pkgbuild: Path) -> str:
-    match = PKGNAME_RE.search(pkgbuild.read_text())
-    # a PKGBUILD without a pkgname would fail makepkg long before this
-    name = match.group(1).strip().strip("'\"") if match else pkgbuild.parent.name
+def scalar(pattern: re.Pattern, text: str) -> str | None:
+    match = pattern.search(text)
+    return match.group(1).strip().strip("'\"") if match else None
+
+
+def pkgname_of(pkgbuild: Path, text: str) -> str:
+    name = scalar(PKGNAME_RE, text) or pkgbuild.parent.name
     return name.replace("${pkgname}", pkgbuild.parent.name)
 
 
-def is_any(text: str, pkgbuild: Path) -> bool:
-    arches = field(ARCH_RE, text)
-    if not arches:
-        raise SystemExit(f"{pkgbuild}: no arch= line")
-    return arches == ["any"]
+def declared_version(text: str) -> str | None:
+    """The version the PKGBUILD states, or None when it cannot be known here.
+
+    A pkgver() function resolves the version from a source checkout at build
+    time, which this cannot do. It is still knowable when the sources are
+    pinned to a _commit: the checkout is then always the same one, so the
+    version it computes is fixed, and the pkgver= line already carries the
+    result. An unpinned pkgver() - a package tracking a branch tip - is
+    genuinely unknowable and never skipped.
+    """
+    if "pkgver()" in text and not COMMIT_RE.search(text):
+        return None
+    pkgver = scalar(PKGVER_RE, text)
+    pkgrel = scalar(PKGREL_RE, text)
+    if not pkgver or not pkgrel:
+        return None
+    epoch = scalar(EPOCH_RE, text)
+    return f"{epoch}:{pkgver}-{pkgrel}" if epoch else f"{pkgver}-{pkgrel}"
+
+
+def source_hash(directory: Path) -> str:
+    """A digest of everything in the package directory.
+
+    The PKGBUILD alone is not enough: ashlaros-browser-settings ships five
+    payload files beside it, and editing one changes the package without
+    touching pkgver.
+    """
+    digest = hashlib.sha256()
+    for path in sorted(p for p in directory.rglob("*") if p.is_file()):
+        digest.update(path.relative_to(directory).as_posix().encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
+def published(arch: str) -> dict[str, tuple[str, str | None]]:
+    """{pkgname: (version, source hash)} from the live database.
+
+    A repository that cannot be reached yields nothing, so a run builds
+    everything rather than skipping on incomplete information.
+    """
+    url = f"{REPO_URL}/{arch}/ashlaros.db.tar.gz"
+    # a named User-Agent, because cloudflare's bot protection answers 403 to
+    # urllib's default and a 403 here silently means "rebuild everything"
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "ashlaros-discover-packages"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = response.read()
+    except (urllib.error.URLError, TimeoutError) as exc:
+        log(f"{arch}: could not read the published database ({exc}); building everything")
+        return {}
+
+    entries = {}
+    with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as tar:
+        for member in tar.getmembers():
+            if not member.name.endswith("/desc"):
+                continue
+            handle = tar.extractfile(member)
+            if handle is None:
+                continue
+            desc = dict(FIELD.findall(handle.read().decode()))
+            name, version = desc.get("NAME"), desc.get("VERSION")
+            if not name or not version:
+                continue
+            packager = desc.get("PACKAGER", "")
+            mark = None
+            if SOURCE_MARK in packager:
+                mark = packager.split(SOURCE_MARK, 1)[1].strip().rstrip(">")
+            entries[name] = (version, mark)
+    return entries
 
 
 def main() -> int:
     only = os.environ.get("ONLY", "").strip()
+    rebuild_all = os.environ.get("REBUILD_ALL", "").strip() not in ("", "0", "false")
 
     packages = {}
     for pkgbuild in sorted(PACKAGES.glob("*/PKGBUILD")):
         text = pkgbuild.read_text()
-        packages[pkgbuild.parent.name] = {
-            "pkgname": pkgname_of(pkgbuild),
-            "any": is_any(text, pkgbuild),
+        name = pkgbuild.parent.name
+        packages[name] = {
+            "pkgname": pkgname_of(pkgbuild, text),
+            "any": field(ARCH_RE, text) == ["any"],
             "depends": field(DEPENDS_RE, text),
+            "version": declared_version(text),
+            "source": source_hash(pkgbuild.parent),
         }
 
     if only:
@@ -71,21 +181,37 @@ def main() -> int:
             raise SystemExit(f"no package directory named {only}")
         packages = {only: packages[only]}
 
+    skipped = []
+    if not rebuild_all and not only:
+        # an `any` package lives in both trees, so it counts as built only
+        # when both carry it; a compiled one is judged per architecture in
+        # its own leg, and x86_64 is the one the ISO is built from
+        live = {arch: published(arch) for arch in ("x86_64", "aarch64")}
+        for name, meta in list(packages.items()):
+            version, source = meta["version"], meta["source"]
+            if version is None:
+                continue
+            arches = ("x86_64", "aarch64") if meta["any"] else ("x86_64",)
+            if all(live[a].get(meta["pkgname"]) == (version, source) for a in arches):
+                skipped.append(name)
+                del packages[name]
+
     provided = {meta["pkgname"]: name for name, meta in packages.items()}
 
     waves = []
     remaining = dict(packages)
-    published: set[str] = set()
+    built: set[str] = set()
     while remaining:
         ready = {
             name: meta
             for name, meta in remaining.items()
-            # only dependencies we build ourselves can hold a package back;
-            # everything else comes from Arch or CachyOS and is already there
+            # only dependencies we build in THIS run can hold a package
+            # back; anything skipped is already published, and anything
+            # else comes from Arch or CachyOS
             if not {
                 provided[d] for d in meta["depends"] if d in provided and provided[d] != name
             }
-            - published
+            - built
         }
         if not ready:
             cycle = ", ".join(sorted(remaining))
@@ -97,12 +223,16 @@ def main() -> int:
                 "compiled": sorted(n for n, m in ready.items() if not m["any"]),
             }
         )
-        published |= {m["pkgname"] for m in ready.values()}
+        built |= {m["pkgname"] for m in ready.values()}
         for name in ready:
             del remaining[name]
 
+    if skipped:
+        log(f"already published, not rebuilding: {', '.join(sorted(skipped))}")
+
     print(f"waves={json.dumps(waves)}")
     print(f"wave_count={len(waves)}")
+    print(f"skipped={json.dumps(sorted(skipped))}")
     return 0
 
 

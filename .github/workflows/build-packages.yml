@@ -15,6 +15,13 @@ on:
       package:
         description: build a single package directory rather than all of them
         required: false
+      rebuild_all:
+        description: >-
+          rebuild even packages already published at their current version.
+          Needed when the toolchain moves under us - a new glibc or rustc -
+          because nothing in the package directory changes then.
+        type: boolean
+        default: false
 
 concurrency:
   # both architecture legs read-modify-write the same bucket, and repo-add is
@@ -33,6 +40,7 @@ jobs:
       - id: split
         env:
           ONLY: ${{ inputs.package }}
+          REBUILD_ALL: ${{ inputs.rebuild_all && '1' || '' }}
         run: python3 scripts/discover_packages.py >> "$GITHUB_OUTPUT"
 
   # A wave is build-then-publish, because the next wave resolves its
@@ -42,6 +50,9 @@ jobs:
   # alternative (a workflow that dispatches itself) hides the ordering.
   wave0:
     needs: discover
+    # every package already published at its current version leaves nothing
+    # to do, which is the normal outcome of a commit that touches only CI
+    if: fromJSON(needs.discover.outputs.wave_count) > 0
     uses: ./.github/workflows/build-wave.yml
     with:
       any: ${{ toJSON(fromJSON(needs.discover.outputs.waves)[0].any) }}
