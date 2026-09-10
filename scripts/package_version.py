@@ -24,6 +24,7 @@ Needs full history - `actions/checkout` must run with fetch-depth: 0, or
 every count is 1.
 """
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -35,8 +36,25 @@ ROOT = Path(__file__).resolve().parent.parent
 AUTHORED_PREFIX = "ashlaros-"
 
 
+SOURCE_TREES_RE = re.compile(r"^_source_trees=\((.*?)\)", re.MULTILINE | re.DOTALL)
+
+
 class NoHistory(Exception):
     """The checkout carries no usable git history."""
+
+
+def source_trees(directory: Path) -> list[str]:
+    """Extra directories the package is built from, as declared in its PKGBUILD.
+
+    ashlaros-installer's content is in installer/, not in its package
+    directory. Counting commits to the package directory alone would leave
+    the version unchanged when the installer changes, and pacman treats
+    equal versions as nothing to do - so the edit would reach nobody.
+    """
+    declared = SOURCE_TREES_RE.search((directory / "PKGBUILD").read_text())
+    if not declared:
+        return []
+    return [name.strip("\"'") for name in declared.group(1).split()]
 
 
 def git(*args: str) -> str:
@@ -56,9 +74,9 @@ def version_of(directory: Path) -> tuple[str, str] | None:
     if not directory.name.startswith(AUTHORED_PREFIX):
         return None
 
-    relative = directory.relative_to(ROOT).as_posix()
-    count = git("rev-list", "--count", "HEAD", "--", relative)
-    date = git("log", "-1", "--format=%cd", "--date=format:%Y%m%d", "--", relative)
+    paths = [directory.relative_to(ROOT).as_posix(), *source_trees(directory)]
+    count = git("rev-list", "--count", "HEAD", "--", *paths)
+    date = git("log", "-1", "--format=%cd", "--date=format:%Y%m%d", "--", *paths)
 
     # a shallow clone reports 1 for everything, which would publish every
     # authored package at pkgrel=1 forever and strand every later update

@@ -26,6 +26,12 @@ depends=(
 # does not exist yet
 source=()
 
+# Content built from outside this directory. Read by
+# scripts/discover_packages.py and scripts/package_version.py, which
+# otherwise see only the package directory and would never notice an edit
+# to installer/ - the package would keep its version and stay skipped.
+_source_trees=(installer)
+
 package() {
   local installer="${startdir}/../../installer"
 

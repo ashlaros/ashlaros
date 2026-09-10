@@ -146,17 +146,43 @@ def authored_version(directory: Path) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+SOURCE_TREES_RE = re.compile(r"^_source_trees=\((.*?)\)", re.MULTILINE | re.DOTALL)
+
+
+def source_trees(directory: Path) -> list[Path]:
+    """Directories a package is built from, itself first.
+
+    ashlaros-installer builds from installer/ and ashlaros-branding from
+    branding/, both outside their package directory. A PKGBUILD says so
+    with _source_trees=(...); without it an edit there would change what
+    the package ships while looking untouched, so the package would keep
+    its version and be skipped forever.
+    """
+    trees = [directory]
+    declared = SOURCE_TREES_RE.search((directory / "PKGBUILD").read_text())
+    if declared:
+        for name in declared.group(1).split():
+            tree = ROOT / name.strip("\"'")
+            if not tree.is_dir():
+                raise SystemExit(
+                    f"{directory.name}: _source_trees names {name}, which does not exist"
+                )
+            trees.append(tree)
+    return trees
+
+
 def source_hash(directory: Path) -> str:
-    """A digest of everything in the package directory.
+    """A digest of everything a package is built from.
 
     The PKGBUILD alone is not enough: ashlaros-browser-settings ships five
     payload files beside it, and editing one changes the package without
     touching pkgver.
     """
     digest = hashlib.sha256()
-    for path in sorted(p for p in directory.rglob("*") if p.is_file()):
-        digest.update(path.relative_to(directory).as_posix().encode())
-        digest.update(path.read_bytes())
+    for tree in source_trees(directory):
+        for path in sorted(p for p in tree.rglob("*") if p.is_file()):
+            digest.update(path.relative_to(tree).as_posix().encode())
+            digest.update(path.read_bytes())
     return digest.hexdigest()[:16]
 
 
