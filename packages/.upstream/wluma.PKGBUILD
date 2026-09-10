@@ -11,7 +11,7 @@ arch=('x86_64' 'aarch64')
 depends=('dbus' 'vulkan-icd-loader' 'systemd-libs' 'glibc' 'gcc-libs' 'v4l-utils')
 optdepends=('vulkan-driver: for using capturer=wlroots in config.toml'
             'wayland: for using capturer=wlroots in config.toml')
-makedepends=('cargo' 'clang' 'systemd' 'marked-man')
+makedepends=('cargo' 'clang' 'marked-man')
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/max-baz/${pkgname}/archive/${pkgver}.tar.gz"
         "https://github.com/max-baz/${pkgname}/releases/download/${pkgver}/${pkgname}-${pkgver}.tar.gz.asc")
 b2sums=('3eba7e941a11f459053018dc3eb59e23da6c41d3a3206ccf0684e8e1294da7da1a54fefd20295cafceb695ea8f7483822cf99472f2b701dd57c8d1b95fb57ce6'
