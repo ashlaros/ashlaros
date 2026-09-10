@@ -37,6 +37,12 @@ jobs:
       wave_count: ${{ steps.split.outputs.wave_count }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # package_version.py derives pkgver/pkgrel from how many commits
+          # have touched a package directory; a shallow checkout reports 1
+          # for everything, which would publish every authored package at
+          # pkgrel=1 forever and strand every later update
+          fetch-depth: 0
       - id: split
         env:
           ONLY: ${{ inputs.package }}
