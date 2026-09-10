@@ -10,6 +10,9 @@ on:
       - scripts/**
       - .github/scripts/**
       - .github/workflows/build-packages.yml
+      # the reusable workflow this one calls does the actual building, so a
+      # change there changes every build and must trigger one
+      - .github/workflows/build-wave.yml
   workflow_dispatch:
     inputs:
       package:
