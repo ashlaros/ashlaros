@@ -67,7 +67,19 @@ jobs:
           # the ISO itself is not attached: github caps a release asset at
           # 2 GB and this one is larger. The bucket holds the image; the
           # release holds the checksum that proves which image it is.
-          gh release create "v$VERSION" out/SHA256SUMS \
-            --repo "${{ github.repository }}" \
-            --title "AshlarOS $VERSION" \
-            --notes "https://iso.ashlaros.download/$VERSION/"
+          # The version is a date, so a second build on the same day finds
+          # its tag already there. That is a rebuild of the same version,
+          # not an error: replace the checksum and move the tag to the
+          # commit that produced it.
+          if gh release view "v$VERSION" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "v$VERSION" out/SHA256SUMS \
+              --repo "${{ github.repository }}" --clobber
+            gh release edit "v$VERSION" --repo "${{ github.repository }}" \
+              --target "$GITHUB_SHA" --notes "https://iso.ashlaros.download/$VERSION/"
+            echo "## replaced the assets on the existing v$VERSION"
+          else
+            gh release create "v$VERSION" out/SHA256SUMS \
+              --repo "${{ github.repository }}" \
+              --title "AshlarOS $VERSION" \
+              --notes "https://iso.ashlaros.download/$VERSION/"
+          fi
