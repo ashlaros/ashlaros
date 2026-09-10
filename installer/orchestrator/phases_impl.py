@@ -251,7 +251,9 @@ def trust_keys(ctx: InstallContext) -> None:
     copies of the files later without conflict.
     """
     live_keyrings = Path("/usr/share/pacman/keyrings")
-    staged = ctx.target / "tmp/ashlaros-keys"
+    # not /tmp: arch-chroot mounts a fresh tmpfs over it, so a file staged
+    # there is invisible inside the chroot ("gpg: can't open ...")
+    staged = ctx.target / "var/cache/ashlaros-keys"
     staged.mkdir(parents=True, exist_ok=True)
 
     run_command(["arch-chroot", str(ctx.target), "pacman-key", "--init"])
@@ -262,7 +264,7 @@ def trust_keys(ctx: InstallContext) -> None:
         if not keyring.exists():
             continue
         shutil.copy2(keyring, staged / keyring.name)
-        inside = f"/tmp/ashlaros-keys/{keyring.name}"
+        inside = f"/var/cache/ashlaros-keys/{keyring.name}"
         run_command(["arch-chroot", str(ctx.target), "pacman-key", "--add", inside])
         # --add imports without trusting; only a local signature makes
         # pacman accept a database signed with the key
