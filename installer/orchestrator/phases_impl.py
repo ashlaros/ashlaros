@@ -314,14 +314,77 @@ def install_bootloader(ctx: InstallContext, installer, config) -> bool:
 
 
 def configure_system(ctx: InstallContext) -> None:
-    """The settings archinstall does not own: keymap, and the boot entry's
-    kernel command line for a TPM-unlocked root."""
+    """The settings archinstall does not own: the keymap, for both the
+    virtual console and X11/Wayland."""
     handler = ctx.state["arch_config_handler"]
     config = handler.config
 
     keymap = config.locale_config.kb_layout if config.locale_config else ""
     if keymap:
         (ctx.target / "etc/vconsole.conf").write_text(f"KEYMAP={keymap}\n")
+        write_x11_keymap(ctx, keymap)
+
+
+def write_x11_keymap(ctx: InstallContext, keymap: str) -> None:
+    """Give the desktop the keymap the user chose, not just the console.
+
+    vconsole.conf sets the virtual console alone. The sway config asks
+    localectl for the *X11 Layout* (see keyboard.sh) and that comes from
+    /etc/X11/xorg.conf.d/00-keyboard.conf, which nothing else writes here -
+    so a user who picked `de` got a `us` desktop while the TTY was right.
+
+    localectl itself cannot do this: it has no --root, and running it in
+    the chroot needs a dbus the target is not running. The file is small
+    and its format is stable, so it is written directly.
+    """
+    layout, variant = x11_layout_for(keymap)
+
+    conf = ctx.target / "etc/X11/xorg.conf.d/00-keyboard.conf"
+    conf.parent.mkdir(parents=True, exist_ok=True)
+    options = [f'Option "XkbLayout" "{layout}"']
+    if variant:
+        options.append(f'Option "XkbVariant" "{variant}"')
+    body = "\n".join(f"        {option}" for option in options)
+    conf.write_text(
+        "# Written by the AshlarOS installer.\n"
+        "# Consumed by localectl, which the sway config reads to set the\n"
+        "# desktop layout; keep it in step with /etc/vconsole.conf.\n"
+        'Section "InputClass"\n'
+        '        Identifier "system-keyboard"\n'
+        '        MatchIsKeyboard "on"\n'
+        f"{body}\n"
+        "EndSection\n"
+    )
+    info(f"› keymap {keymap}: console and X11 layout {layout}")
+
+
+# Console keymaps and X11 layouts are different namespaces: `de-latin1` is a
+# keymap with no layout of that name, and `us` maps to a layout that also
+# carries a model. systemd ships the mapping localectl itself uses.
+KBD_MODEL_MAP = Path("/usr/share/systemd/kbd-model-map")
+
+
+def x11_layout_for(keymap: str) -> tuple[str, str]:
+    """(layout, variant) for a console keymap, from systemd's own table.
+
+    An unknown keymap falls back to itself: for the common layouts the two
+    names coincide, and a wrong-but-stated layout beats silently keeping
+    the hardcoded `us`.
+    """
+    try:
+        rows = KBD_MODEL_MAP.read_text().splitlines()
+    except OSError:
+        return keymap, ""
+
+    for row in rows:
+        if row.startswith("#") or not row.strip():
+            continue
+        fields = row.split()
+        if len(fields) < 4 or fields[0] != keymap:
+            continue
+        layout, variant = fields[1], fields[3]
+        return layout, "" if variant == "-" else variant
+    return keymap, ""
 
 
 def enroll_tpm(ctx: InstallContext) -> None:
