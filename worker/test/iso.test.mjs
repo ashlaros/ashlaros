@@ -1,5 +1,5 @@
 /**
- * What the ISO worker serves.
+ * What the ISO site serves.
  *
  * The load-bearing behaviours are: an ISO downloads rather than renders,
  * a resumed download works, and `latest/` is never cached as if it were
@@ -8,7 +8,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import worker, { renderIndex, versionOf } from '../src/index.js';
+import worker from '../src/index.js';
+import { renderIndex, versionOf } from '../src/iso.js';
+import { bucketOf, get } from './helpers.mjs';
 
 const KEYS = [
   '2026.09.10/ashlaros-2026.09.10-x86_64.iso',
@@ -17,25 +19,11 @@ const KEYS = [
   'latest/ashlaros.iso',
 ];
 
-function env(keys) {
-  return {
-    BUCKET: {
-      list: async () => ({
-        objects: keys.map((key) => ({ key, size: 2_000_000_000, uploaded: new Date(0) })),
-        delimitedPrefixes: [],
-      }),
-      get: async (k) =>
-        keys.includes(k)
-          ? { body: 'bytes', writeHttpMetadata: () => {}, httpEtag: '"e"' }
-          : null,
-    },
-  };
-}
-
-const get = (path) => new Request(`https://iso.ashlaros.download/${path}`);
+const env = () => ({ PACKAGES: bucketOf([]), ISO: bucketOf(KEYS) });
+const req = (path) => get('iso.ashlaros.download', path);
 
 test('an iso is offered as a download, not rendered', async () => {
-  const res = await worker.fetch(get('2026.09.10/ashlaros-2026.09.10-x86_64.iso'), env(KEYS));
+  const res = await worker.fetch(req('2026.09.10/ashlaros-2026.09.10-x86_64.iso'), env());
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-disposition'), /attachment/);
 });
@@ -43,12 +31,12 @@ test('an iso is offered as a download, not rendered', async () => {
 test('latest is never cached as immutable', async () => {
   // an immutable latest/ would keep handing out the image that happened to
   // be current when a cache first saw it
-  const latest = await worker.fetch(get('latest/ashlaros.iso'), env(KEYS));
+  const latest = await worker.fetch(req('latest/ashlaros.iso'), env());
   assert.equal(latest.headers.get('cache-control'), 'no-cache');
 
   const versioned = await worker.fetch(
-    get('2026.09.10/ashlaros-2026.09.10-x86_64.iso'),
-    env(KEYS),
+    req('2026.09.10/ashlaros-2026.09.10-x86_64.iso'),
+    env(),
   );
   assert.match(versioned.headers.get('cache-control'), /immutable/);
 });
@@ -58,17 +46,17 @@ test('a range request is answered as a range, so a download resumes', async () =
     'https://iso.ashlaros.download/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
     { headers: { range: 'bytes=1000-2000' } },
   );
-  const res = await worker.fetch(request, env(KEYS));
+  const res = await worker.fetch(request, env());
   assert.equal(res.status, 206);
 });
 
 test('an absent image is 404', async () => {
-  const res = await worker.fetch(get('2027.01.01/nope.iso'), env(KEYS));
+  const res = await worker.fetch(req('2027.01.01/nope.iso'), env());
   assert.equal(res.status, 404);
 });
 
 test('the index lists newest first and does not repeat latest as a version', async () => {
-  const res = await worker.fetch(get(''), env(KEYS));
+  const res = await worker.fetch(req(''), env());
   const body = await res.text();
   assert.ok(
     body.indexOf('2026.09.10') < body.indexOf('2026.08.01'),

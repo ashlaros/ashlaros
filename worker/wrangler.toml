@@ -1,16 +1,25 @@
-name = "ashlaros-packages"
+name = "ashlaros-web"
 main = "src/index.js"
 compatibility_date = "2026-09-10"
-# the login sees several accounts; pin the one owning the bucket so a deploy
-# can never bind an empty bucket on the wrong account
+# the login sees several accounts; pin the one owning the buckets so a
+# deploy can never bind an empty bucket on the wrong account
 account_id = "fc8102dae7e1eb7a1ecec012dcb0dfaf"
 
-# custom domain rather than a route: cloudflare provisions the DNS record and
-# certificate, and the zone lives in the same account as the worker
+# One worker, both sites: they serve the same shape and differ only in
+# bucket, key validation, index and caching. Routing is by hostname, and
+# each site reads only its own binding.
+#
+# Custom domains rather than routes: cloudflare provisions the DNS record
+# and certificate, and the zone lives in the same account as the worker.
 routes = [
   { pattern = "packages.ashlaros.download", custom_domain = true },
+  { pattern = "iso.ashlaros.download", custom_domain = true },
 ]
 
 [[r2_buckets]]
-binding = "BUCKET"
+binding = "PACKAGES"
 bucket_name = "ashlaros"
+
+[[r2_buckets]]
+binding = "ISO"
+bucket_name = "ashlaros-iso"

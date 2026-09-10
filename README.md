@@ -13,7 +13,7 @@ packages/     PKGBUILDs published to the ashlaros pacman repository
 iso/          the archiso profile the ISO is built from
 installer/    the gum TUI installer shipped on the ISO
 branding/     logo, favicon, background, palette
-worker/       cloudflare worker serving the pacman repository from R2
+worker/       cloudflare worker serving the repository and the ISOs from R2
 scripts/      publish tooling for the repository
 ```
 
