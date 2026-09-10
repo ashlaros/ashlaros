@@ -28,6 +28,12 @@ jobs:
       matrix:
         package: ${{ fromJSON(inputs.any) }}
     steps:
+      # Before checkout: without git on PATH the action downloads a tarball
+      # through the REST API instead of cloning, leaving no .git at all -
+      # so fetch-depth below is silently meaningless and package_version.py
+      # fails with "not a git repository".
+      - name: install git before the checkout
+        run: pacman -Sy --noconfirm --needed git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # package_version.py derives pkgver/pkgrel from how many commits
@@ -81,6 +87,12 @@ jobs:
         arch: [x86_64, aarch64]
         package: ${{ fromJSON(inputs.compiled) }}
     steps:
+      # Before checkout: without git on PATH the action downloads a tarball
+      # through the REST API instead of cloning, leaving no .git at all -
+      # so fetch-depth below is silently meaningless and package_version.py
+      # fails with "not a git repository".
+      - name: install git before the checkout
+        run: pacman -Sy --noconfirm --needed git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # package_version.py derives pkgver/pkgrel from how many commits
