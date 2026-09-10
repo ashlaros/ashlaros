@@ -16,7 +16,11 @@ REPO_URL="${REPO_URL:-https://packages.ashlaros.download}"
 # allows it, so probe rather than switch it off unconditionally.
 if ! pacman -Sy --noconfirm >/dev/null 2>&1; then
 	echo "pacman's download sandbox is unavailable here; disabling it" >&2
-	printf '\nDisableSandbox\n' >>/etc/pacman.conf
+	# into [options], not appended: a directive after the last repository
+	# section belongs to THAT section, where pacman ignores it with
+	# "directive 'DisableSandbox' in section 'aur' not recognized" - which
+	# is what the ALARM image's trailing [aur] section made happen.
+	sed -i '0,/^\[options\]/s//[options]\nDisableSandbox/' /etc/pacman.conf
 fi
 
 pacman-key --init
