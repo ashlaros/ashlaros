@@ -28,6 +28,10 @@ vim
 ashlaros-branding
 ashlaros-installer
 ashlaros-keyring
+# the live system resolves the TARGET's packages through pacstrap, so it
+# needs to trust the repositories it fetches them from; without this the
+# installer's `pacman -Sy` fails on the cachyos database signature
+cachyos-keyring
 ashlaros-mirrorlist
 ashlaros-release
 

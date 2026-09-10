@@ -113,11 +113,41 @@ def run_command(args: list[str], **kwargs) -> subprocess.CompletedProcess:
     return result
 
 
+def write_live_repository_stack() -> None:
+    """Give the LIVE system the repositories the target will be built from.
+
+    archinstall pacstraps with `pacstrap -C /etc/pacman.conf`, so the base
+    system is resolved against the live system's configuration, not the
+    target's. The ISO is built with a pacman.conf that has the CachyOS
+    repositories, but that file configures the BUILD, not the running live
+    system - which ships Arch's stock one. So `pacstrap ... linux-cachyos`
+    failed with "target not found: linux-cachyos" and the install died at
+    minimal_installation.
+
+    Writing the same stack here fixes it at the source: one definition,
+    used for the live system and copied to the target.
+    """
+    live = Path("/etc")
+    live.joinpath("pacman.conf").write_text(PACMAN_CONF)
+    pacman_d = live / "pacman.d"
+    pacman_d.mkdir(parents=True, exist_ok=True)
+    (pacman_d / "cachyos-v3-mirrorlist").write_text(CACHYOS_V3_MIRRORLIST)
+    (pacman_d / "cachyos-mirrorlist").write_text(CACHYOS_MIRRORLIST)
+    (pacman_d / "ashlaros-mirrorlist").write_text(ASHLAROS_MIRRORLIST)
+
+    # the live ISO already trusts these keys - it installed packages from
+    # both repositories at build time - so only the databases need fetching
+    run_command(["pacman", "-Sy", "--noconfirm"])
+    info("› live repositories configured for the target's package stack")
+
+
 def prepare_live(ctx: InstallContext) -> None:
     """Load the archinstall config and check the machine can be installed to."""
     handler = arch.load_arch_config(ctx.config_path, ctx.creds_path)
     ctx.state["arch_config_handler"] = handler
     ctx.state["mirror_handler"] = arch.make_mirror_handler()
+
+    write_live_repository_stack()
 
     config = handler.config
     if arch.is_systemd_boot(config) and not arch.has_uefi():

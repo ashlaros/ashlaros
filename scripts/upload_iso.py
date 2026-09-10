@@ -13,6 +13,7 @@ import os
 import sys
 
 import boto3
+from botocore.config import Config
 
 
 def log(message: str) -> None:
@@ -20,12 +21,17 @@ def log(message: str) -> None:
 
 
 def s3_client():
+    # R2 copies an object server-side, and a 1.7 GB image takes minutes -
+    # well past botocore's 60s default, which failed the build after a
+    # successful upload with "Read timeout on .../latest/ashlaros.iso".
+    # The copy itself had started; only the client gave up waiting.
     return boto3.client(
         "s3",
         endpoint_url=os.environ["R2_ENDPOINT"],
         aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
         aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
         region_name="auto",
+        config=Config(read_timeout=900, connect_timeout=60, retries={"max_attempts": 3}),
     )
 
 
@@ -69,12 +75,21 @@ def main() -> int:
     # previous one whole
     for iso in isos:
         name = os.path.basename(iso)
+        source = f"{args.version}/{name}"
         s3.copy_object(
             Bucket=bucket,
             Key="latest/ashlaros.iso",
-            CopySource={"Bucket": bucket, "Key": f"{args.version}/{name}"},
+            CopySource={"Bucket": bucket, "Key": source},
         )
-        log(f"latest/ashlaros.iso now points at {args.version}/{name}")
+        # a copy that returned is not necessarily a copy that landed whole;
+        # the size is the cheapest thing that would catch a truncated one
+        expected = os.path.getsize(iso)
+        actual = s3.head_object(Bucket=bucket, Key="latest/ashlaros.iso")["ContentLength"]
+        if actual != expected:
+            raise SystemExit(
+                f"latest/ashlaros.iso is {actual} bytes, expected {expected}"
+            )
+        log(f"latest/ashlaros.iso now points at {source} ({actual} bytes)")
 
     return 0
 
