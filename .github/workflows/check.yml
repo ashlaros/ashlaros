@@ -49,6 +49,36 @@ jobs:
           pip install ruff
           ruff check scripts installer/orchestrator
 
+  arm-repo:
+    # The aarch64 half of the repository has no other test: the ISO is
+    # x86_64 only, so nothing else ever installs an ashlaros package on ARM.
+    # A native ARM runner is the only place this can run - qemu-user under
+    # rootless docker cannot register binfmt.
+    runs-on: ubuntu-24.04-arm
+    container: menci/archlinuxarm:base
+    steps:
+      - name: an ARM machine can install from the repository
+        run: |
+          pacman -Sy --noconfirm --needed curl >/dev/null
+          curl -fsSL "${REPO_URL}/ashlaros.gpg" -o /tmp/ashlaros.gpg
+          pacman-key --init
+          pacman-key --populate archlinuxarm
+          pacman-key --add /tmp/ashlaros.gpg
+          gpg --show-keys --with-colons /tmp/ashlaros.gpg |
+            awk -F: '/^fpr:/ {print $10}' |
+            while read -r fingerprint; do pacman-key --lsign-key "$fingerprint"; done
+          printf '\n[ashlaros]\nSigLevel = Required DatabaseOptional\nServer = %s/$arch\n' \
+            "$REPO_URL" >> /etc/pacman.conf
+          pacman -Sy
+
+          # against Arch Linux ARM's own core/extra, which is what an ARM
+          # user actually runs underneath this repository
+          pacman -S --noconfirm ashlaros-settings
+          pacman -Q ashlaros-settings ashlaros-branding
+          test -f /etc/sway/config
+    env:
+      REPO_URL: ${{ vars.REPO_URL || 'https://packages.ashlaros.download' }}
+
   packages:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
