@@ -71,10 +71,9 @@ jobs:
             name=$(basename "$report" .md)
             branch="track-upstream/$name"
 
-            # each PR starts from the base commit, so one does not carry
-            # another's changes
-            git checkout -q -B "$branch" "$base"
-
+            # A conflicted package wrote no files, so decide BEFORE creating
+            # a branch - otherwise every conflict leaves an empty branch
+            # behind that no pull request ever references.
             if git diff --quiet -- "packages/$name" "packages/.upstream/$name.PKGBUILD"; then
               # conflicted: nothing to commit, so report it as an issue
               # rather than an empty pull request
@@ -89,6 +88,9 @@ jobs:
               continue
             fi
 
+            # each PR starts from the base commit, so one does not carry
+            # another's changes
+            git checkout -q -B "$branch" "$base"
             git add "packages/$name" "packages/.upstream/$name.PKGBUILD"
             git commit -q -m "track upstream: $name"
             git push -q --force origin "$branch"
