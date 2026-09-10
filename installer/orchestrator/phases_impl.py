@@ -390,12 +390,7 @@ def tpm_available() -> bool:
 
 
 def luks_device(ctx: InstallContext) -> Path | None:
-    """The block device holding the LUKS2 container.
-
-    Read off the target's crypttab rather than the disk config: by this
-    phase the partition exists and systemd has written the UUID that
-    actually names it, which is what cryptenroll wants.
-    """
+    """The block device holding the LUKS2 container."""
     handler = ctx.state["arch_config_handler"]
     for partition in arch.encrypted_partitions(handler.config):
         dev_path = getattr(partition, "dev_path", None)
@@ -405,19 +400,29 @@ def luks_device(ctx: InstallContext) -> Path | None:
 
 
 def add_crypttab_tpm_option(ctx: InstallContext, device: Path) -> None:
-    """Add tpm2-device=auto to the root mapping's crypttab options.
+    """Give the root mapping a crypttab entry that unlocks from the TPM.
 
-    Without it the initramfs never asks the TPM and prompts for the
-    passphrase despite the enrolled keyslot.
+    archinstall's own install needs no crypttab: the busybox `encrypt` hook
+    takes the LUKS device on the kernel command line. sd-encrypt reads
+    /etc/crypttab.initramfs instead, so booting the installed system asked
+    for the passphrase even with the keyslot enrolled - the file did not
+    exist to say tpm2-device=auto, and this function returned early rather
+    than writing one.
     """
-    crypttab = ctx.target / "etc/crypttab"
-    if not crypttab.exists():
-        # archinstall writes crypttab.initramfs for a root-on-LUKS install;
-        # the plain crypttab covers later-mounted volumes only
-        crypttab = ctx.target / "etc/crypttab.initramfs"
-    if not crypttab.exists():
-        error("no crypttab on the target; the TPM keyslot exists but will not be used")
+    crypttab = ctx.target / "etc/crypttab.initramfs"
+    if not crypttab.exists() and not (ctx.target / "etc/crypttab").exists():
+        crypttab.write_text(
+            "# written by the AshlarOS installer: sd-encrypt unlocks root\n"
+            f"{mapper_name(ctx)} UUID={device_uuid(device)} none tpm2-device=auto\n"
+        )
+        info(f"› {crypttab.name}: root unlocks via TPM, passphrase as fallback")
+        use_systemd_initramfs(ctx)
+        use_sd_encrypt_cmdline(ctx, device)
+        run_command(["arch-chroot", str(ctx.target), "mkinitcpio", "-P"])
         return
+
+    if not crypttab.exists():
+        crypttab = ctx.target / "etc/crypttab"
 
     lines = []
     changed = False
@@ -456,6 +461,61 @@ def add_crypttab_tpm_option(ctx: InstallContext, device: Path) -> None:
     # the initramfs embeds crypttab.initramfs, so it has to be rebuilt for
     # the option to take effect at boot
     run_command(["arch-chroot", str(ctx.target), "mkinitcpio", "-P"])
+
+
+def mapper_name(ctx: InstallContext) -> str:
+    """The device-mapper name the root volume is unlocked as.
+
+    It has to match what the bootloader entry and fstab already reference,
+    so it is read back from the running mount rather than assumed.
+    """
+    if Path("/dev/mapper/root").exists():
+        return "root"
+    for entry in sorted(Path("/dev/mapper").iterdir()):
+        if entry.name != "control":
+            return entry.name
+    raise RuntimeError("no device-mapper node for the unlocked root volume")
+
+
+def device_uuid(device: Path) -> str:
+    """The LUKS container's UUID, which is what crypttab names it by."""
+    return subprocess.run(
+        ["blkid", "-s", "UUID", "-o", "value", str(device)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+def use_sd_encrypt_cmdline(ctx: InstallContext, device: Path) -> None:
+    """Rewrite the boot entry's cryptdevice= for sd-encrypt.
+
+    archinstall writes `cryptdevice=PARTUUID=...:root`, which only the
+    busybox hook parses; sd-encrypt looks for rd.luks.*. Left alone the
+    initramfs would come up with the crypttab entry but no idea which
+    device it names, and drop to a rescue shell.
+    """
+    uuid = device_uuid(device)
+    entries = sorted((ctx.target / "boot/loader/entries").glob("*.conf"))
+    if not entries:
+        error("no loader entries to amend; the boot line still names cryptdevice=")
+        return
+
+    for entry in entries:
+        rewritten = []
+        for line in entry.read_text().splitlines():
+            if not line.startswith("options"):
+                rewritten.append(line)
+                continue
+            kept = [
+                word
+                for word in line.split()
+                if not word.startswith("cryptdevice=")
+            ]
+            kept.insert(1, f"rd.luks.name={uuid}=root")
+            rewritten.append(" ".join(kept))
+        entry.write_text("\n".join(rewritten) + "\n")
+    info(f"› boot entries: rd.luks.name={uuid}=root")
 
 
 def use_systemd_initramfs(ctx: InstallContext) -> None:
