@@ -4,6 +4,16 @@ Operation = Install
 Operation = Upgrade
 Target = filesystem
 
+# also on our own install: during pacstrap filesystem is installed before
+# this package, so the trigger above fires while the payload it copies does
+# not exist yet - the target kept Arch's os-release and identified itself
+# as "Arch Linux"
+[Trigger]
+Type = Package
+Operation = Install
+Operation = Upgrade
+Target = ashlaros-release
+
 [Action]
 Description = Installing the AshlarOS os-release
 When = PostTransaction
