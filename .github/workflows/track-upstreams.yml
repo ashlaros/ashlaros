@@ -63,6 +63,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           base=$(git rev-parse HEAD)
+          failures=0
 
           # A clean merge wrote files; a conflict wrote none. Both produce a
           # report, so drive the loop off the reports and decide per package.
@@ -95,10 +96,22 @@ jobs:
             git commit -q -m "track upstream: $name"
             git push -q --force origin "$branch"
 
-            gh pr create --head "$branch" --base main \
-              --title "track upstream: $name" \
-              --body-file "$report" 2>/dev/null ||
-              gh pr edit "$branch" --body-file "$report"
+            # `gh pr create` fails if one is already open for this branch,
+            # which is the normal second-run case - so fall back to updating
+            # it. Errors are NOT discarded: hiding them turned "the org
+            # forbids workflows from opening pull requests" into the far
+            # less useful "no pull requests found for branch".
+            if ! gh pr create --head "$branch" --base main \
+                 --title "track upstream: $name" --body-file "$report"; then
+              gh pr edit "$branch" --body-file "$report" || {
+                echo "::error::could not open or update a pull request for $name."
+                echo "::error::If this says 'GitHub Actions is not permitted to create pull requests',"
+                echo "::error::enable it in the ashlaros org settings: Actions > General >"
+                echo "::error::Workflow permissions > Allow GitHub Actions to create and approve pull requests."
+                failures=1
+              }
+            fi
           done
 
           git checkout -q "$base"
+          exit "$failures"

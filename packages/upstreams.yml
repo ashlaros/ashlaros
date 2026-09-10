@@ -8,7 +8,12 @@
 # scripts/track_upstreams.py daily: it fetches each upstream PKGBUILD -
 # from the AUR through cgit, from github through the contents API -
 # compares it against the pristine copy in packages/.upstream/, and opens
-# one pull request per package that moved. Five of these carry deliberate local edits
+# one pull request per package that moved.
+#
+# Requires the ashlaros org to allow GitHub Actions to create pull
+# requests (Actions > General > Workflow permissions). Without it the
+# workflow fails with an explicit message rather than silently doing
+# nothing - the branch is still pushed, so the update is not lost. Five of these carry deliberate local edits
 # (arch= widened to aarch64, wluma's man-page step removed), so the merge
 # is three-way against that base - an upstream change to a line we never
 # touched applies cleanly, one to a line we did touch is reported as a
