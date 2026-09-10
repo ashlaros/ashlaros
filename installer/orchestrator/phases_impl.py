@@ -400,66 +400,31 @@ def luks_device(ctx: InstallContext) -> Path | None:
 
 
 def add_crypttab_tpm_option(ctx: InstallContext, device: Path) -> None:
-    """Give the root mapping a crypttab entry that unlocks from the TPM.
+    """Write the crypttab entry sd-encrypt unlocks root from.
 
-    archinstall's own install needs no crypttab: the busybox `encrypt` hook
-    takes the LUKS device on the kernel command line. sd-encrypt reads
-    /etc/crypttab.initramfs instead, so booting the installed system asked
-    for the passphrase even with the keyslot enrolled - the file did not
-    exist to say tpm2-device=auto, and this function returned early rather
-    than writing one.
+    archinstall needs no crypttab: it passes cryptdevice=...:root on the
+    kernel command line, which only the busybox `encrypt` hook parses.
+    sd-encrypt reads /etc/crypttab.initramfs, and nothing else creates it -
+    the plain /etc/crypttab that systemd ships is a comment-only stub with
+    no mapping to amend, which is why an earlier version of this function
+    found "no mapping" and returned before switching the hooks.
+
+    So the file is written outright rather than edited: this installer owns
+    root's mapping, and there is no prior entry to preserve.
     """
     crypttab = ctx.target / "etc/crypttab.initramfs"
-    if not crypttab.exists() and not (ctx.target / "etc/crypttab").exists():
-        crypttab.write_text(
-            "# written by the AshlarOS installer: sd-encrypt unlocks root\n"
-            f"{mapper_name(ctx)} UUID={device_uuid(device)} none tpm2-device=auto\n"
-        )
-        info(f"› {crypttab.name}: root unlocks via TPM, passphrase as fallback")
-        use_systemd_initramfs(ctx)
-        use_sd_encrypt_cmdline(ctx, device)
-        run_command(["arch-chroot", str(ctx.target), "mkinitcpio", "-P"])
-        return
-
-    if not crypttab.exists():
-        crypttab = ctx.target / "etc/crypttab"
-
-    lines = []
-    changed = False
-    for line in crypttab.read_text().splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            lines.append(line)
-            continue
-
-        fields = stripped.split()
-        # name source keyfile options - options may be absent entirely
-        if len(fields) < 2:
-            lines.append(line)
-            continue
-
-        if "tpm2-device=" in line:
-            lines.append(line)
-            changed = True
-            continue
-
-        while len(fields) < 4:
-            fields.append("none" if len(fields) < 3 else "")
-        fields[3] = f"{fields[3]},tpm2-device=auto".lstrip(",")
-        lines.append(" ".join(fields))
-        changed = True
-
-    if not changed:
-        error(f"{crypttab} holds no mapping to amend")
-        return
-
-    crypttab.write_text("\n".join(lines) + "\n")
+    crypttab.write_text(
+        "# written by the AshlarOS installer: sd-encrypt unlocks root from\n"
+        "# the TPM2 keyslot enrolled against PCR 7, passphrase as fallback\n"
+        f"{mapper_name(ctx)} UUID={device_uuid(device)} none tpm2-device=auto\n"
+    )
     info(f"› {crypttab.name}: root unlocks via TPM, passphrase as fallback")
 
     use_systemd_initramfs(ctx)
+    use_sd_encrypt_cmdline(ctx, device)
 
-    # the initramfs embeds crypttab.initramfs, so it has to be rebuilt for
-    # the option to take effect at boot
+    # the initramfs embeds crypttab.initramfs and the hook set, so it has to
+    # be rebuilt for either to take effect at boot
     run_command(["arch-chroot", str(ctx.target), "mkinitcpio", "-P"])
 
 

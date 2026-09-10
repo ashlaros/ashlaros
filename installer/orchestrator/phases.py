@@ -4,6 +4,7 @@ the InstallContext and either return cleanly or raise to abort the install."""
 from __future__ import annotations
 
 import json
+import shutil
 import time
 import traceback
 from collections.abc import Callable
@@ -73,6 +74,12 @@ def run(ctx: InstallContext, phases: list[tuple[str, PhaseFn]]) -> None:
     timing_path = ctx.target / "var" / "log" / "ashlaros-install-timing.json"
     timing_path.parent.mkdir(parents=True, exist_ok=True)
     write_state(timing_path, state)
+
+    # The log itself lives on the live ISO, which is gone after the first
+    # reboot - so a phase that reported a non-fatal error left nothing to
+    # read on the installed system. Copy it across.
+    if ctx.log_path.exists():
+        shutil.copy2(ctx.log_path, timing_path.parent / ctx.log_path.name)
 
 
 def installed_package_count(target: Path) -> int:
