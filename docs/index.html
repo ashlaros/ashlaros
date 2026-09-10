@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AshlarOS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <style>
+      /*
+       * The manjaro-sway design language, carried over from
+       * sway-repo/_layouts/default.html: #141a1b topbar, #282828 page, #eee
+       * foreground, headings deliberately small. Only the accent changes -
+       * #16a085 was Manjaro's green; ours is stone.
+       */
+      * {
+        color: #eee;
+        text-decoration: none;
+      }
+
+      body {
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        background-size: cover;
+        background-position: center right;
+        margin: 0;
+        font-family: Roboto, Helvetica, Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        background-image: url("background.svg");
+        background-color: #282828;
+      }
+
+      h1 {
+        background: #141a1b;
+        color: #8a8f98;
+        font-size: 0.8rem;
+        font-weight: 500;
+        line-height: 30px;
+        padding: 0 20px;
+        margin: 0;
+      }
+
+      h2 {
+        color: #8a8f98;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin: 2rem 0 0.4rem;
+      }
+
+      #content {
+        margin: 20px;
+        max-width: 46rem;
+      }
+
+      a.link {
+        font-family: monospace;
+        text-shadow: 2px 2px #282828;
+      }
+
+      a.link:hover {
+        color: #c9ccd1;
+      }
+
+      p {
+        line-height: 1.6;
+        max-width: 40rem;
+      }
+
+      pre {
+        background: #141a1b;
+        padding: 0.8rem 1rem;
+        overflow-x: auto;
+        font-family: monospace;
+      }
+
+      pre,
+      code {
+        color: #c9ccd1;
+      }
+
+      ul {
+        line-height: 1.8;
+        padding-left: 1.2rem;
+      }
+
+      .muted {
+        color: #8a8f98;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AshlarOS</h1>
+    <main id="content">
+      <p>
+        An Arch-based distribution: plain Arch underneath, CachyOS's
+        v3-optimised repositories layered over it, <code>linux-cachyos</code>,
+        <code>chwd</code> for hardware detection, systemd-boot, and a sway
+        desktop.
+      </p>
+
+      <h2>Download</h2>
+      <p>
+        <a class="link" href="https://iso.ashlaros.download/latest/ashlaros.iso"
+          >ashlaros.iso</a
+        >
+        &nbsp;<span class="muted"
+          >— x86_64 only. The package stack is <code>x86_64_v3</code>, which
+          needs AVX2: machines older than 2013 cannot run it.</span
+        >
+      </p>
+      <p class="muted">
+        Every build, with checksums:
+        <a class="link" href="https://iso.ashlaros.download/">iso.ashlaros.download</a>
+      </p>
+
+      <h2>The repository, on an existing Arch system</h2>
+      <p>
+        The <code>ashlaros</code> repository is dual-arch. There is no ARM ISO —
+        CachyOS publishes no ARM repositories to build one from — but the
+        packages install on Arch Linux ARM just as well.
+      </p>
+      <pre>
+curl -fsSL https://packages.ashlaros.download/ashlaros.gpg -o /tmp/ashlaros.gpg
+sudo pacman-key --add /tmp/ashlaros.gpg
+sudo pacman-key --lsign-key "$(gpg --show-keys --with-colons /tmp/ashlaros.gpg |
+  awk -F: '/^fpr:/ {print $10; exit}')"
+
+printf '[ashlaros]\nSigLevel = Required DatabaseRequired\nServer = https://packages.ashlaros.download/$arch\n' |
+  sudo tee -a /etc/pacman.conf
+
+sudo pacman -Sy ashlaros-keyring ashlaros-mirrorlist ashlaros-settings</pre
+      >
+
+      <h2>What it is not</h2>
+      <ul>
+        <li>
+          Not Manjaro. No <code>mhwd</code>, no Manjaro rebuilds, no calamares —
+          plain Arch provides what those did, and <code>chwd</code> replaces
+          <code>mhwd</code>.
+        </li>
+        <li>Not for pre-Haswell CPUs, for the reason above.</li>
+        <li>Not an ARM ISO.</li>
+      </ul>
+
+      <h2>Source</h2>
+      <p>
+        <a class="link" href="https://github.com/ashlaros/ashlaros"
+          >github.com/ashlaros/ashlaros</a
+        >
+        <span class="muted"
+          >— packages, the ISO profile, the installer and the workers, in one
+          repository.</span
+        >
+      </p>
+    </main>
+  </body>
+</html>
