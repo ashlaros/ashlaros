@@ -32,6 +32,13 @@ ashlaros-mirrorlist
 ashlaros-release
 
 # installer
+# extra/, not the v3 rebuild: cachyos-extra-v3 carried python-pydantic-core
+# 2.46.4 while extra's python-pydantic 2.13.5 requires exactly 2.46.5, so
+# archinstall raised SystemError on import and the installer died before it
+# touched the disk. Caught by booting the ISO, not by resolution checks -
+# each package resolved fine alone. Drop the prefix when the v3 tree catches
+# up; `pacman -Si python-pydantic-core` in both repos is the check.
+extra/python-pydantic-core
 archinstall
 arch-install-scripts
 gum
