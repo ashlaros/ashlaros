@@ -1,0 +1,84 @@
+name: track-upstreams
+
+# The AUR moves; our copies of its PKGBUILDs do not. This looks once a day
+# and opens a pull request when it finds a difference.
+#
+# A pull request, never a direct push: five of the vendored PKGBUILDs carry
+# deliberate local edits, and whether an upstream change is still compatible
+# with them is a judgement call. The merge is three-way against
+# packages/.upstream/, so a change to a line we never touched applies
+# cleanly and one to a line we did touch is reported as a conflict and left
+# alone.
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: track-upstreams
+  cancel-in-progress: false
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - run: pip install pyyaml
+
+      - name: look for upstream changes
+        id: track
+        run: |
+          set +e
+          python3 scripts/track_upstreams.py --apply --report /tmp/report.md > /tmp/summary.json
+          status=$?
+          set -e
+          cat /tmp/summary.json
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "changed=$(jq -r '.changed | join(" ")' /tmp/summary.json)" >> "$GITHUB_OUTPUT"
+          echo "conflicted=$(jq -r '.conflicted | join(" ")' /tmp/summary.json)" >> "$GITHUB_OUTPUT"
+          # 2 means a fetch failed: the AUR was unreachable, which is not a
+          # reason to fail the run, but is a reason not to claim all is well
+          if [ "$status" = "2" ]; then
+            echo "::warning::could not fetch $(jq -r '.failed | join(", ")' /tmp/summary.json)"
+          fi
+
+      - name: open a pull request
+        if: steps.track.outputs.status == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANGED: ${{ steps.track.outputs.changed }}
+          CONFLICTED: ${{ steps.track.outputs.conflicted }}
+        run: |
+          branch="track-upstreams"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+
+          # A conflicted package changes nothing in the tree, so there may
+          # be no diff to commit even though there is something to report.
+          if git diff --quiet; then
+            echo "## nothing merged cleanly; reporting the conflicts only"
+            gh issue create \
+              --title "AUR changes need a human: ${CONFLICTED}" \
+              --body-file /tmp/report.md \
+              --label upstream || true
+            exit 0
+          fi
+
+          git add packages/
+          git commit -m "track upstream: ${CHANGED}
+
+          $([ -n "$CONFLICTED" ] && echo "Left conflicted, needing a human: ${CONFLICTED}")"
+          git push --force origin "$branch"
+
+          gh pr create --head "$branch" --base main \
+            --title "track upstream: ${CHANGED}" \
+            --body-file /tmp/report.md 2>/dev/null ||
+            gh pr edit "$branch" --body-file /tmp/report.md

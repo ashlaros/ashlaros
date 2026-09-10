@@ -58,9 +58,18 @@ it locally, on an Arch host with `archiso` installed:
 sudo mkarchiso -v -w /tmp/ashlaros-work -o out iso/
 ```
 
-Packages are built and published by `.github/workflows/build-packages.yml`.
-`packages/*/PKGBUILD` are ours; `packages/upstreams.yml` lists the AUR sources
-built alongside them.
+Packages are built and published by `.github/workflows/build-packages.yml`,
+in dependency waves: a package that needs another built here waits for it to
+be published first.
+
+`packages/*/PKGBUILD` are ours. The rest are vendored from the AUR, because
+an AUR PKGBUILD can be force-pushed between two builds of the same version.
+`packages/upstreams.yml` records where each came from, and
+`.github/workflows/track-upstreams.yml` checks daily for upstream changes and
+opens a pull request. Several of them carry local edits — `arch=` widened to
+aarch64, a broken man-page step removed — so that merge is three-way against
+`packages/.upstream/` and conflicts are left for a human. Nothing merges
+itself.
 
 ## Licence
 

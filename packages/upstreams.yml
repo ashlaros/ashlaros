@@ -1,9 +1,17 @@
 # Where each PKGBUILD in this directory comes from.
 #
 # ashlaros-*: authored here, no upstream. Everything else is vendored - the
-# AUR is not a build input, because an AUR PKGBUILD can change under us
-# between two builds of the same version. Refreshing one is a deliberate
-# commit: fetch the upstream PKGBUILD, diff it, keep our arch= widening.
+# AUR is not a build input, because an AUR PKGBUILD can be force-pushed
+# between two builds of the same version.
+#
+# Vendored copies do not update themselves. track-upstreams.yml runs
+# scripts/track_upstreams.py daily: it fetches each AUR PKGBUILD, compares
+# it against the pristine copy in packages/.upstream/, and opens a pull
+# request with whatever moved. Five of these carry deliberate local edits
+# (arch= widened to aarch64, wluma's man-page step removed), so the merge
+# is three-way against that base - an upstream change to a line we never
+# touched applies cleanly, one to a line we did touch is reported as a
+# conflict and left for a human. Nothing is ever merged automatically.
 #
 # arch: what the PKGBUILD declares after our edits. `both` means the
 # aarch64 leg builds it too; a package that fails to compile there is
