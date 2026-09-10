@@ -81,6 +81,13 @@ fi
 # bucket is empty and there is no database to fetch
 pacman -Sy --noconfirm || true
 
+# Stock OPTIONS carry `debug`, which makes a <name>-debug package beside
+# every compiled one - detached symbols and /usr/src/debug sources. Those
+# would enter the repository as first-class packages nobody asked for, and
+# roughly double what a build leg uploads. OPTIONS is readonly inside
+# makepkg and has no flag, so the config file is the only place to say it.
+sed -i 's/^\(OPTIONS=(.*\)\bdebug\b/\1!debug/' /etc/makepkg.conf
+
 useradd -m -G wheel builder 2>/dev/null || true
 echo 'builder ALL=(ALL) NOPASSWD: ALL' >/etc/sudoers.d/builder
 chmod 440 /etc/sudoers.d/builder

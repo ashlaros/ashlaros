@@ -21,7 +21,12 @@ import_for() {
   "${run[@]}" gpg --batch --command-fd 0 --edit-key "$GPG_KEYID" trust quit <<<$'5\ny\n'
 }
 
-import_for /root/.gnupg
+# $HOME/.gnupg, not /root/.gnupg: a job in a container runs as root but
+# with HOME=/github/home, so gpg - and therefore makepkg and repo-add -
+# reads a keyring that an import into /root/.gnupg never touches. That
+# failed with "The key ... does not exist in your keyring" after the import
+# had reported success.
+import_for "${HOME:-/root}/.gnupg"
 
 # The publish container has no builder user - nothing there runs makepkg -
 # and under `set -e` a bare `id builder && ...` makes its absence the
