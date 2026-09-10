@@ -451,9 +451,46 @@ def add_crypttab_tpm_option(ctx: InstallContext, device: Path) -> None:
     crypttab.write_text("\n".join(lines) + "\n")
     info(f"› {crypttab.name}: root unlocks via TPM, passphrase as fallback")
 
+    use_systemd_initramfs(ctx)
+
     # the initramfs embeds crypttab.initramfs, so it has to be rebuilt for
     # the option to take effect at boot
     run_command(["arch-chroot", str(ctx.target), "mkinitcpio", "-P"])
+
+
+def use_systemd_initramfs(ctx: InstallContext) -> None:
+    """Swap the busybox encrypt hook for the systemd one.
+
+    The stock HOOKS line uses `encrypt`, which is the busybox unlocker: it
+    reads neither crypttab nor a TPM2 keyslot and always prompts. Only
+    `sd-encrypt`, under the `systemd` init hook, honours tpm2-device=auto -
+    so without this the enrolment above succeeds and changes nothing, which
+    is exactly what booting the installed system showed.
+
+    udev/keymap/consolefont have systemd equivalents; the whole set has to
+    move together, because sd-encrypt requires systemd to have run.
+    """
+    conf = ctx.target / "etc/mkinitcpio.conf"
+    replacements = {
+        "udev": "systemd",
+        "keymap": "sd-vconsole",
+        "encrypt": "sd-encrypt",
+    }
+    dropped = {"consolefont"}  # sd-vconsole covers both font and keymap
+
+    lines = []
+    for line in conf.read_text().splitlines():
+        if not line.startswith("HOOKS="):
+            lines.append(line)
+            continue
+        hooks = line[len("HOOKS=("):].rstrip(")").split()
+        rewritten = [replacements.get(h, h) for h in hooks if h not in dropped]
+        # base and systemd together is a mkinitcpio warning: systemd
+        # replaces base's early userspace outright
+        rewritten = [h for h in rewritten if h != "base"]
+        lines.append(f"HOOKS=({' '.join(rewritten)})")
+    conf.write_text("\n".join(lines) + "\n")
+    info("› initramfs: sd-encrypt, so the TPM keyslot is actually used")
 
 
 def configure_login(ctx: InstallContext) -> None:
