@@ -9,6 +9,16 @@ set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://packages.ashlaros.download}"
 
+# pacman 7 drops privileges to the 'alpm' user and confines downloads with
+# Landlock. A container whose seccomp profile blocks the landlock syscalls
+# fails the whole sync with "the Landlock ruleset could not be applied" -
+# seen on the ARM runners. The isolation is worth having where the kernel
+# allows it, so probe rather than switch it off unconditionally.
+if ! pacman -Sy --noconfirm >/dev/null 2>&1; then
+	echo "pacman's download sandbox is unavailable here; disabling it" >&2
+	printf '\nDisableSandbox\n' >>/etc/pacman.conf
+fi
+
 pacman-key --init
 # Arch Linux ARM ships its own keyring name; populate whichever is present
 for keyring in archlinux archlinuxarm; do
