@@ -22,4 +22,11 @@ import_for() {
 }
 
 import_for /root/.gnupg
-id builder >/dev/null 2>&1 && import_for /home/builder/.gnupg builder
+
+# The publish container has no builder user - nothing there runs makepkg -
+# and under `set -e` a bare `id builder && ...` makes its absence the
+# script's exit status. Publishing then failed with 28 packages collected
+# and the key already imported.
+if id builder >/dev/null 2>&1; then
+  import_for /home/builder/.gnupg builder
+fi
