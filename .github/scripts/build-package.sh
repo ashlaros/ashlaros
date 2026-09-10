@@ -5,6 +5,9 @@ set -euo pipefail
 pkg_dir="${1:?usage: build-package.sh <package directory>}"
 : "${GPG_KEYID:?the key id must be provided}"
 
+# every path below is relative to the checkout, and the build cds away
+root="$PWD"
+
 # the repository moves under us between the container's sync and this build;
 # a makedepend resolved against a stale database installs a version the
 # current one no longer has
@@ -13,6 +16,11 @@ pacman -Syu --noconfirm
 # makepkg refuses to run as root, and the whole checkout has to be readable
 # by the user it runs as instead
 chown -R builder:builder .
+
+# ...which makes git, still running as root here, refuse the checkout for
+# dubious ownership - and package_version.py below needs it. Seen as
+# "cannot derive a version for packages/ashlaros-branding".
+git config --global --add safe.directory "$root"
 
 # A package we author has no upstream release to take a version from, and a
 # hardcoded one silently strands every update: publishing edited content at
@@ -49,17 +57,20 @@ done
 # Record what this package was built from, so a later run can tell that
 # rebuilding it would produce the same thing. PACKAGER is the only free-text
 # field repo-add copies into the database that nothing else reads; the hash
-# is over every file in the package directory, because a payload edit
-# changes the package without touching pkgver. discover_packages.py reads
-# it back out of the published database.
-source_hash=$(python3 - "$PWD" <<'PYTHON'
-import hashlib, pathlib, sys
-directory = pathlib.Path(sys.argv[1])
-digest = hashlib.sha256()
-for path in sorted(p for p in directory.rglob("*") if p.is_file()):
-    digest.update(path.relative_to(directory).as_posix().encode())
-    digest.update(path.read_bytes())
-print(digest.hexdigest()[:16])
+# is over every file a package is built from - its directory plus any
+# _source_trees it declares - because a payload edit changes the package
+# without touching pkgver. discover_packages.py reads it back out of the
+# published database.
+source_hash=$(cd "$root" && python3 - "$pkg_dir" <<'PYTHON'
+import importlib.util, pathlib, sys
+
+# the one implementation discovery reads back, so the two can never
+# disagree about what a package was built from - a second copy here missed
+# _source_trees and would have stamped a mark that never matched
+spec = importlib.util.spec_from_file_location("d", "scripts/discover_packages.py")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+print(module.source_hash(pathlib.Path(sys.argv[1])))
 PYTHON
 )
 
