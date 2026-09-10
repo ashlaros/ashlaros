@@ -9,3 +9,8 @@ work/
 # signing key material - never commit
 .gnupg-tmp/
 *.private-key.pem
+# credentials, in any of the shapes an editor leaves them
+.env
+.env.*
+*.env
+.*.swp
