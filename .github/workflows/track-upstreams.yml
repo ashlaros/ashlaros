@@ -1,14 +1,18 @@
 name: track-upstreams
 
-# The AUR moves; our copies of its PKGBUILDs do not. This looks once a day
-# and opens a pull request when it finds a difference.
+# Upstream moves; our vendored copies do not. This looks once a day and
+# opens one pull request per package that changed.
 #
-# A pull request, never a direct push: five of the vendored PKGBUILDs carry
-# deliberate local edits, and whether an upstream change is still compatible
-# with them is a judgement call. The merge is three-way against
-# packages/.upstream/, so a change to a line we never touched applies
-# cleanly and one to a line we did touch is reported as a conflict and left
-# alone.
+# One per package, not one for all of them: a conflict in wluma should not
+# hold up a clean update to swayr, and a PR that touches one PKGBUILD is a
+# PR someone can actually review. Each branch is named for its package, so
+# a second run updates the existing PR rather than opening another.
+#
+# Never a direct push: several vendored PKGBUILDs carry deliberate local
+# edits, and whether an upstream change is still compatible with them is a
+# judgement call. The merge is three-way against packages/.upstream/, so a
+# change to a line we never touched applies cleanly and one to a line we
+# did touch is reported as a conflict with our file left alone.
 on:
   schedule:
     - cron: '0 2 * * *'
@@ -17,6 +21,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 concurrency:
   group: track-upstreams
@@ -34,51 +39,64 @@ jobs:
 
       - name: look for upstream changes
         id: track
+        env:
+          # raises the GitHub API rate limit from 60/hour per address to
+          # 1000, which matters on a shared runner
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set +e
-          python3 scripts/track_upstreams.py --apply --report /tmp/report.md > /tmp/summary.json
+          python3 scripts/track_upstreams.py --apply --report-dir /tmp/pr > /tmp/summary.json
           status=$?
           set -e
           cat /tmp/summary.json
           echo "status=$status" >> "$GITHUB_OUTPUT"
-          echo "changed=$(jq -r '.changed | join(" ")' /tmp/summary.json)" >> "$GITHUB_OUTPUT"
-          echo "conflicted=$(jq -r '.conflicted | join(" ")' /tmp/summary.json)" >> "$GITHUB_OUTPUT"
-          # 2 means a fetch failed: the AUR was unreachable, which is not a
-          # reason to fail the run, but is a reason not to claim all is well
           if [ "$status" = "2" ]; then
-            echo "::warning::could not fetch $(jq -r '.failed | join(", ")' /tmp/summary.json)"
+            echo "::warning::could not check $(jq -r '.failed | join(", ")' /tmp/summary.json)"
           fi
 
-      - name: open a pull request
-        if: steps.track.outputs.status == '1'
+      - name: open a pull request per package
+        if: steps.track.outputs.status != '0'
         env:
           GH_TOKEN: ${{ github.token }}
-          CHANGED: ${{ steps.track.outputs.changed }}
-          CONFLICTED: ${{ steps.track.outputs.conflicted }}
         run: |
-          branch="track-upstreams"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$branch"
 
-          # A conflicted package changes nothing in the tree, so there may
-          # be no diff to commit even though there is something to report.
-          if git diff --quiet; then
-            echo "## nothing merged cleanly; reporting the conflicts only"
-            gh issue create \
-              --title "AUR changes need a human: ${CONFLICTED}" \
-              --body-file /tmp/report.md \
-              --label upstream || true
-            exit 0
-          fi
+          base=$(git rev-parse HEAD)
 
-          git add packages/
-          git commit -m "track upstream: ${CHANGED}
+          # A clean merge wrote files; a conflict wrote none. Both produce a
+          # report, so drive the loop off the reports and decide per package.
+          for report in /tmp/pr/*.md; do
+            [ -e "$report" ] || continue
+            name=$(basename "$report" .md)
+            branch="track-upstream/$name"
 
-          $([ -n "$CONFLICTED" ] && echo "Left conflicted, needing a human: ${CONFLICTED}")"
-          git push --force origin "$branch"
+            # each PR starts from the base commit, so one does not carry
+            # another's changes
+            git checkout -q -B "$branch" "$base"
 
-          gh pr create --head "$branch" --base main \
-            --title "track upstream: ${CHANGED}" \
-            --body-file /tmp/report.md 2>/dev/null ||
-            gh pr edit "$branch" --body-file /tmp/report.md
+            if git diff --quiet -- "packages/$name" "packages/.upstream/$name.PKGBUILD"; then
+              # conflicted: nothing to commit, so report it as an issue
+              # rather than an empty pull request
+              existing=$(gh issue list --search "in:title track upstream: $name" \
+                --state open --json number --jq '.[0].number // empty')
+              if [ -n "$existing" ]; then
+                gh issue comment "$existing" --body-file "$report"
+              else
+                gh issue create --title "track upstream: $name needs a human" \
+                  --body-file "$report"
+              fi
+              continue
+            fi
+
+            git add "packages/$name" "packages/.upstream/$name.PKGBUILD"
+            git commit -q -m "track upstream: $name"
+            git push -q --force origin "$branch"
+
+            gh pr create --head "$branch" --base main \
+              --title "track upstream: $name" \
+              --body-file "$report" 2>/dev/null ||
+              gh pr edit "$branch" --body-file "$report"
+          done
+
+          git checkout -q "$base"

@@ -64,9 +64,9 @@ be published first.
 
 `packages/*/PKGBUILD` are ours. The rest are vendored from the AUR, because
 an AUR PKGBUILD can be force-pushed between two builds of the same version.
-`packages/upstreams.yml` records where each came from, and
-`.github/workflows/track-upstreams.yml` checks daily for upstream changes and
-opens a pull request. Several of them carry local edits — `arch=` widened to
+`packages/upstreams.yml` records where each came from — the AUR for most,
+GitHub for three — and `.github/workflows/track-upstreams.yml` checks all of
+them daily, opening one pull request per package that moved. Several of them carry local edits — `arch=` widened to
 aarch64, a broken man-page step removed — so that merge is three-way against
 `packages/.upstream/` and conflicts are left for a human. Nothing merges
 itself.
