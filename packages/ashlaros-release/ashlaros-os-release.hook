@@ -1,0 +1,10 @@
+[Trigger]
+Type = Package
+Operation = Install
+Operation = Upgrade
+Target = filesystem
+
+[Action]
+Description = Installing the AshlarOS os-release
+When = PostTransaction
+Exec = /usr/bin/cp -f /usr/share/ashlaros/os-release /etc/os-release

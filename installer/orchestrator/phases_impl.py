@@ -240,26 +240,64 @@ def write_repository_stack(ctx: InstallContext) -> None:
 
 
 def trust_keys(ctx: InstallContext) -> None:
-    """Populate the target's pacman keyring with the keys its repositories sign with.
+    """Trust the keys the target's repositories sign with, before their packages exist.
 
-    The live system already trusts both, and its keyrings are the same files
-    the packages install, so copying them across saves fetching a keyring
-    package from a repository whose signature is not yet trusted.
+    The live system already trusts both, so its key material is what the
+    target needs - but it cannot be staged under /usr/share/pacman/keyrings:
+    ashlaros-keyring owns those paths and pacman refuses to install over
+    files it does not own ("ashlaros.gpg exists in filesystem" failed the
+    whole pacstrap transaction). The keys go into the keyring database
+    instead, which no package owns, and ashlaros-keyring installs its own
+    copies of the files later without conflict.
     """
     live_keyrings = Path("/usr/share/pacman/keyrings")
-    target_keyrings = ctx.target / "usr/share/pacman/keyrings"
-    target_keyrings.mkdir(parents=True, exist_ok=True)
-    for name in ("cachyos", "ashlaros"):
-        for suffix in (".gpg", "-trusted", "-revoked"):
-            source = live_keyrings / f"{name}{suffix}"
-            if source.exists():
-                shutil.copy2(source, target_keyrings / source.name)
+    staged = ctx.target / "tmp/ashlaros-keys"
+    staged.mkdir(parents=True, exist_ok=True)
 
     run_command(["arch-chroot", str(ctx.target), "pacman-key", "--init"])
-    run_command(
-        ["arch-chroot", str(ctx.target), "pacman-key", "--populate",
-         "archlinux", "cachyos", "ashlaros"]
-    )
+    run_command(["arch-chroot", str(ctx.target), "pacman-key", "--populate", "archlinux"])
+
+    for name in ("cachyos", "ashlaros"):
+        keyring = live_keyrings / f"{name}.gpg"
+        if not keyring.exists():
+            continue
+        shutil.copy2(keyring, staged / keyring.name)
+        inside = f"/tmp/ashlaros-keys/{keyring.name}"
+        run_command(["arch-chroot", str(ctx.target), "pacman-key", "--add", inside])
+        # --add imports without trusting; only a local signature makes
+        # pacman accept a database signed with the key
+        for fingerprint in key_fingerprints(keyring):
+            run_command(
+                ["arch-chroot", str(ctx.target), "pacman-key", "--lsign-key", fingerprint]
+            )
+
+    shutil.rmtree(staged, ignore_errors=True)
+
+
+def key_fingerprints(keyring: Path) -> list[str]:
+    """Every primary-key fingerprint in a keyring file.
+
+    Only the fpr record following a pub: subkeys emit one too, and
+    pacman-key --lsign-key on a subkey fingerprint fails.
+    """
+    listing = subprocess.run(
+        ["gpg", "--show-keys", "--with-colons", str(keyring)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    fingerprints = []
+    primary = False
+    for line in listing.splitlines():
+        record = line.split(":")[0]
+        if record == "pub":
+            primary = True
+        elif record == "fpr" and primary:
+            fingerprints.append(line.split(":")[9])
+            primary = False
+        elif record == "sub":
+            primary = False
+    return fingerprints
 
 
 def install_bootloader(ctx: InstallContext, installer, config) -> bool:
