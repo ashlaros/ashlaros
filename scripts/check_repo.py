@@ -25,6 +25,9 @@ from botocore.exceptions import ClientError
 
 DB_NAME = "ashlaros"
 
+# Arch compresses with zstd, Arch Linux ARM with xz
+PKG_SUFFIXES = (".pkg.tar.zst", ".pkg.tar.xz")
+
 # a database entry records its own filename and size; both must match
 FIELD = re.compile(r"%([A-Z0-9]+)%\n([^\n]*)")
 
@@ -118,7 +121,7 @@ def check_arch(s3, bucket: str, arch: str) -> list[str]:
 
     # a package nobody can install is as broken as a missing one
     for name in sorted(present):
-        if name.endswith(".pkg.tar.zst") and name not in listed:
+        if name.endswith(PKG_SUFFIXES) and name not in listed:
             problems.append(f"{arch}: {name} is published but absent from the database")
 
     files_payload = fetch(s3, bucket, f"{prefix}{DB_NAME}.files.tar.gz")

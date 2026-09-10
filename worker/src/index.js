@@ -157,7 +157,9 @@ export default {
     // but the database is rewritten in place on every publish
     headers.set(
       'cache-control',
-      key.endsWith('.pkg.tar.zst')
+      // .zst from Arch, .xz from Arch Linux ARM - both immutable, since
+      // the version is in the filename
+      /\.pkg\.tar\.(zst|xz)$/.test(key)
         ? 'public, max-age=31536000, immutable'
         : 'no-cache',
     );

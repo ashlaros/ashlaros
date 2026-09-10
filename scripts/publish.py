@@ -46,13 +46,28 @@ def s3_client():
     )
 
 
+# Arch compresses packages with zstd; Arch Linux ARM still uses xz, and
+# makepkg's PKGEXT follows whichever distribution built them.
+PKG_SUFFIXES = (".pkg.tar.zst", ".pkg.tar.xz")
+
+
+def packages_in(directory: str) -> list[str]:
+    return sorted(
+        path
+        for suffix in PKG_SUFFIXES
+        for path in glob.glob(os.path.join(directory, f"*{suffix}"))
+    )
+
+
 def pkgname_of(filename: str) -> str:
     """The package name out of a filename.
 
-    A filename is name-version-release-arch.pkg.tar.zst, and a name may hold
-    hyphens, so strip the three known trailing fields rather than split.
+    A filename is name-version-release-arch.pkg.tar.<ext>, and a name may
+    hold hyphens, so strip the three known trailing fields rather than split.
     """
-    stem = filename.removesuffix(".pkg.tar.zst").removesuffix(".sig")
+    stem = filename.removesuffix(".sig")
+    for suffix in PKG_SUFFIXES:
+        stem = stem.removesuffix(suffix)
     return stem.rsplit("-", 3)[0]
 
 
@@ -89,7 +104,7 @@ def prune_superseded(s3, bucket: str, prefix: str, published: list[str]) -> None
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         for obj in page.get("Contents", []):
             name = obj["Key"].removeprefix(prefix)
-            if not name.endswith((".pkg.tar.zst", ".pkg.tar.zst.sig")):
+            if not name.endswith(PKG_SUFFIXES + tuple(s + ".sig" for s in PKG_SUFFIXES)):
                 continue
             if name in keep or f"{name}.sig" in keep or name.removesuffix(".sig") in keep:
                 continue
@@ -143,7 +158,7 @@ def main() -> int:
     parser.add_argument("--arch", required=True, help="architecture tree to publish into")
     args = parser.parse_args()
 
-    packages = sorted(glob.glob(os.path.join(args.pkg_dir, "*.pkg.tar.zst")))
+    packages = packages_in(args.pkg_dir)
     if not packages:
         log("no packages to publish")
         return 1

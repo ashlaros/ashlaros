@@ -44,7 +44,14 @@ jobs:
         # upload-artifact rejects a colon anywhere in a path and a pacman
         # epoch always has one, so the files go in a tar we name ourselves
         working-directory: packages/${{ matrix.package }}
-        run: tar cf artifact.tar ./*.pkg.tar.zst ./*.pkg.tar.zst.sig
+        # .zst or .xz: makepkg's PKGEXT follows the distribution, and Arch
+        # Linux ARM still compresses with xz. Hardcoding .zst silently
+        # produced no artifact from a build that had already succeeded.
+        run: |
+          find . -maxdepth 1 \( -name '*.pkg.tar.zst' -o -name '*.pkg.tar.xz' \
+            -o -name '*.pkg.tar.zst.sig' -o -name '*.pkg.tar.xz.sig' \) -printf '%P\n' > files.txt
+          test -s files.txt
+          tar cf artifact.tar -T files.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pkg-any-${{ matrix.package }}
@@ -89,7 +96,14 @@ jobs:
       - name: collect the packages
         if: steps.build.outcome == 'success'
         working-directory: packages/${{ matrix.package }}
-        run: tar cf artifact.tar ./*.pkg.tar.zst ./*.pkg.tar.zst.sig
+        # .zst or .xz: makepkg's PKGEXT follows the distribution, and Arch
+        # Linux ARM still compresses with xz. Hardcoding .zst silently
+        # produced no artifact from a build that had already succeeded.
+        run: |
+          find . -maxdepth 1 \( -name '*.pkg.tar.zst' -o -name '*.pkg.tar.xz' \
+            -o -name '*.pkg.tar.zst.sig' -o -name '*.pkg.tar.xz.sig' \) -printf '%P\n' > files.txt
+          test -s files.txt
+          tar cf artifact.tar -T files.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.build.outcome == 'success'
         with:
@@ -126,7 +140,7 @@ jobs:
         run: |
           mkdir -p out
           find artifacts -name artifact.tar -exec tar -xf {} -C out \; 2>/dev/null || true
-          count=$(ls out/*.pkg.tar.zst 2>/dev/null | wc -l)
+          count=$(find out -maxdepth 1 \( -name '*.pkg.tar.zst' -o -name '*.pkg.tar.xz' \) | wc -l)
           echo "count=$count" >> "$GITHUB_OUTPUT"
           echo "## ${{ matrix.arch }}: $count package(s) to publish"
       - name: import the signing key

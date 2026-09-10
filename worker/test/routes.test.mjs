@@ -17,6 +17,7 @@ const KEYS = [
   'x86_64/swayr-0.27.3-1-x86_64.pkg.tar.zst',
   'aarch64/ashlaros.db.tar.gz',
   'aarch64/ashlaros-settings-20260910-1-any.pkg.tar.zst',
+  'aarch64/idlehack-0.r21-1-aarch64.pkg.tar.xz',
   'ashlaros.gpg',
 ];
 
@@ -89,6 +90,11 @@ test('packages are immutable, the database is not', async () => {
 
   const db = await worker.fetch(get('x86_64/ashlaros.db.tar.gz'), env(KEYS));
   assert.equal(db.headers.get('cache-control'), 'no-cache');
+
+  // Arch Linux ARM compresses with xz, and an xz package is no less
+  // immutable than a zst one - its version is in its filename either way
+  const xz = await worker.fetch(get('aarch64/idlehack-0.r21-1-aarch64.pkg.tar.xz'), env(KEYS));
+  assert.match(xz.headers.get('cache-control'), /immutable/);
 });
 
 test('a range request is answered as a range', async () => {
