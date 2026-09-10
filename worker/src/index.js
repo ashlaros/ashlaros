@@ -21,18 +21,27 @@ const SITES = {
   'iso.ashlaros.download': isoSite,
 };
 
-// `wrangler dev` and a workers.dev URL carry neither hostname; serving the
-// repository there keeps the common case working without pretending an
-// unknown host is one of ours.
+// The apex is the landing page, which is not a bucket at all: it is the
+// docs/ directory, bound as static assets and served by the runtime.
+const DOCS_HOST = 'ashlaros.download';
+
+// `wrangler dev` and a workers.dev URL carry none of these hostnames;
+// serving the repository there keeps the common case working without
+// pretending an unknown host is one of ours.
 const DEFAULT_SITE = packagesSite;
 
 export function siteFor(hostname) {
   return SITES[hostname] ?? DEFAULT_SITE;
 }
 
+export function isDocsHost(hostname) {
+  return hostname === DOCS_HOST || hostname === `www.${DOCS_HOST}`;
+}
+
 export default {
   fetch(request, env, ctx) {
     const { hostname } = new URL(request.url);
+    if (isDocsHost(hostname)) return env.DOCS.fetch(request);
     return handler(siteFor(hostname))(request, env, ctx);
   },
 };

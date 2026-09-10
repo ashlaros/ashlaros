@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import worker, { siteFor } from '../src/index.js';
+import worker, { isDocsHost, siteFor } from '../src/index.js';
 import { site as isoSite } from '../src/iso.js';
 import { site as packagesSite } from '../src/packages.js';
 import { bucketOf, get } from './helpers.mjs';
@@ -58,6 +58,31 @@ test('the root of each host renders that host\'s own index', async () => {
   const body = await iso.text();
   assert.match(body, /latest\/ashlaros\.iso/);
   assert.doesNotMatch(body, /x86_64\/ashlaros\.db/);
+});
+
+test('the apex serves the landing page, not a bucket', async () => {
+  // the assets binding answers it; if the apex ever fell through to a site
+  // handler it would expose bucket keys under the marketing hostname
+  let asked;
+  const withDocs = {
+    ...env(),
+    DOCS: { fetch: (request) => ((asked = request.url), new Response('<h1>AshlarOS</h1>')) },
+  };
+
+  const res = await worker.fetch(get('ashlaros.download', ''), withDocs);
+  assert.match(await res.text(), /AshlarOS/);
+  assert.equal(asked, 'https://ashlaros.download/');
+
+  // a key that exists in a bucket is still the landing page here
+  const key = await worker.fetch(get('ashlaros.download', 'x86_64/ashlaros.db.tar.gz'), withDocs);
+  assert.match(await key.text(), /AshlarOS/);
+});
+
+test('only the apex is the docs host', () => {
+  assert.ok(isDocsHost('ashlaros.download'));
+  assert.ok(isDocsHost('www.ashlaros.download'));
+  assert.ok(!isDocsHost('packages.ashlaros.download'));
+  assert.ok(!isDocsHost('iso.ashlaros.download'));
 });
 
 test('the favicon is served on both hosts', async () => {

@@ -12,9 +12,25 @@ account_id = "fc8102dae7e1eb7a1ecec012dcb0dfaf"
 # Custom domains rather than routes: cloudflare provisions the DNS record
 # and certificate, and the zone lives in the same account as the worker.
 routes = [
+  # A route, not a custom domain: the apex already carries DNS records the
+  # zone manages, and a custom domain refuses to take a hostname that has
+  # them ("already has externally managed DNS records"). A route on the
+  # proxied hostname runs ahead of whatever those records point at, which
+  # is what makes the apex stop answering 525.
+  { pattern = "ashlaros.download/*", zone_name = "ashlaros.download" },
+  { pattern = "www.ashlaros.download/*", zone_name = "ashlaros.download" },
   { pattern = "packages.ashlaros.download", custom_domain = true },
   { pattern = "iso.ashlaros.download", custom_domain = true },
 ]
+
+# The landing page, served from the repository rather than copied into a
+# JS module, so the page and its assets have exactly one source. The worker
+# runs first and hands the apex to this binding; the two bucket hostnames
+# never touch it.
+[assets]
+directory = "../docs"
+binding = "DOCS"
+run_worker_first = true
 
 [[r2_buckets]]
 binding = "PACKAGES"
