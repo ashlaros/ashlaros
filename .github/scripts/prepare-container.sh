@@ -38,15 +38,30 @@ if [[ $(uname -m) == x86_64 ]]; then
 	EOF
 fi
 
-# Our own repository, so a package can depend on one published minutes ago.
-# DatabaseOptional, not DatabaseRequired: the very first run publishes into
-# an empty bucket, where no signed database exists yet.
-cat >>/etc/pacman.conf <<-EOF
+# Trust our own signing key before configuring the repository. A signed
+# database whose key is unknown does not degrade to unsigned - pacman fails
+# the whole sync with "invalid or corrupted database (PGP signature)", and
+# every build after it cannot resolve so much as jq. SigLevel = Optional
+# does not help: the check that fails happens before it applies.
+if curl -fsSL "${REPO_URL}/ashlaros.gpg" -o /tmp/ashlaros.gpg &&
+	gpg --show-keys /tmp/ashlaros.gpg >/dev/null 2>&1; then
+	pacman-key --add /tmp/ashlaros.gpg
+	gpg --show-keys --with-colons /tmp/ashlaros.gpg |
+		awk -F: '/^fpr:/ {print $10}' |
+		while read -r fingerprint; do pacman-key --lsign-key "$fingerprint"; done
 
-	[ashlaros]
-	SigLevel = Optional TrustAll
-	Server = ${REPO_URL}/\$arch
-EOF
+	# Our own repository, so a package can depend on one published minutes
+	# ago. DatabaseOptional, not DatabaseRequired: the very first run
+	# publishes into an empty bucket, where no database exists at all.
+	cat >>/etc/pacman.conf <<-EOF
+
+		[ashlaros]
+		SigLevel = Required DatabaseOptional
+		Server = ${REPO_URL}/\$arch
+	EOF
+else
+	echo "the ashlaros key is not published yet; building without the repository" >&2
+fi
 
 # a missing repository must not fail the sync: on the first ever run the
 # bucket is empty and there is no database to fetch

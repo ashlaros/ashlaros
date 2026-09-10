@@ -1,0 +1,146 @@
+name: build-wave
+
+# One wave: build every package in it, then publish them together. The caller
+# runs waves in order, because a later wave resolves its dependencies out of
+# what this one publishes.
+on:
+  workflow_call:
+    inputs:
+      any:
+        description: JSON array of arch=any package directories
+        required: true
+        type: string
+      compiled:
+        description: JSON array of package directories built per architecture
+        required: true
+        type: string
+
+jobs:
+  build-any:
+    if: inputs.any != '[]'
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+      # makepkg drops privileges and pacman needs to mount
+      options: --security-opt seccomp=unconfined
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(inputs.any) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: prepare the build container
+        run: .github/scripts/prepare-container.sh
+      - name: import the signing key
+        env:
+          GPG_SECRET_BASE64: ${{ secrets.GPG_SECRET_BASE64 }}
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+        run: .github/scripts/import-key.sh
+      - name: build
+        env:
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+        run: .github/scripts/build-package.sh "packages/${{ matrix.package }}"
+      - name: collect the packages
+        # upload-artifact rejects a colon anywhere in a path and a pacman
+        # epoch always has one, so the files go in a tar we name ourselves
+        working-directory: packages/${{ matrix.package }}
+        run: tar cf artifact.tar ./*.pkg.tar.zst ./*.pkg.tar.zst.sig
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pkg-any-${{ matrix.package }}
+          path: packages/${{ matrix.package }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  build-compiled:
+    if: inputs.compiled != '[]'
+    # native, not emulated: makepkg under qemu is slow enough to change what
+    # a build costs
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    container:
+      # Arch proper has no aarch64 port; Arch Linux ARM is what an ARM user
+      # runs underneath our repository, so it is what we build against.
+      image: ${{ matrix.arch == 'aarch64' && 'menci/archlinuxarm:base-devel' || 'archlinux:base-devel' }}
+      options: --security-opt seccomp=unconfined
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+        package: ${{ fromJSON(inputs.compiled) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: prepare the build container
+        run: .github/scripts/prepare-container.sh
+      - name: import the signing key
+        env:
+          GPG_SECRET_BASE64: ${{ secrets.GPG_SECRET_BASE64 }}
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+        run: .github/scripts/import-key.sh
+      - name: build
+        id: build
+        # An aarch64 failure is not a build failure: the package is simply
+        # absent from that database, and an ALARM user loses one package
+        # rather than the repository. On x86_64 it is fatal - that is the
+        # architecture the ISO is built from.
+        continue-on-error: ${{ matrix.arch == 'aarch64' }}
+        env:
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+        run: .github/scripts/build-package.sh "packages/${{ matrix.package }}"
+      - name: collect the packages
+        if: steps.build.outcome == 'success'
+        working-directory: packages/${{ matrix.package }}
+        run: tar cf artifact.tar ./*.pkg.tar.zst ./*.pkg.tar.zst.sig
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.build.outcome == 'success'
+        with:
+          name: pkg-${{ matrix.arch }}-${{ matrix.package }}
+          path: packages/${{ matrix.package }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    needs: [build-any, build-compiled]
+    # a leg that failed must not withhold the packages that did build
+    if: always() && (needs.build-any.result == 'success' || needs.build-compiled.result == 'success')
+    runs-on: ubuntu-latest
+    strategy:
+      # one at a time: both legs read-modify-write the same bucket
+      max-parallel: 1
+      matrix:
+        arch: [x86_64, aarch64]
+    container:
+      # repo-add must come from the same pacman generation that built the
+      # packages; Ubuntu's build rejects them as "not a package file"
+      image: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: pacman -Sy --noconfirm --needed python python-boto3
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          # the any packages belong in both trees, so both legs take them
+          pattern: pkg-{${{ matrix.arch }},any}-*
+          path: artifacts
+        continue-on-error: true
+      - name: unpack
+        id: have
+        run: |
+          mkdir -p out
+          find artifacts -name artifact.tar -exec tar -xf {} -C out \; 2>/dev/null || true
+          count=$(ls out/*.pkg.tar.zst 2>/dev/null | wc -l)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "## ${{ matrix.arch }}: $count package(s) to publish"
+      - name: import the signing key
+        if: steps.have.outputs.count != '0'
+        env:
+          GPG_SECRET_BASE64: ${{ secrets.GPG_SECRET_BASE64 }}
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+        run: .github/scripts/import-key.sh
+      - name: publish to R2
+        if: steps.have.outputs.count != '0'
+        env:
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ashlaros
+        run: python3 scripts/publish.py --pkg-dir out --arch "${{ matrix.arch }}"

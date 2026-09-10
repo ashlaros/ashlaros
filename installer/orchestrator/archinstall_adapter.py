@@ -32,7 +32,7 @@ from __future__ import annotations
 import inspect
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from collections.abc import Iterator
 
 # Imports are top-level so a missing or incompatible archinstall surfaces at
 # orchestrator startup, not deep inside a phase.
@@ -121,7 +121,7 @@ def perform_filesystem_operations(arch_config: ArchConfig) -> None:
         try:
             handler.perform_filesystem_operations(**kwargs)
             return
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             if attempt == attempts or "unable to inform the kernel" not in str(exc):
                 raise
             info(f"› partition commit lost a udev race ({attempt}/{attempts}); retrying")

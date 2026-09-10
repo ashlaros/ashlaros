@@ -1,0 +1,76 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workers:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        worker: [worker, iso-worker]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: 22
+      - name: test
+        working-directory: ${{ matrix.worker }}
+        run: npm test
+
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: shellcheck
+        # the installer is the one place a shell bug destroys a disk, so it
+        # is checked rather than trusted
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y shellcheck
+          shellcheck --severity=warning \
+            installer/configurator \
+            installer/dashboard \
+            installer/ashlaros-install \
+            .github/scripts/*.sh \
+            iso/airootfs/root/.automated_script.sh
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@e348410e00f449ade0b528ec4c2f8e17d5df125a # v6.0.0
+        with:
+          python-version: '3.13'
+      - name: ruff
+        run: |
+          pip install ruff
+          ruff check scripts installer/orchestrator
+
+  packages:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: every PKGBUILD parses and its checksums match its sources
+        # a stale sha256sum fails the build twenty minutes in; catch it here
+        run: |
+          # git: several PKGBUILDs take git+ sources, which makepkg
+          # refuses to even look at without it
+          pacman -Sy --noconfirm --needed pacman-contrib git >/dev/null
+          useradd -m builder
+          chown -R builder:builder .
+          fail=0
+          for pkgbuild in packages/*/PKGBUILD; do
+            dir=$(dirname "$pkgbuild")
+            if ! sudo -u builder bash -c "cd '$dir' && makepkg --verifysource --noconfirm --skippgpcheck" >/dev/null 2>&1; then
+              echo "::error file=$pkgbuild::sources do not verify"
+              fail=1
+            fi
+          done
+          exit $fail

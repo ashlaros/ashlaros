@@ -10,9 +10,11 @@ Order matters. Packages and their signatures upload first, the database
 last, so a client that fetches the database mid-publish never sees an entry
 whose package is not there yet.
 
-`arch=any` packages are built once, in the x86_64 leg, and registered in
-both databases - pacman accepts an `any` package from either tree. Pass
---also-arch to write them into the second one.
+`arch=any` packages are built once and registered in both databases -
+pacman accepts an `any` package from either tree. The workflow hands the
+same artifacts to both architecture legs rather than this script writing
+two trees in one run, so a failure in one leg cannot leave the other's
+database referencing packages it never uploaded.
 """
 
 import argparse
@@ -139,11 +141,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pkg-dir", required=True, help="directory of built packages")
     parser.add_argument("--arch", required=True, help="architecture tree to publish into")
-    parser.add_argument(
-        "--also-arch",
-        help="second tree to register these packages in; for arch=any packages, "
-             "which are built once and belong in both",
-    )
     args = parser.parse_args()
 
     packages = sorted(glob.glob(os.path.join(args.pkg_dir, "*.pkg.tar.zst")))
@@ -155,16 +152,12 @@ def main() -> int:
     key = os.environ.get("GPG_KEYID")
     s3 = s3_client()
 
-    publish(s3, bucket, args.arch, args.pkg_dir, packages, key)
+    # a database left by an earlier run would be extended rather than
+    # rebuilt from what this bucket actually holds
+    for stale in glob.glob(os.path.join(args.pkg_dir, f"{DB_NAME}.*")):
+        os.remove(stale)
 
-    if args.also_arch:
-        any_packages = [p for p in packages if p.endswith("-any.pkg.tar.zst")]
-        if any_packages:
-            # a fresh working directory: repo-add would otherwise extend the
-            # database just written for the first architecture
-            for stale in glob.glob(os.path.join(args.pkg_dir, f"{DB_NAME}.*")):
-                os.remove(stale)
-            publish(s3, bucket, args.also_arch, args.pkg_dir, any_packages, key)
+    publish(s3, bucket, args.arch, args.pkg_dir, packages, key)
 
     log(f"published {len(packages)} package(s) to {args.arch}")
     return 0

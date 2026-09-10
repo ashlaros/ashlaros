@@ -19,8 +19,9 @@ export ASHLAROS_INSTALL_LOG_FILE=/var/log/ashlaros-install.log
 mkdir -p /var/log /run/ashlaros-install
 touch "$ASHLAROS_INSTALL_LOG_FILE"
 
-export COLUMNS=$(tput cols)
-export LINES=$(tput lines)
+COLUMNS=$(tput cols)
+LINES=$(tput lines)
+export COLUMNS LINES
 exec > >(tee >(sed -u 's/\x1b\[[0-9;?]*[A-Za-z]//g' >>"$ASHLAROS_INSTALL_LOG_FILE") 2>/dev/null) 2>/dev/tty
 export CLICOLOR_FORCE=1
 export FORCE_COLOR=1
@@ -30,10 +31,11 @@ export FORCE_COLOR=1
 systemctl is-active --quiet pacman-init.service ||
   systemctl start pacman-init.service 2>/dev/null
 
-cd /root
+cd /root || exit 1
 ashlaros-configurator || exit $?
 
-export ASHLAROS_DASHBOARD_TTY="$(tty)"
+ASHLAROS_DASHBOARD_TTY=$(tty)
+export ASHLAROS_DASHBOARD_TTY
 rm -f /run/ashlaros-install/state.json
 ashlaros-install-dashboard \
   "$ASHLAROS_INSTALL_LOG_FILE" \

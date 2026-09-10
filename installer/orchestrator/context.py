@@ -29,7 +29,7 @@ class InstallContext:
     state: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_env(cls) -> "InstallContext":
+    def from_env(cls) -> InstallContext:
         config_str = os.environ.get("ASHLAROS_INSTALL_CONFIG")
         creds_str = os.environ.get("ASHLAROS_INSTALL_CREDS")
         if not config_str or not creds_str:

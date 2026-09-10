@@ -47,7 +47,7 @@ def run(ctx: InstallContext, phases: list[tuple[str, PhaseFn]]) -> None:
         started = time.time()
         try:
             fn(ctx)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             elapsed = time.time() - started
             state["phases"].append(
                 {"name": name, "status": "failed", "elapsed": elapsed, "error": str(exc)}
