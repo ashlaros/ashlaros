@@ -59,6 +59,13 @@ jobs:
     steps:
       - name: an ARM machine can install from the repository
         run: |
+          # pacman 7 confines downloads with Landlock; this container's
+          # seccomp profile blocks the syscalls, failing every sync with
+          # "the Landlock ruleset could not be applied". Same probe the
+          # build containers use - keep the isolation where it works.
+          if ! pacman -Sy --noconfirm >/dev/null 2>&1; then
+            sed -i '0,/^\[options\]/s//[options]\nDisableSandbox/' /etc/pacman.conf
+          fi
           pacman -Sy --noconfirm --needed curl >/dev/null
           curl -fsSL "${REPO_URL}/ashlaros.gpg" -o /tmp/ashlaros.gpg
           pacman-key --init
