@@ -83,8 +83,30 @@ def scalar(pattern: re.Pattern, text: str) -> str | None:
 
 
 def pkgname_of(pkgbuild: Path, text: str) -> str:
-    name = scalar(PKGNAME_RE, text) or pkgbuild.parent.name
-    return name.replace("${pkgname}", pkgbuild.parent.name)
+    """The package name a PKGBUILD produces.
+
+    Three forms appear in ours: a plain `pkgname=swayr`, an array
+    `pkgname=('nwg-wrapper')`, and an indirection `pkgname=${_pkgname}`.
+    Reading the first as-is and the other two literally is what made the
+    published-version lookup miss - the key was `${_pkgname}` and
+    `('nwg-wrapper')`, so those two rebuilt on every run despite being
+    unchanged.
+    """
+    raw = scalar(PKGNAME_RE, text)
+    if not raw:
+        return pkgbuild.parent.name
+
+    # a shell variable: resolve it from its own assignment
+    variable = re.fullmatch(r"\$\{?(\w+)\}?", raw)
+    if variable:
+        assigned = scalar(
+            re.compile(rf"^{variable.group(1)}=(.+)$", re.MULTILINE), text
+        )
+        raw = assigned or pkgbuild.parent.name
+
+    # an array of one, which is how some PKGBUILDs spell a single package
+    words = re.findall(r"[\w.+@-]+", raw.replace("'", " ").replace('"', " "))
+    return words[0] if words else pkgbuild.parent.name
 
 
 def declared_version(text: str) -> str | None:
