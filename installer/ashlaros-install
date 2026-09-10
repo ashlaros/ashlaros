@@ -1,0 +1,28 @@
+#!/bin/bash
+#
+# Live-ISO entry point for the install orchestrator, invoked by the dashboard
+# after the configurator has written its JSON.
+#
+# The flags become environment variables before python starts: archinstall
+# parses sys.argv at import time and would reject flags of ours.
+set -eEo pipefail
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+  --config)
+    export ASHLAROS_INSTALL_CONFIG="$2"
+    shift 2
+    ;;
+  --creds)
+    export ASHLAROS_INSTALL_CREDS="$2"
+    shift 2
+    ;;
+  *)
+    echo "ashlaros-install: unknown argument $1" >&2
+    exit 2
+    ;;
+  esac
+done
+
+cd /usr/share/ashlaros-installer
+exec python -m orchestrator.main

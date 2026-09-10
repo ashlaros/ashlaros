@@ -1,0 +1,10 @@
+[Trigger]
+Type = Package
+Operation = Install
+Operation = Upgrade
+Target = lsb-release
+
+[Action]
+Description = Restoring the AshlarOS lsb-release
+When = PostTransaction
+Exec = /usr/bin/cp -f /usr/share/ashlaros/lsb-release /etc/lsb-release

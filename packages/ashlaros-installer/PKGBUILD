@@ -1,0 +1,39 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+pkgname=ashlaros-installer
+pkgver=20260910
+pkgrel=1
+pkgdesc="AshlarOS TUI installer"
+arch=('any')
+url="https://github.com/ashlaros/ashlaros"
+license=('GPL-3.0-or-later')
+depends=(
+    'bash'
+    'gum'          # every prompt in the configurator
+    'jq'           # json the configurator writes and the dashboard reads
+    'archinstall'  # driven as a library by the orchestrator
+    'python'
+    'arch-install-scripts' # arch-chroot, used by the post-install phases
+    'openssl'      # password hashing
+    'systemd'      # systemd-cryptenroll, for the TPM enrolment
+    'tpm2-tools'
+    'util-linux'   # lsblk, blockdev
+    'parted'       # cfdisk, partprobe
+    'ashlaros-branding' # the logo the TUI header renders
+)
+# built from installer/ in the monorepo checkout; the installer and this
+# PKGBUILD move together, so a source= would pin them to a release that
+# does not exist yet
+source=()
+
+package() {
+  local installer="${startdir}/../../installer"
+
+  install -Dm755 "${installer}/configurator" "${pkgdir}/usr/bin/ashlaros-configurator"
+  install -Dm755 "${installer}/dashboard" "${pkgdir}/usr/bin/ashlaros-install-dashboard"
+  install -Dm755 "${installer}/ashlaros-install" "${pkgdir}/usr/bin/ashlaros-install"
+
+  install -d "${pkgdir}/usr/share/ashlaros-installer/orchestrator"
+  install -Dm644 "${installer}"/orchestrator/*.py \
+    "${pkgdir}/usr/share/ashlaros-installer/orchestrator/"
+}

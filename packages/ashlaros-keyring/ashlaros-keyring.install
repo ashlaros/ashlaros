@@ -1,0 +1,27 @@
+post_upgrade() {
+  # populating is what moves the key from the shipped keyring into pacman's
+  # own, and re-running it is how a rotated or revoked key takes effect
+  if usr/bin/pacman-key -l >/dev/null 2>&1; then
+    usr/bin/pacman-key --populate ashlaros
+    usr/bin/pacman-key --updatedb
+  fi
+}
+
+post_install() {
+  # pacman-key -l fails before the keyring is initialised, which is the
+  # normal state inside a fresh chroot or an ISO build. Nothing to do then:
+  # whoever runs pacman-key --init later populates every keyring present.
+  post_upgrade
+}
+
+pre_remove() {
+  # leaving the key trusted after the package is gone would keep accepting
+  # signatures the user has just opted out of
+  if usr/bin/pacman-key -l >/dev/null 2>&1; then
+    local key
+    while read -r key _; do
+      [ -n "$key" ] && usr/bin/pacman-key --delete "${key%%:*}" 2>/dev/null || true
+    done < usr/share/pacman/keyrings/ashlaros-trusted
+    usr/bin/pacman-key --updatedb
+  fi
+}

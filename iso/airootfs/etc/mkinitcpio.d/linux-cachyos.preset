@@ -1,0 +1,18 @@
+# mkinitcpio preset file for the 'linux-cachyos' package on archiso
+#
+# The filename is the pkgbase, and that is load-bearing. A kernel package
+# ships nothing in /boot - only usr/lib/modules/<kver>/vmlinuz - so
+# mkinitcpio's alpm hook sources /etc/mkinitcpio.d/<pkgbase>.preset and
+# copies THAT package's kernel to whatever ALL_kver names. Without this file
+# nothing lands in /boot, and mkarchiso's `install ${boot_dir}/vmlinuz-*`
+# fails with no kernel to copy.
+#
+# The stock linux.preset stays for the stock kernel, which this ISO does not
+# install; leaving it costs nothing and diverging from releng would.
+
+PRESETS=('archiso')
+
+ALL_kver='/boot/vmlinuz-linux-cachyos'
+archiso_config='/etc/mkinitcpio.conf.d/archiso.conf'
+
+archiso_image="/boot/initramfs-linux-cachyos.img"

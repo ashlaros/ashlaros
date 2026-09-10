@@ -1,0 +1,16 @@
+name = "ashlaros-packages"
+main = "src/index.js"
+compatibility_date = "2026-09-10"
+# the login sees several accounts; pin the one owning the bucket so a deploy
+# can never bind an empty bucket on the wrong account
+account_id = "fc8102dae7e1eb7a1ecec012dcb0dfaf"
+
+# custom domain rather than a route: cloudflare provisions the DNS record and
+# certificate, and the zone lives in the same account as the worker
+routes = [
+  { pattern = "packages.ashlaros.download", custom_domain = true },
+]
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ashlaros"

@@ -1,0 +1,40 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+pkgname=ashlaros-browser-settings
+pkgver=20260910
+pkgrel=1
+pkgdesc="AshlarOS browser defaults"
+arch=('any')
+url="https://github.com/ashlaros/ashlaros"
+license=('GPL-3.0-or-later')
+# flat, not firefox/ and chrome/ subdirectories: makepkg resolves a local
+# source by its basename, so a path here is looked up in the build
+# directory's root and never found
+source=('firefox-distribution.ini'
+        'all-ashlaros.js'
+        'initial_preferences'
+        'firefox-pre.hook'
+        'firefox-post.hook')
+sha256sums=('aff36dc3c0ae45a95844d59dd7517525c30c5ee0832c59fab0236a0c97a412b3'
+            'bcb39d12698e75893f22999c149866e03a5949cfbb8ffcbe56268a1be1893d51'
+            '38e5a7d9563d8ddc99c2da1f0a57b267530a6fa7983854e7cfdfc4a98678c041'
+            'be8a0404c0ab4795d56dad3bea340d766179f788d29ccdf33e2fa925310c7b71'
+            'cbf247e3cdd6c318c7985ddf7ce489ce56a1654d717a9691aaa689c6a5f24168')
+package() {
+  # firefox overwrites its own distribution directory on every upgrade, so
+  # the settings live in /etc and the post-transaction hook puts them back
+  install -Dm644 firefox-distribution.ini "${pkgdir}/etc/ashlaros-firefox.ini"
+  install -Dm644 firefox-distribution.ini \
+    "${pkgdir}/usr/lib/firefox/distribution/distribution.ini"
+  install -Dm644 all-ashlaros.js \
+    "${pkgdir}/usr/lib/firefox/browser/defaults/preferences/all-ashlaros.js"
+
+  # initial_preferences, not master_preferences: chromium renamed the file
+  # in 91 and dropped the old name entirely
+  for browser in chromium brave-browser; do
+    install -Dm644 initial_preferences "${pkgdir}/usr/lib/${browser}/initial_preferences"
+  done
+
+  install -Dm644 firefox-pre.hook "${pkgdir}/usr/share/libalpm/hooks/firefox-pre.hook"
+  install -Dm644 firefox-post.hook "${pkgdir}/usr/share/libalpm/hooks/firefox-post.hook"
+}

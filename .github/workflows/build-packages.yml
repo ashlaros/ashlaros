@@ -1,0 +1,180 @@
+name: build-packages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - packages/**
+      - branding/**
+      - installer/**
+      - scripts/publish.py
+      - .github/workflows/build-packages.yml
+  workflow_dispatch:
+    inputs:
+      package:
+        description: build a single package directory rather than all of them
+        required: false
+
+concurrency:
+  # the two architecture legs write the same bucket, and repo-add is a
+  # read-modify-write of one database per tree; two runs must never overlap
+  group: build-packages
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      any: ${{ steps.split.outputs.any }}
+      compiled: ${{ steps.split.outputs.compiled }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: split
+        # `any` packages build once and land in both databases; compiled
+        # ones build per architecture. The split comes from the PKGBUILD's
+        # own arch=, so there is no second list to drift.
+        env:
+          ONLY: ${{ inputs.package }}
+        run: python3 scripts/discover_packages.py >> "$GITHUB_OUTPUT"
+
+  build-any:
+    needs: discover
+    if: needs.discover.outputs.any != '[]'
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+      # makepkg drops privileges to a build user, which needs to mount
+      options: --security-opt seccomp=unconfined
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.discover.outputs.any) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: prepare the build container
+        run: .github/scripts/prepare-container.sh
+      - name: import the signing key
+        env:
+          GPG_SECRET_BASE64: ${{ secrets.GPG_SECRET_BASE64 }}
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+        run: .github/scripts/import-key.sh
+      - name: build
+        env:
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+        run: .github/scripts/build-package.sh "packages/${{ matrix.package }}"
+      - name: collect the packages
+        # upload-artifact rejects a colon anywhere in a path and a pacman
+        # epoch always has one, so the files go in a tar we name ourselves
+        run: |
+          tar cf artifact.tar -C "packages/${{ matrix.package }}" \
+            $(cd "packages/${{ matrix.package }}" && ls *.pkg.tar.zst *.pkg.tar.zst.sig)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pkg-any-${{ matrix.package }}
+          path: artifact.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  build-compiled:
+    needs: discover
+    if: needs.discover.outputs.compiled != '[]'
+    # native, not emulated: makepkg under qemu is slow enough to change what
+    # a build costs
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    container:
+      # Arch proper has no aarch64 port; Arch Linux ARM is what an ARM user
+      # runs underneath our repository, so it is what we build against.
+      image: ${{ matrix.arch == 'aarch64' && 'menci/archlinuxarm:base-devel' || 'archlinux:base-devel' }}
+      options: --security-opt seccomp=unconfined
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+        package: ${{ fromJSON(needs.discover.outputs.compiled) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: prepare the build container
+        run: .github/scripts/prepare-container.sh
+      - name: import the signing key
+        env:
+          GPG_SECRET_BASE64: ${{ secrets.GPG_SECRET_BASE64 }}
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+        run: .github/scripts/import-key.sh
+      - name: build
+        id: build
+        # An aarch64 failure is not a build failure: the package is simply
+        # absent from that database, and an ALARM user loses one package
+        # rather than the repository. On x86_64 it is fatal - that is the
+        # architecture the ISO is built from.
+        continue-on-error: ${{ matrix.arch == 'aarch64' }}
+        env:
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+        run: .github/scripts/build-package.sh "packages/${{ matrix.package }}"
+      - name: collect the packages
+        if: steps.build.outcome == 'success'
+        run: |
+          tar cf artifact.tar -C "packages/${{ matrix.package }}" \
+            $(cd "packages/${{ matrix.package }}" && ls *.pkg.tar.zst *.pkg.tar.zst.sig)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.build.outcome == 'success'
+        with:
+          name: pkg-${{ matrix.arch }}-${{ matrix.package }}
+          path: artifact.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    needs: [discover, build-any, build-compiled]
+    # a leg that failed must not withhold the packages that built: publish
+    # whatever arrived, and let the failed job be the signal
+    if: always() && (needs.build-any.result == 'success' || needs.build-compiled.result == 'success')
+    runs-on: ubuntu-latest
+    strategy:
+      # one at a time: both legs read-modify-write the same bucket
+      max-parallel: 1
+      matrix:
+        arch: [x86_64, aarch64]
+    container:
+      # repo-add must come from the same pacman generation that built the
+      # packages; Ubuntu's build rejects them as "not a package file"
+      image: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: install the publish tooling
+        run: pacman -Sy --noconfirm --needed python python-boto3 git
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          # the any packages go into both trees, so both legs take them
+          pattern: pkg-{${{ matrix.arch }},any}-*
+          path: artifacts
+      - name: unpack
+        run: |
+          mkdir -p out
+          find artifacts -name artifact.tar -exec tar -xf {} -C out \;
+          echo "## $(ls out/*.pkg.tar.zst 2>/dev/null | wc -l) package(s) for ${{ matrix.arch }}"
+      - name: is there anything to publish
+        id: have
+        run: echo "count=$(ls out/*.pkg.tar.zst 2>/dev/null | wc -l)" >> "$GITHUB_OUTPUT"
+      - name: import the signing key
+        if: steps.have.outputs.count != '0'
+        env:
+          GPG_SECRET_BASE64: ${{ secrets.GPG_SECRET_BASE64 }}
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+        run: .github/scripts/import-key.sh
+      - name: publish to R2
+        if: steps.have.outputs.count != '0'
+        env:
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ashlaros
+        run: python3 scripts/publish.py --pkg-dir out --arch "${{ matrix.arch }}"
+      - name: verify the tree resolves
+        if: steps.have.outputs.count != '0'
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ashlaros
+        run: python3 scripts/check_repo.py --arch "${{ matrix.arch }}"

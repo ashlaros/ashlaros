@@ -1,0 +1,32 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+pkgname=ashlaros-release
+pkgver=20260910
+pkgrel=1
+pkgdesc="AshlarOS release files"
+arch=('any')
+url="https://github.com/ashlaros/ashlaros"
+license=('GPL-3.0-or-later')
+install="${pkgname}.install"
+source=('os-release'
+        'lsb-release'
+        'ashlaros-lsb-release.hook')
+sha256sums=('8ef84376a1af9b612fdb626a37c6c4b01fbfc6a98989b3043abb584c94806c22'
+            '7566c7a8be1b28b44fb63b8257d9b00ca57edd736dd63ffb350bfe8192f454e6'
+            '313105748ffb548756d43f1ae5c5b9700b4c93e602ebb3714c81aa62c187f412')
+package() {
+  # /etc, not /usr/lib: arch's filesystem package owns /usr/lib/os-release,
+  # and os-release(5) has readers prefer /etc when both exist. Installing
+  # there identifies the system without conflicting with filesystem.
+  install -Dm644 os-release "${pkgdir}/etc/os-release"
+
+  # /etc/lsb-release belongs to arch's lsb-release package, which
+  # open-vm-tools depends on, so this package cannot own that path - two
+  # packages owning one file is a failed transaction, not an override.
+  # lsb_release(1) reads only that file and has no os-release fallback, so
+  # the content is shipped here and a hook copies it into place after
+  # lsb-release installs or upgrades over it.
+  install -Dm644 lsb-release "${pkgdir}/usr/share/ashlaros/lsb-release"
+  install -Dm644 ashlaros-lsb-release.hook \
+    "${pkgdir}/usr/share/libalpm/hooks/ashlaros-lsb-release.hook"
+}

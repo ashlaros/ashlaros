@@ -1,0 +1,22 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+pkgname=ashlaros-keyring
+pkgver=20260910
+pkgrel=1
+pkgdesc="AshlarOS PGP keyring"
+arch=('any')
+url="https://github.com/ashlaros/ashlaros"
+license=('GPL-3.0-or-later')
+depends=('pacman')
+install="${pkgname}.install"
+source=('Makefile'
+        'ashlaros.gpg'
+        'ashlaros-revoked'
+        'ashlaros-trusted')
+sha256sums=('62510e0d62c0dad3c4f13fc2ff7ab61bfa65cc6637ee076acc218d452eb846a3'
+            '95e036c1b5634bb1648ea204d92bbc1bea6091839c021c95f79632194d43eb24'
+            'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+            '4da4e8f0cce72344410c60847708710e94bf368f83b69dc803267010c7dfb7b5')
+package() {
+  make DESTDIR="${pkgdir}" install
+}

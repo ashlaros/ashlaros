@@ -1,0 +1,98 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+pkgname=ashlaros-settings
+pkgver=20260910
+pkgrel=1
+pkgdesc="AshlarOS sway desktop configuration and skel"
+arch=('any')
+url="https://github.com/ashlaros/ashlaros"
+license=('GPL-3.0-or-later')
+groups=('ashlaros')
+depends=(
+    'sway'                    # window manager
+    'swaybg'                  # wallpaper setter
+    'swayidle'                # idle management daemon
+    'sway-services'           # systemd units for sway and friends
+    'waybar'                  # configurable bar
+    'foot'                    # terminal application
+    'foot-terminfo'           # terminal info for foot
+    'rofi'                    # launcher; provides rofi-wayland since 2.0
+    'rofimoji'                # emoji picker
+    'mako'                    # desktop notifications
+    'brightnessctl'           # cli to control brightness
+    'wob'                     # overlay bar for brightness and volume
+    'grim'                    # screenshot tool
+    'slurp'                   # region select, helper for grim
+    'grimshot'                # screenshot helper built on grim/slurp
+    'swappy'                  # screenshot editing tool
+    'wf-recorder'             # screen recording util
+    'wl-clipboard'            # copy/paste utilities for wayland
+    'wl-clip-persist'         # persists clipboard content between clients
+    'xdg-terminal-exec'       # execute-in-terminal xdg standard
+    'idlehack'                # inhibit swayidle on screensaver-inhibit dbus calls
+    'swayr'                   # lru window switcher for sway
+    'nwg-wrapper'             # conky like onscreen information
+    'dex'                     # executes desktop entries on autostart
+    'jq'                      # json parsing, used across the scripts
+    'bc'                      # arithmetic for the bar scripts
+    'inotify-tools'           # file watchers
+    'lm_sensors'              # sensor readings for the bar
+    'calcurse'                # tui calendar application
+    'btop'                    # system monitor
+    'bluetuith'               # bluetooth management tool
+    'noto-fonts-emoji'        # emoji font, e.g. weather icons
+    'pacman-contrib'          # checkupdates, for the updates module
+    'ashlaros-branding'       # logo, wallpaper and palette
+    ## shell
+    'zsh'
+    'grml-zsh-config'         # arch's own zsh baseline, in place of oh-my-zsh
+    'zsh-autosuggestions'
+    'zsh-syntax-highlighting'
+    'starship'                # prompt
+    ## portal
+    'xdg-desktop-portal-lxqt' # native file chooser, via the portal
+    'lxqt-qtplugin'           # styles the portal dialog process
+    ## theme
+    'qt6ct'                   # provides qt6ct-style, used by the portal dialog
+    'kvantum'                 # theme engine for qt
+    'kvantum-qt5'             # theme engine for qt5
+    'adw-gtk-theme'           # default gtk theme
+    'gnome-themes-extra'      # ships Adwaita/Adwaita-dark for gtk3
+    'papirus-icon-theme'      # default icon theme
+    'adwaita-cursors'         # default cursor theme
+    'ttf-jetbrains-mono-nerd' # default monospace font
+    'ttf-roboto'              # default font
+)
+optdepends=(
+    'flashfocus: better flashing on focus changes'
+    'gtklock: lockscreen based on gtkgreet'
+    'swaylock-effects: minimalistic lockscreen with fancy effects'
+    'wlsunset: time & place based light temperature'
+    'way-displays: automated display management'
+    'autotiling: automated tiling'
+    'sworkstyle: dynamic workspace names (icons) in waybar'
+    'cliphist: clipboard manager'
+    'swaycwd: open here helper'
+    'poweralertd: battery and power notifications'
+    'wluma: adaptive brightness based on screen contents and ALS'
+    'pacseek: package manager tui'
+    'yay: AUR helper, used by ashlaros-theme to install theme extras'
+    'pcmanfm-qt: file manager'
+    'python-requests: the waybar weather module'
+)
+# generated_background.svg is rewritten on every theme apply, and the
+# per-user theme.conf is the file the theme switcher edits
+backup=()
+
+package() {
+    local payload="${startdir}/payload"
+
+    install -d "${pkgdir}/etc" "${pkgdir}/usr"
+    cp -a "${payload}/etc/." "${pkgdir}/etc/"
+    cp -a "${payload}/usr/." "${pkgdir}/usr/"
+
+    # cp -a keeps the source tree's modes; the scripts must be executable
+    # whatever the checkout looked like
+    find "${pkgdir}/usr/bin" "${pkgdir}/usr/local/bin" \
+        "${pkgdir}/usr/share/sway/scripts" -type f -exec chmod 755 {} +
+}

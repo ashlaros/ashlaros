@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=AshlarOS Theme
+
+Comment=Lets you select an AshlarOS theme
+
+Exec=ashlaros-theme
+Icon=preferences-desktop-theme
+Terminal=false
+Type=Application
+Categories=Settings;DesktopSettings;

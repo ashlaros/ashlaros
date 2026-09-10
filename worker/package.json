@@ -1,0 +1,9 @@
+{
+  "name": "ashlaros-packages-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.mjs",
+    "deploy": "wrangler deploy"
+  }
+}

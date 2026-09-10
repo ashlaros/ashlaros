@@ -1,0 +1,17 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+pkgname=ashlaros-mirrorlist
+pkgver=20260910
+pkgrel=1
+pkgdesc="AshlarOS repository mirrorlist"
+arch=('any')
+url="https://github.com/ashlaros/ashlaros"
+license=('GPL-3.0-or-later')
+# a mirrorlist pacman would overwrite on upgrade is a mirrorlist the user
+# cannot edit; backup keeps their version and drops a .pacnew beside it
+backup=('etc/pacman.d/ashlaros-mirrorlist')
+source=('ashlaros-mirrorlist')
+sha256sums=('b3492816bd8a4ff021cea7f7bace405d8bed31e1c2e88ce1adf363447735bcf2')
+package() {
+  install -Dm644 ashlaros-mirrorlist "${pkgdir}/etc/pacman.d/ashlaros-mirrorlist"
+}

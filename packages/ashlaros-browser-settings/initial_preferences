@@ -1,0 +1,27 @@
+{
+  "homepage": "https://ashlaros.download",
+  "homepage_is_newtabpage": true,
+  "browser": {
+    "show_home_button": true
+  },
+  "session": {
+    "restore_on_startup": 4,
+    "startup_urls": [
+      "https://ashlaros.download"
+    ]
+  },
+  "distribution": {
+    "import_bookmarks": false,
+    "skip_first_run_ui": true
+  },
+  "bookmark_bar": {
+    "show_on_all_tabs": true
+  },
+  "sync_promo": {
+    "show_on_first_run_allowed": false
+  },
+  "first_run_tabs": [
+    "https://ashlaros.download",
+    "new_tab_page"
+  ]
+}

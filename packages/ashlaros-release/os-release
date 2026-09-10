@@ -1,0 +1,11 @@
+NAME="AshlarOS"
+PRETTY_NAME="AshlarOS"
+ID=ashlaros
+ID_LIKE=arch
+BUILD_ID=rolling
+ANSI_COLOR="0;38;2;138;143;152"
+HOME_URL="https://ashlaros.download/"
+DOCUMENTATION_URL="https://github.com/ashlaros/ashlaros"
+SUPPORT_URL="https://github.com/ashlaros/ashlaros/discussions"
+BUG_REPORT_URL="https://github.com/ashlaros/ashlaros/issues"
+LOGO=ashlaros

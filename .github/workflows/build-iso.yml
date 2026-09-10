@@ -1,0 +1,73 @@
+name: build-iso
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  push:
+    branches: [main]
+    paths:
+      - iso/**
+      - .github/workflows/build-iso.yml
+  workflow_dispatch:
+
+concurrency:
+  group: build-iso
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      # the ISO is published as a release asset
+      contents: write
+    container:
+      image: archlinux:base-devel
+      # mkarchiso mounts, makes device nodes, and runs mkinitcpio in a
+      # chroot; none of that works under the default profile
+      options: --privileged
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: install archiso
+        run: |
+          pacman -Sy --noconfirm --needed archiso git
+          pacman-key --init
+          pacman-key --populate archlinux
+      - name: trust the repositories the profile pulls from
+        # mkarchiso syncs with the profile's own pacman.conf, which names
+        # cachyos and ashlaros; a key it does not have is a build that stops
+        # before it downloads anything
+        env:
+          ASHLAROS_KEY_URL: https://packages.ashlaros.download/ashlaros.gpg
+        run: .github/scripts/trust-repo-keys.sh
+      - id: version
+        run: echo "value=$(date +%Y.%m.%d)" >> "$GITHUB_OUTPUT"
+      - name: build the iso
+        run: |
+          mkarchiso -v -w /tmp/work -o out iso/
+          ls -la out/
+      - name: checksum
+        working-directory: out
+        run: sha256sum ./*.iso > SHA256SUMS
+      - name: upload to R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ashlaros-iso
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          pacman -S --noconfirm --needed python-boto3
+          python3 scripts/upload_iso.py --iso-dir out --version "$VERSION"
+      - name: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          pacman -S --noconfirm --needed github-cli
+          # the ISO itself is not attached: github caps a release asset at
+          # 2 GB and this one is larger. The bucket holds the image; the
+          # release holds the checksum that proves which image it is.
+          gh release create "v$VERSION" out/SHA256SUMS \
+            --repo "${{ github.repository }}" \
+            --title "AshlarOS $VERSION" \
+            --notes "https://iso.ashlaros.download/$VERSION/"

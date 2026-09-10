@@ -1,0 +1,31 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+pkgname=ashlaros-branding
+pkgver=20260910
+pkgrel=1
+pkgdesc="AshlarOS logo, wallpaper and palette"
+arch=('any')
+url="https://github.com/ashlaros/ashlaros"
+license=('GPL-3.0-or-later')
+# built from branding/ in the monorepo checkout, not from a tarball: the
+# assets and the PKGBUILD move together, so a source= would only pin them
+# to a release that does not exist yet
+source=()
+
+package() {
+  local branding="${startdir}/../../branding"
+
+  install -Dm644 "${branding}/logo.svg" "${pkgdir}/usr/share/ashlaros/logo.svg"
+  install -Dm644 "${branding}/favicon.svg" "${pkgdir}/usr/share/ashlaros/favicon.svg"
+  install -Dm644 "${branding}/background.svg" "${pkgdir}/usr/share/ashlaros/background.svg"
+  # the installer's TUI header reads this; see installer/configurator
+  install -Dm644 "${branding}/logo.txt" "${pkgdir}/usr/share/ashlaros/logo.txt"
+  install -Dm644 "${branding}/palette.conf" "${pkgdir}/usr/share/ashlaros/palette.conf"
+
+  # the desktop's wallpaper lookup and os-release's LOGO= both read the
+  # freedesktop locations rather than /usr/share/ashlaros
+  install -Dm644 "${branding}/background.svg" \
+    "${pkgdir}/usr/share/backgrounds/ashlaros/background.svg"
+  install -Dm644 "${branding}/logo.svg" \
+    "${pkgdir}/usr/share/icons/hicolor/scalable/apps/ashlaros.svg"
+}

@@ -1,0 +1,455 @@
+"""What each phase does.
+
+The ordering is the point of the orchestrator: the target's repository stack
+must exist before any ashlaros-* package is fetched, and the TPM enrolment
+must happen after the bootloader phase has written the initramfs and
+crypttab it amends.
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+from dataclasses import replace
+from pathlib import Path
+
+from . import archinstall_adapter as arch
+from .context import InstallContext
+from .ui import error, info
+
+# The target's repository stack, byte-identical in intent to iso/pacman.conf:
+# pacman takes the FIRST repository carrying a package, not the highest
+# version, so the v3 sections must precede core/extra or the installed system
+# is a plain x86_64 one that merely has the v3 repos configured.
+PACMAN_CONF = """\
+#
+# /etc/pacman.conf
+#
+# See the pacman.conf(5) manpage for option and repository directives.
+#
+
+[options]
+HoldPkg     = pacman glibc
+# x86_64_v3 must be listed or pacman refuses every v3 package with
+# "does not have a valid architecture"
+Architecture = x86_64 x86_64_v3
+
+CheckSpace
+ParallelDownloads = 8
+DownloadUser = alpm
+
+SigLevel    = Required DatabaseOptional
+LocalFileSigLevel = Optional
+
+# Repository order is load-bearing. pacman resolves a package from the first
+# repository that carries it, so the v3-optimised trees come before core and
+# extra; anything without a v3 build falls through to them unchanged.
+[cachyos-core-v3]
+Include = /etc/pacman.d/cachyos-v3-mirrorlist
+
+[cachyos-extra-v3]
+Include = /etc/pacman.d/cachyos-v3-mirrorlist
+
+[cachyos]
+Include = /etc/pacman.d/cachyos-mirrorlist
+
+[core]
+Include = /etc/pacman.d/mirrorlist
+
+[extra]
+Include = /etc/pacman.d/mirrorlist
+
+[multilib]
+Include = /etc/pacman.d/mirrorlist
+
+[ashlaros]
+Include = /etc/pacman.d/ashlaros-mirrorlist
+"""
+
+CACHYOS_V3_MIRRORLIST = "Server = https://mirror.cachyos.org/repo/x86_64_v3/$repo\n"
+CACHYOS_MIRRORLIST = "Server = https://mirror.cachyos.org/repo/x86_64/$repo\n"
+ASHLAROS_MIRRORLIST = "Server = https://packages.ashlaros.download/$arch\n"
+
+# Installed on the target after the base system exists. base-devel and the
+# ashlaros-* set come from the archinstall config's "packages"; these are the
+# desktop the ISO promises.
+DESKTOP_PACKAGES = [
+    "ashlaros-branding",
+    "ashlaros-browser-settings",
+    "firefox",
+    "greetd",
+    "greetd-tuigreet",
+    "networkmanager",
+    "bluez",
+    "bluez-utils",
+    "pipewire",
+    "pipewire-pulse",
+    "wireplumber",
+    "xorg-xwayland",
+    "qt5-wayland",
+    "qt6-wayland",
+    "gnome-keyring",
+    "polkit-gnome",
+    "xdg-desktop-portal-wlr",
+    "xdg-user-dirs",
+    "pcmanfm-qt",
+    "gvfs",
+    "tpm2-tools",
+]
+
+
+def run_command(args: list[str], **kwargs) -> subprocess.CompletedProcess:
+    """Run a command, raising with its stderr attached.
+
+    subprocess's own CalledProcessError prints the exit status and nothing
+    else, which for cryptsetup and bootctl is never enough to act on.
+    """
+    result = subprocess.run(args, capture_output=True, text=True, **kwargs)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{' '.join(args)} exited {result.returncode}: "
+            f"{result.stderr.strip() or result.stdout.strip()}"
+        )
+    return result
+
+
+def prepare_live(ctx: InstallContext) -> None:
+    """Load the archinstall config and check the machine can be installed to."""
+    handler = arch.load_arch_config(ctx.config_path, ctx.creds_path)
+    ctx.state["arch_config_handler"] = handler
+    ctx.state["mirror_handler"] = arch.make_mirror_handler()
+
+    config = handler.config
+    if arch.is_systemd_boot(config) and not arch.has_uefi():
+        raise RuntimeError(
+            "this ISO boots systemd-boot, which needs UEFI; "
+            "the machine reports a legacy BIOS boot"
+        )
+
+
+def install_system(ctx: InstallContext) -> None:
+    """Partition, format, and pacstrap the target."""
+    handler = ctx.state["arch_config_handler"]
+    mirror_handler = ctx.state["mirror_handler"]
+    config = handler.config
+
+    info("› partitioning, formatting and encrypting")
+    arch.perform_filesystem_operations(config)
+
+    info("› opening the installer context")
+    with arch.open_installer(config, ctx.target, silent=True) as installer:
+        installer.mount_ordered_layout()
+        installer.sanity_check()
+
+        if arch.is_encrypted(config):
+            installer.generate_key_files()
+
+        if config.mirror_config:
+            installer.set_mirrors(mirror_handler, config.mirror_config, on_target=False)
+
+        info("› installing the base system")
+        # kb_layout blanked: archinstall otherwise boots the target in a
+        # container purely to run localectl. The keymap is written directly
+        # in configure_system, which needs no such round trip.
+        locale_config = (
+            replace(config.locale_config, kb_layout="") if config.locale_config else None
+        )
+        installer.minimal_installation(
+            hostname=config.hostname,
+            locale_config=locale_config,
+        )
+
+        if config.mirror_config:
+            installer.set_mirrors(mirror_handler, config.mirror_config, on_target=True)
+
+        # the repository stack must be in place before any ashlaros-* or
+        # cachyos package is requested from the target
+        write_repository_stack(ctx)
+
+        if config.swap and config.swap.enabled:
+            installer.setup_swap(algo=config.swap.algorithm)
+
+        info("› installing the AshlarOS package set")
+        installer.add_additional_packages(config.packages)
+        installer.add_additional_packages(DESKTOP_PACKAGES)
+
+        info("› creating the user")
+        users = arch.users(config)
+        if users:
+            installer.create_users(users)
+
+        if config.timezone:
+            installer.set_timezone(config.timezone)
+        if config.ntp:
+            installer.activate_time_synchronization()
+        if root := arch.root_user(config):
+            installer.set_user_password(root)
+
+        installer.genfstab()
+
+        ctx.state["installer_bootloader_done"] = install_bootloader(ctx, installer, config)
+
+
+def write_repository_stack(ctx: InstallContext) -> None:
+    """Give the target the same repositories the live system uses.
+
+    Written before the keyring package exists on the target, so the CachyOS
+    and AshlarOS sections are unusable until trust_keys runs - which is why
+    that runs in this same phase, immediately after.
+    """
+    etc = ctx.target / "etc"
+    (etc / "pacman.conf").write_text(PACMAN_CONF)
+
+    pacman_d = etc / "pacman.d"
+    pacman_d.mkdir(parents=True, exist_ok=True)
+    (pacman_d / "cachyos-v3-mirrorlist").write_text(CACHYOS_V3_MIRRORLIST)
+    (pacman_d / "cachyos-mirrorlist").write_text(CACHYOS_MIRRORLIST)
+    (pacman_d / "ashlaros-mirrorlist").write_text(ASHLAROS_MIRRORLIST)
+
+    trust_keys(ctx)
+
+
+def trust_keys(ctx: InstallContext) -> None:
+    """Populate the target's pacman keyring with the keys its repositories sign with.
+
+    The live system already trusts both, and its keyrings are the same files
+    the packages install, so copying them across saves fetching a keyring
+    package from a repository whose signature is not yet trusted.
+    """
+    live_keyrings = Path("/usr/share/pacman/keyrings")
+    target_keyrings = ctx.target / "usr/share/pacman/keyrings"
+    target_keyrings.mkdir(parents=True, exist_ok=True)
+    for name in ("cachyos", "ashlaros"):
+        for suffix in (".gpg", "-trusted", "-revoked"):
+            source = live_keyrings / f"{name}{suffix}"
+            if source.exists():
+                shutil.copy2(source, target_keyrings / source.name)
+
+    run_command(["arch-chroot", str(ctx.target), "pacman-key", "--init"])
+    run_command(
+        ["arch-chroot", str(ctx.target), "pacman-key", "--populate",
+         "archlinux", "cachyos", "ashlaros"]
+    )
+
+
+def install_bootloader(ctx: InstallContext, installer, config) -> bool:
+    bootloader = arch.bootloader(config)
+    if bootloader is None:
+        info("› no bootloader requested")
+        return False
+
+    info(f"› installing the bootloader ({bootloader.value})")
+    installer.add_bootloader(bootloader)
+    return True
+
+
+def configure_system(ctx: InstallContext) -> None:
+    """The settings archinstall does not own: keymap, and the boot entry's
+    kernel command line for a TPM-unlocked root."""
+    handler = ctx.state["arch_config_handler"]
+    config = handler.config
+
+    keymap = config.locale_config.kb_layout if config.locale_config else ""
+    if keymap:
+        (ctx.target / "etc/vconsole.conf").write_text(f"KEYMAP={keymap}\n")
+
+
+def enroll_tpm(ctx: InstallContext) -> None:
+    """Enrol the LUKS passphrase into the TPM so boots unlock without typing it.
+
+    New work: omarchy has no TPM handling at all. PCR 7 is the secure-boot
+    policy register - it is stable across kernel updates, unlike PCR 4 or 8,
+    so an ordinary upgrade does not invalidate the enrolment.
+
+    No TPM is not an error. A machine without one keeps passphrase unlock,
+    which is what an unencrypted-adjacent fallback should be: the disk stays
+    encrypted, only the convenience is absent.
+    """
+    if not ctx.encrypt:
+        info("› encryption disabled; nothing to enrol")
+        return
+
+    if not tpm_available():
+        info("› no TPM2 device; leaving passphrase unlock in place")
+        return
+
+    device = luks_device(ctx)
+    if device is None:
+        raise RuntimeError("encryption is on but no LUKS partition was found")
+
+    passphrase = ctx.user_credentials.get("encryption_password")
+    if not passphrase:
+        raise RuntimeError("encryption is on but no passphrase is in user_credentials.json")
+
+    info(f"› enrolling {device} into the TPM (PCR 7)")
+    # the existing passphrase authorises adding the new keyslot; it is passed
+    # on the environment rather than the command line, where /proc would
+    # expose it to every process on the live system
+    result = subprocess.run(
+        ["systemd-cryptenroll", "--tpm2-device=auto", "--tpm2-pcrs=7", str(device)],
+        capture_output=True,
+        text=True,
+        env={"PASSWORD": passphrase, "PATH": "/usr/bin:/bin"},
+    )
+    if result.returncode != 0:
+        # a failed enrolment leaves the passphrase keyslot untouched, so the
+        # system still boots; say so rather than failing the install
+        error(
+            "TPM enrolment failed; the passphrase still unlocks the disk: "
+            f"{result.stderr.strip()}"
+        )
+        return
+
+    add_crypttab_tpm_option(ctx, device)
+
+
+def tpm_available() -> bool:
+    """Whether systemd sees a usable TPM2 device.
+
+    --tpm2-device=list prints a header row and one row per device, so an
+    empty body means none.
+    """
+    result = subprocess.run(
+        ["systemd-cryptenroll", "--tpm2-device=list"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+    return bool(result.stdout.strip().splitlines()[1:])
+
+
+def luks_device(ctx: InstallContext) -> Path | None:
+    """The block device holding the LUKS2 container.
+
+    Read off the target's crypttab rather than the disk config: by this
+    phase the partition exists and systemd has written the UUID that
+    actually names it, which is what cryptenroll wants.
+    """
+    handler = ctx.state["arch_config_handler"]
+    for partition in arch.encrypted_partitions(handler.config):
+        dev_path = getattr(partition, "dev_path", None)
+        if dev_path:
+            return Path(dev_path)
+    return None
+
+
+def add_crypttab_tpm_option(ctx: InstallContext, device: Path) -> None:
+    """Add tpm2-device=auto to the root mapping's crypttab options.
+
+    Without it the initramfs never asks the TPM and prompts for the
+    passphrase despite the enrolled keyslot.
+    """
+    crypttab = ctx.target / "etc/crypttab"
+    if not crypttab.exists():
+        # archinstall writes crypttab.initramfs for a root-on-LUKS install;
+        # the plain crypttab covers later-mounted volumes only
+        crypttab = ctx.target / "etc/crypttab.initramfs"
+    if not crypttab.exists():
+        error("no crypttab on the target; the TPM keyslot exists but will not be used")
+        return
+
+    lines = []
+    changed = False
+    for line in crypttab.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            lines.append(line)
+            continue
+
+        fields = stripped.split()
+        # name source keyfile options - options may be absent entirely
+        if len(fields) < 2:
+            lines.append(line)
+            continue
+
+        if "tpm2-device=" in line:
+            lines.append(line)
+            changed = True
+            continue
+
+        while len(fields) < 4:
+            fields.append("none" if len(fields) < 3 else "")
+        fields[3] = f"{fields[3]},tpm2-device=auto".lstrip(",")
+        lines.append(" ".join(fields))
+        changed = True
+
+    if not changed:
+        error(f"{crypttab} holds no mapping to amend")
+        return
+
+    crypttab.write_text("\n".join(lines) + "\n")
+    info(f"› {crypttab.name}: root unlocks via TPM, passphrase as fallback")
+
+    # the initramfs embeds crypttab.initramfs, so it has to be rebuilt for
+    # the option to take effect at boot
+    run_command(["arch-chroot", str(ctx.target), "mkinitcpio", "-P"])
+
+
+def configure_login(ctx: InstallContext) -> None:
+    """greetd with tuigreet, and autologin when it was asked for."""
+    greetd_dir = ctx.target / "etc/greetd"
+    greetd_dir.mkdir(parents=True, exist_ok=True)
+
+    config = [
+        "[terminal]",
+        "vt = 1",
+        "",
+        "[default_session]",
+        'command = "tuigreet --time --remember --cmd sway"',
+        'user = "greeter"',
+    ]
+
+    if ctx.autologin:
+        config += [
+            "",
+            "# autologin: the disk passphrase (or its TPM enrolment) is the",
+            "# authentication that matters on a single-user machine",
+            "[initial_session]",
+            'command = "sway"',
+            f'user = "{ctx.username}"',
+        ]
+
+    (greetd_dir / "config.toml").write_text("\n".join(config) + "\n")
+    run_command(["arch-chroot", str(ctx.target), "systemctl", "enable", "greetd.service"])
+
+
+def enable_services(ctx: InstallContext) -> None:
+    for service in ("NetworkManager.service", "bluetooth.service", "systemd-timesyncd.service"):
+        run_command(["arch-chroot", str(ctx.target), "systemctl", "enable", service])
+
+
+def run_hardware_detection(ctx: InstallContext) -> None:
+    """Let chwd pick the graphics driver for this machine.
+
+    -a pci free 0300 is chwd's own "install the free driver for the display
+    controller" invocation. A machine it has no profile for is not a failure:
+    the kernel's built-in drivers still bring up a display.
+    """
+    result = subprocess.run(
+        ["arch-chroot", str(ctx.target), "chwd", "-a", "pci", "free", "0300"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        error(f"chwd found no profile to install: {result.stderr.strip()}")
+        return
+    info("› chwd installed the detected graphics profile")
+
+
+def validate_boot(ctx: InstallContext) -> None:
+    """Fail here rather than at the boot menu.
+
+    A missing loader entry is the one failure mode that looks like a
+    successful install right up until the machine does not boot.
+    """
+    esp = ctx.target / ctx.esp_mount.lstrip("/")
+    entries = sorted((esp / "loader/entries").glob("*.conf"))
+    if not entries:
+        raise RuntimeError(f"no systemd-boot entries were written to {esp}/loader/entries")
+
+    efi = esp / "EFI/systemd/systemd-bootx64.efi"
+    if not efi.exists():
+        raise RuntimeError(f"{efi} is missing; the ESP holds no bootloader")
+
+    info(f"› {len(entries)} boot entry/entries and systemd-boot present on the ESP")

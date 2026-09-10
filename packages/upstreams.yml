@@ -1,0 +1,82 @@
+# Where each PKGBUILD in this directory comes from.
+#
+# ashlaros-*: authored here, no upstream. Everything else is vendored - the
+# AUR is not a build input, because an AUR PKGBUILD can change under us
+# between two builds of the same version. Refreshing one is a deliberate
+# commit: fetch the upstream PKGBUILD, diff it, keep our arch= widening.
+#
+# arch: what the PKGBUILD declares after our edits. `both` means the
+# aarch64 leg builds it too; a package that fails to compile there is
+# dropped from the aarch64 database with a warning rather than failing the
+# run - ALARM users lose that package, not the repository.
+
+packages:
+  # authored here
+  ashlaros-branding:
+    arch: any
+  ashlaros-browser-settings:
+    arch: any
+  ashlaros-installer:
+    arch: any
+  ashlaros-keyring:
+    arch: any
+  ashlaros-mirrorlist:
+    arch: any
+  ashlaros-release:
+    arch: any
+  ashlaros-settings:
+    arch: any
+
+  # vendored from the AUR
+  bluetuith:
+    upstream: https://aur.archlinux.org/bluetuith.git
+    arch: both
+  flashfocus:
+    upstream: https://aur.archlinux.org/flashfocus.git
+    arch: any
+  nwg-wrapper:
+    upstream: https://aur.archlinux.org/nwg-wrapper.git
+    # pure python; the AUR's x86_64 is an oversight, widened here
+    arch: both
+  phinger-cursors:
+    upstream: https://aur.archlinux.org/phinger-cursors.git
+    arch: any
+  poweralertd:
+    upstream: https://aur.archlinux.org/poweralertd.git
+    arch: both
+  python-xpybutil:
+    upstream: https://aur.archlinux.org/python-xpybutil.git
+    arch: any
+  swaycwd:
+    # no upstream repository: the AUR url is a dead google cache link, so
+    # the script itself is vendored beside the PKGBUILD
+    arch: any
+  swaylock-effects:
+    upstream: https://aur.archlinux.org/swaylock-effects.git
+    arch: both
+  swayr:
+    upstream: https://aur.archlinux.org/swayr.git
+    arch: both
+  sworkstyle:
+    upstream: https://aur.archlinux.org/sworkstyle.git
+    arch: both
+  way-displays:
+    upstream: https://aur.archlinux.org/way-displays.git
+    arch: both
+  wluma:
+    upstream: https://aur.archlinux.org/wluma.git
+    arch: both
+  xdg-terminal-exec:
+    upstream: https://aur.archlinux.org/xdg-terminal-exec.git
+    arch: any
+
+  # vendored from manjaro-contrib, which maintains these outside the AUR
+  grimshot:
+    upstream: https://github.com/manjaro-contrib/grimshot
+    arch: any
+  idlehack:
+    upstream: https://github.com/manjaro-contrib/idlehack
+    arch: both
+  sway-services:
+    upstream: https://github.com/manjaro-contrib/sway-services
+    arch: any

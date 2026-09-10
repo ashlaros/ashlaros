@@ -1,0 +1,11 @@
+.wrangler/
+__pycache__/
+node_modules/
+out/
+work/
+*.pkg.tar.zst
+*.pkg.tar.zst.sig
+*.iso
+# signing key material - never commit
+.gnupg-tmp/
+*.private-key.pem

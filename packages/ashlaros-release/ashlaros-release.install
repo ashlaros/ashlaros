@@ -1,0 +1,9 @@
+post_install() {
+  # the hook only fires when lsb-release itself is installed or upgraded,
+  # which has usually already happened by the time this package arrives
+  [ -d /etc ] && cp -f usr/share/ashlaros/lsb-release etc/lsb-release
+}
+
+post_upgrade() {
+  post_install
+}

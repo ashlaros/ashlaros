@@ -1,0 +1,8 @@
+##
+## AshlarOS repository mirrorlist
+##
+## $arch is expanded by pacman: the repository is served as two trees,
+## x86_64/ and aarch64/, so one line covers both architectures.
+##
+
+Server = https://packages.ashlaros.download/$arch

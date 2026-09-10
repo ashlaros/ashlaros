@@ -1,0 +1,473 @@
+#!/bin/bash
+# AshlarOS install configurator.
+#
+# Four screens plus a confirmation, each with its default preselected, so
+# Enter-Enter-Enter-Enter-Enter installs. Produces the two JSON files
+# archinstall reads (user_configuration.json, user_credentials.json) plus
+# the AshlarOS-specific bits the orchestrator needs, and hands off to
+# ashlaros-install.
+#
+# Modelled on omarchy-iso's configurator (MIT); the question flow, the
+# archinstall JSON shape and the openssl password hashing are theirs.
+set -uo pipefail
+
+ASHLAROS_PATH="${ASHLAROS_PATH:-/usr/share/ashlaros}"
+LOGO_PATH="${LOGO_PATH:-$ASHLAROS_PATH/logo.txt}"
+OUTPUT_DIR="${OUTPUT_DIR:-/root}"
+
+# gum draws on stderr and measures /dev/tty, so both are addressed directly
+# throughout rather than through whatever stdout happens to be.
+export GUM_CHOOSE_CURSOR_FOREGROUND="7"
+export GUM_CHOOSE_SELECTED_FOREGROUND="15"
+export GUM_CONFIRM_SELECTED_BACKGROUND="8"
+export GUM_CONFIRM_SELECTED_FOREGROUND="15"
+export GUM_CONFIRM_UNSELECTED_FOREGROUND="7"
+
+if [[ ! -r $LOGO_PATH ]]; then
+  echo "ashlaros: logo not found at $LOGO_PATH" >&2
+  exit 1
+fi
+
+LOGO_WIDTH=$(awk '{ if (length > max) max = length } END { print max+0 }' "$LOGO_PATH")
+
+# The console grows after boot - the framebuffer settles late, especially in
+# VMs - so remeasure at every redraw rather than trusting startup geometry.
+measure_terminal() {
+  TERM_WIDTH=$(stty size 2>/dev/null </dev/tty | awk '{print $2}')
+  [[ $TERM_WIDTH =~ ^[0-9]+$ ]] && ((TERM_WIDTH > 0)) || TERM_WIDTH=${COLUMNS:-80}
+
+  PADDING_LEFT=$(((TERM_WIDTH - LOGO_WIDTH) / 2))
+  ((PADDING_LEFT < 0)) && PADDING_LEFT=0
+  PADDING_LEFT_SPACES=$(printf "%*s" "$PADDING_LEFT" "")
+
+  local padding="0 0 0 $PADDING_LEFT"
+  export GUM_CHOOSE_PADDING="$padding"
+  export GUM_INPUT_PADDING="$padding"
+  export GUM_SPIN_PADDING="$padding"
+  export GUM_TABLE_PADDING="$padding"
+  export GUM_CONFIRM_PADDING="$padding"
+}
+measure_terminal
+
+clear_logo() {
+  measure_terminal
+  printf "\033[H\033[2J"
+  gum style --foreground 7 --padding "1 0 0 $PADDING_LEFT" "$(<"$LOGO_PATH")"
+}
+
+say() {
+  gum style --padding "0 0 0 $PADDING_LEFT" "$@"
+}
+
+step() {
+  clear_logo
+  echo
+  say "$1"
+  echo
+}
+
+abort() {
+  gum style "${1:-Aborted installation}"
+  echo
+  gum style "Run 'ashlaros-configurator' to start again."
+  exit 1
+}
+
+# STEP 1: LOCALE & KEYBOARD
+
+# en_US.UTF-8 with a de keymap is the EU default: an English system whose
+# keyboard matches the hardware most of our users have.
+locale_keymap_form() {
+  step "Locale and keyboard"
+
+  local choice
+  choice=$(gum choose --header "Layout" --selected "EU (en_US.UTF-8, de keyboard)" \
+    "EU (en_US.UTF-8, de keyboard)" \
+    "US (en_US.UTF-8, us keyboard)" \
+    "Other...") || abort
+
+  case "$choice" in
+  "EU"*)
+    locale="en_US.UTF-8"
+    keymap="de"
+    ;;
+  "US"*)
+    locale="en_US.UTF-8"
+    keymap="us"
+    ;;
+  *)
+    # arguments rather than a pipe: gum reads piped choices from stdin and
+    # then has to reopen /dev/tty to draw, which fails wherever the process
+    # has no controlling terminal. As arguments it uses the fds it was given.
+    locale=$(gum choose --header "Locale" --selected "en_US.UTF-8" \
+      en_US.UTF-8 en_GB.UTF-8 de_DE.UTF-8 fr_FR.UTF-8 es_ES.UTF-8 \
+      it_IT.UTF-8 nl_NL.UTF-8 pt_PT.UTF-8 pl_PL.UTF-8 sv_SE.UTF-8 \
+      da_DK.UTF-8 nb_NO.UTF-8 fi_FI.UTF-8 cs_CZ.UTF-8 ja_JP.UTF-8) || abort
+    keymap=$(localectl list-keymaps 2>/dev/null |
+      gum filter --header "Keymap" --placeholder "type to filter" --value "de") || abort
+    ;;
+  esac
+
+  # loadkeys only works on a virtual console, not in a terminal emulator
+  [[ $(tty 2>/dev/null) == /dev/tty[0-9]* ]] && loadkeys "$keymap" 2>/dev/null
+
+  timezone=$(timedatectl show --property=Timezone --value 2>/dev/null)
+  [[ -n $timezone ]] || timezone="UTC"
+}
+
+# STEP 2: USER
+
+user_form() {
+  while true; do
+    step "Your user account"
+
+    # --value, not --placeholder: a placeholder is not submitted, so Enter
+    # on an untouched field yielded an empty username and re-asked. The
+    # promise is that Enter alone installs.
+    username=$(gum input --header "Username" --value "${username:-user}") || abort
+    if [[ ! $username =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+      say --foreground 1 "Usernames start with a letter and hold only a-z, 0-9, - and _."
+      gum confirm --affirmative "Try again" --negative "Quit" "" || abort
+      continue
+    fi
+
+    password=$(gum input --password --header "Password" --placeholder "•••••••") || abort
+    if [[ -z $password ]]; then
+      say --foreground 1 "The password cannot be empty: it also unlocks the disk."
+      gum confirm --affirmative "Try again" --negative "Quit" "" || abort
+      continue
+    fi
+
+    local again
+    again=$(gum input --password --header "Password (again)" --placeholder "•••••••") || abort
+    if [[ $password != "$again" ]]; then
+      say --foreground 1 "The two passwords differ."
+      gum confirm --affirmative "Try again" --negative "Quit" "" || abort
+      continue
+    fi
+
+    break
+  done
+
+  hostname=$(gum input --header "Hostname" --value "ashlaros") || abort
+
+  # Autologin is on by default: the disk is encrypted, so the passphrase
+  # prompt at boot already is the authentication.
+  if gum confirm --affirmative "Keep autologin" --negative "Ask for the password" \
+    "Log in automatically?"; then
+    autologin=true
+  else
+    autologin=false
+  fi
+
+  # SHA-512 crypt ($6$), which is what openssl passwd offers and what
+  # archinstall's enc_password expects
+  password_hash=$(printf '%s' "$password" | openssl passwd -6 -stdin)
+}
+
+# STEP 3: ENCRYPTION & TPM
+
+encryption_form() {
+  step "Disk encryption"
+
+  say "LUKS2 with your user password as the passphrase."
+  if tpm_present; then
+    say --foreground 8 "A TPM is present: the passphrase is enrolled into it, so boots unlock without typing it."
+  else
+    say --foreground 8 "No TPM found: you will type the passphrase at every boot."
+  fi
+  echo
+
+  if gum confirm --affirmative "Encrypt the disk" --negative "No encryption" \
+    "Encrypt this installation?"; then
+    encrypt=true
+  else
+    encrypt=false
+  fi
+}
+
+tpm_present() {
+  # --tpm2-device=list prints a header and one row per device; no rows means
+  # no usable TPM, which is not an error, only a fallback to passphrase
+  [[ -n $(systemd-cryptenroll --tpm2-device=list 2>/dev/null | tail -n +2) ]]
+}
+
+# STEP 4: PARTITION LAYOUT
+
+disk_form() {
+  while true; do
+    step "Where to install"
+
+    local boot_source exclude_disk
+    boot_source=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)
+    exclude_disk=$(root_disk_of "$boot_source")
+
+    local rows
+    mapfile -t rows < <(lsblk -dpno NAME,SIZE,MODEL,TYPE |
+      awk '$NF=="disk"{ $NF=""; print }' |
+      grep -E '^/dev/(sd|hd|vd|nvme|mmcblk|xv)' |
+      { if [[ -n $exclude_disk ]]; then grep -Fv "$exclude_disk " || true; else cat; fi; })
+
+    if ((${#rows[@]} == 0)); then
+      abort "No installable disk found."
+    fi
+
+    local selected
+    selected=$(gum choose --header "Install disk" "${rows[@]}") || abort
+    disk=$(awk '{print $1}' <<<"$selected")
+
+    layout=$(gum choose --header "Layout for $disk" --selected "Erase disk (btrfs)" \
+      "Erase disk (btrfs)" \
+      "Erase disk (ext4)" \
+      "Open cfdisk, then re-detect") || abort
+
+    case "$layout" in
+    "Open cfdisk"*)
+      clear
+      cfdisk "$disk" || true
+      partprobe "$disk" 2>/dev/null || true
+      sync
+      continue
+      ;;
+    "Erase disk (ext4)") filesystem="ext4" ;;
+    *) filesystem="btrfs" ;;
+    esac
+
+    return 0
+  done
+}
+
+# The whole-disk device a partition belongs to, so the live medium is not
+# offered as a target.
+root_disk_of() {
+  local source="$1"
+  [[ -n $source ]] || return 0
+  local name
+  name=$(lsblk -no PKNAME "$source" 2>/dev/null | head -n1)
+  [[ -n $name ]] && echo "/dev/$name" || echo "$source"
+}
+
+# CONFIRM
+
+confirm_form() {
+  clear_logo
+  echo
+  printf 'Field,Value\nUser,%s\nHostname,%s\nAutologin,%s\nLocale,%s\nKeymap,%s\nTimezone,%s\nDisk,%s\nLayout,%s\nEncryption,%s\n' \
+    "$username" "$hostname" "$autologin" "$locale" "$keymap" "$timezone" \
+    "$disk" "$filesystem" "$([[ $encrypt == true ]] && echo "LUKS2$(tpm_present && echo " + TPM")" || echo "none")" |
+    gum table -s "," -p | sed "s/^/${PADDING_LEFT_SPACES}/"
+  echo
+  say --foreground 1 "Everything on $disk will be erased. There is no recovery."
+  echo
+
+  gum confirm --affirmative "Install" --negative "Start over" "Install AshlarOS?"
+}
+
+# OUTPUT
+
+# archinstall keys the encryption config to a partition by obj_id, so the
+# root partition's id is fixed here and referenced from disk_encryption.
+ROOT_OBJ_ID="6f2b1c94-0e1d-4a77-9f3e-2c5d8b7a4e10"
+ESP_OBJ_ID="0b7d4c31-58a2-4e69-8c0f-1d6a9b3e5f27"
+
+write_config() {
+  local esp_start=$((1024 * 1024))
+  local esp_size=$((1024 * 1024 * 1024)) # 1 GiB ESP, per the plan
+  local disk_size root_start root_size
+
+  # a failed blockdev leaves disk_size empty, and the arithmetic below then
+  # yields a negative root partition that archinstall accepts and parted
+  # rejects halfway through the wipe
+  if ! disk_size=$(blockdev --getsize64 "$disk" 2>&1); then
+    abort "Could not read the size of $disk: $disk_size"
+  fi
+  [[ $disk_size =~ ^[0-9]+$ ]] || abort "$disk reported a nonsensical size: $disk_size"
+
+  root_start=$((esp_start + esp_size))
+  # leave a mebibyte for the GPT backup header
+  root_size=$((disk_size - root_start - 1024 * 1024))
+
+  # 1 GiB ESP plus a root worth having; below this the install fills the
+  # disk and fails at a random package instead of here
+  ((root_size >= 8 * 1024 * 1024 * 1024)) ||
+    abort "$disk is too small: AshlarOS needs at least 10 GiB."
+
+  local btrfs_volumes="[]"
+  local mount_options="[]"
+  local root_mountpoint='"/"'
+  if [[ $filesystem == btrfs ]]; then
+    btrfs_volumes='[
+                            { "mountpoint": "/", "name": "@" },
+                            { "mountpoint": "/home", "name": "@home" },
+                            { "mountpoint": "/var/log", "name": "@log" },
+                            { "mountpoint": "/var/cache/pacman/pkg", "name": "@pkg" }
+                        ]'
+    mount_options='[ "compress=zstd" ]'
+    # subvolumes carry the mountpoints, so the partition itself has none
+    root_mountpoint="null"
+  fi
+
+  local encryption_config=""
+  if [[ $encrypt == true ]]; then
+    encryption_config=",
+        \"disk_encryption\": {
+            \"encryption_type\": \"luks\",
+            \"lvm_volumes\": [],
+            \"iter_time\": 2000,
+            \"partitions\": [ \"$ROOT_OBJ_ID\" ],
+            \"encryption_password\": $(printf '%s' "$password" | jq -Rsa .)
+        }"
+  fi
+
+  cat >"$OUTPUT_DIR/user_configuration.json" <<-EOF
+	{
+	    "app_config": null,
+	    "archinstall-language": "English",
+	    "auth_config": {},
+	    "audio_config": { "audio": "pipewire" },
+	    "bootloader_config": { "bootloader": "Systemd-boot", "uki": false, "removable": false },
+	    "custom_commands": [],
+	    "ashlaros_install": {
+	        "target_mount": "/mnt",
+	        "autologin": $autologin,
+	        "username": "$username",
+	        "encrypt": $encrypt,
+	        "filesystem": "$filesystem",
+	        "root_obj_id": "$ROOT_OBJ_ID",
+	        "boot": { "esp_mount": "/boot" }
+	    },
+	    "disk_config": {
+	        "config_type": "default_layout",
+	        "device_modifications": [
+	            {
+	                "device": "$disk",
+	                "partitions": [
+	                    {
+	                        "btrfs": [],
+	                        "dev_path": null,
+	                        "flags": [ "boot", "esp" ],
+	                        "fs_type": "fat32",
+	                        "mount_options": [],
+	                        "mountpoint": "/boot",
+	                        "obj_id": "$ESP_OBJ_ID",
+	                        "size": {
+	                            "sector_size": { "unit": "B", "value": 512 },
+	                            "unit": "B",
+	                            "value": $esp_size
+	                        },
+	                        "start": {
+	                            "sector_size": { "unit": "B", "value": 512 },
+	                            "unit": "B",
+	                            "value": $esp_start
+	                        },
+	                        "status": "create",
+	                        "type": "primary"
+	                    },
+	                    {
+	                        "btrfs": $btrfs_volumes,
+	                        "dev_path": null,
+	                        "flags": [],
+	                        "fs_type": "$filesystem",
+	                        "mount_options": $mount_options,
+	                        "mountpoint": $root_mountpoint,
+	                        "obj_id": "$ROOT_OBJ_ID",
+	                        "size": {
+	                            "sector_size": { "unit": "B", "value": 512 },
+	                            "unit": "B",
+	                            "value": $root_size
+	                        },
+	                        "start": {
+	                            "sector_size": { "unit": "B", "value": 512 },
+	                            "unit": "B",
+	                            "value": $root_start
+	                        },
+	                        "status": "create",
+	                        "type": "primary"
+	                    }
+	                ],
+	                "wipe": true
+	            }
+	        ]$encryption_config
+	    },
+	    "hostname": "$hostname",
+	    "kernels": [ "linux-cachyos" ],
+	    "network_config": { "type": "iso" },
+	    "ntp": true,
+	    "parallel_downloads": 8,
+	    "script": null,
+	    "services": [],
+	    "swap": true,
+	    "timezone": "$timezone",
+	    "locale_config": {
+	        "kb_layout": "$keymap",
+	        "sys_enc": "UTF-8",
+	        "sys_lang": "$locale"
+	    },
+	    "mirror_config": {
+	        "custom_repositories": [],
+	        "custom_servers": [],
+	        "mirror_regions": {},
+	        "optional_repositories": []
+	    },
+	    "packages": [
+	        "base-devel",
+	        "git",
+	        "chwd",
+	        "ashlaros-keyring",
+	        "ashlaros-mirrorlist",
+	        "ashlaros-release",
+	        "ashlaros-settings"
+	    ],
+	    "profile_config": {
+	        "gfx_driver": null,
+	        "greeter": null,
+	        "profile": {}
+	    },
+	    "version": "3.0.9"
+	}
+	EOF
+
+  local hash_json password_json
+  hash_json=$(printf '%s' "$password_hash" | jq -Rsa .)
+  password_json=$(printf '%s' "$password" | jq -Rsa .)
+
+  cat >"$OUTPUT_DIR/user_credentials.json" <<-EOF
+	{
+	    "root_enc_password": $hash_json,
+	    "users": [
+	        {
+	            "username": "$username",
+	            "enc_password": $hash_json,
+	            "groups": [],
+	            "sudo": true
+	        }
+	    ]$([[ $encrypt == true ]] && printf ',\n    "encryption_password": %s' "$password_json")
+	}
+	EOF
+
+  chmod 600 "$OUTPUT_DIR/user_credentials.json"
+}
+
+# MAIN
+
+username=""
+autologin=true
+encrypt=true
+filesystem="btrfs"
+
+while true; do
+  locale_keymap_form
+  user_form
+  encryption_form
+  disk_form
+  confirm_form && break
+done
+
+write_config
+
+if [[ ${1:-} == "--dry-run" ]]; then
+  step "Dry run: configuration written, nothing installed"
+  say "$OUTPUT_DIR/user_configuration.json"
+  say "$OUTPUT_DIR/user_credentials.json"
+  exit 0
+fi

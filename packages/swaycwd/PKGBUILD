@@ -1,0 +1,20 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+# Contributor: Julian Daube <joposter at gmail dot com>
+
+pkgname=swaycwd
+pkgdesc="Report the working directory of the focused sway container"
+pkgrel=2
+pkgver=1.1
+# the AUR PKGBUILD's url is a google cache link to a reddit thread, long
+# dead. The script has no upstream repository; it ships here as a source.
+url="https://github.com/ashlaros/ashlaros"
+arch=("any")
+license=("MIT")
+
+source=("swaycwd")
+depends=("sway" "bash" "jq" "procps")
+sha256sums=('d693be4686174d3e1800fee930454286020c11ffca8ae24f231115c79b3719e2')
+
+package() {
+	install -Dm755 "$srcdir/swaycwd" "$pkgdir/usr/bin/swaycwd"
+}

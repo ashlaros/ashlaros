@@ -1,0 +1,108 @@
+# The live system. It is the installer plus enough of a rescue environment
+# to fix a machine that will not boot, not a full desktop: the desktop is
+# what gets installed, and pulling it in twice would only make the ISO
+# bigger and the boot slower.
+
+# base
+base
+linux-cachyos
+linux-firmware
+amd-ucode
+intel-ucode
+mkinitcpio
+mkinitcpio-archiso
+mkinitcpio-nfs-utils
+# the archiso_pxe_nbd hook links nbd-client; without it every initramfs
+# build ends in "binary not found" and produces an incomplete image
+nbd
+systemd
+systemd-resolvconf
+sudo
+sed
+which
+less
+nano
+vim
+
+# AshlarOS
+ashlaros-branding
+ashlaros-installer
+ashlaros-keyring
+ashlaros-mirrorlist
+ashlaros-release
+
+# installer
+archinstall
+arch-install-scripts
+gum
+jq
+openssl
+tpm2-tools
+tpm2-tss
+chwd
+
+# a live session, for looking something up mid-install
+sway
+foot
+foot-terminfo
+firefox
+
+# filesystems the installer can create or repair
+btrfs-progs
+e2fsprogs
+dosfstools
+exfatprogs
+f2fs-tools
+xfsprogs
+ntfs-3g
+cryptsetup
+lvm2
+mdadm
+parted
+gptfdisk
+partclone
+
+# storage and hardware
+nvme-cli
+hdparm
+smartmontools
+usbutils
+pciutils
+lsscsi
+sg3_utils
+
+# network: the install is online, so this is not optional
+networkmanager
+iwd
+wireless-regdb
+wpa_supplicant
+dhcpcd
+ethtool
+openssh
+rsync
+curl
+wget
+bind
+
+# rescue
+arch-install-scripts
+testdisk
+ddrescue
+fsarchiver
+gpm
+htop
+man-db
+man-pages
+tmux
+zsh
+grml-zsh-config
+
+# virtualisation guest support, so the ISO is testable in a VM
+qemu-guest-agent
+open-vm-tools
+virtualbox-guest-utils-nox
+
+# archiso itself
+edk2-shell
+efibootmgr
+memtest86+-efi
