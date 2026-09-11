@@ -31,7 +31,12 @@ RESET="${CSI}0m"
 DIM="${CSI}2m"
 HIDE_CURSOR="${CSI}?25l"
 SHOW_CURSOR="${CSI}?25h"
-CLEAR="${CSI}2J${CSI}H"
+CURSOR_HOME="${CSI}H"
+# erase what this line does not overwrite, rather than blanking the screen
+# and drawing into the gap: a 2J each second is a visible flash, and a
+# screenshot taken mid-redraw catches a half-built frame
+CLEAR_LINE="${CSI}K"
+CLEAR_BELOW="${CSI}J"
 STONE="${CSI}37m"
 BRIGHT="${CSI}97m"
 RED="${CSI}31m"
@@ -127,37 +132,41 @@ render() {
   width=$(term_width)
   permille=$(progress_permille)
 
-  {
-    printf '%s%s' "$CLEAR" "$HIDE_CURSOR"
+  # built in full, then written once: the terminal never shows a partial
+  # frame, and the logo above does not blink while the bar below moves
+  local frame
+  frame=$({
     while IFS= read -r line; do
       centre "${STONE}${line}${RESET}" "$width"
-      printf '\n'
+      printf '%s\n' "$CLEAR_LINE"
     done <<<"$LOGO"
-    printf '\n'
+    printf '%s\n' "$CLEAR_LINE"
     centre "$PHASE" "$width"
-    printf '\n\n'
+    printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
     centre "$(draw_bar "$permille")" "$width"
-    printf '\n\n'
+    printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
     centre "${DIM}step $((INDEX + 1)) of ${TOTAL}${RESET}" "$width"
-    printf '\n'
-  } >"$TTY_PATH"
+    printf '%s\n' "$CLEAR_LINE"
+  })
+  printf '%s%s%s%s' "$CURSOR_HOME" "$HIDE_CURSOR" "$frame" "$CLEAR_BELOW" >"$TTY_PATH"
 }
 
 render_result() {
   local width status="$1" message="$2"
   width=$(term_width)
-  {
-    printf '%s%s' "$CLEAR" "$SHOW_CURSOR"
+  local frame
+  frame=$({
     while IFS= read -r line; do
       centre "${STONE}${line}${RESET}" "$width"
-      printf '\n'
+      printf '%s\n' "$CLEAR_LINE"
     done <<<"$LOGO"
-    printf '\n'
+    printf '%s\n' "$CLEAR_LINE"
     centre "$status" "$width"
-    printf '\n\n'
+    printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
     centre "${DIM}${message}${RESET}" "$width"
-    printf '\n\n'
-  } >"$TTY_PATH"
+    printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
+  })
+  printf '%s%s%s%s' "$CURSOR_HOME" "$SHOW_CURSOR" "$frame" "$CLEAR_BELOW" >"$TTY_PATH"
 }
 
 # read_state overwrites all of these; the defaults are what the first frame

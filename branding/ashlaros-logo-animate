@@ -95,8 +95,13 @@ frame() {
   for ((row = 0; row < courses * 2; row++)); do
     printf '%s%s%s%s\n' "$pad" "$STONE" "${LOGO_ROWS[row]}" "$RESET"
   done
+  # The name is narrower than the wall, so it takes its own padding: the
+  # shared left edge is right for the courses, which are all one width,
+  # and would hang the name off the wall's left corner.
   if ((letters > 0)) && [[ -n $NAME ]]; then
-    printf '\n%s%s%s%s\n' "$pad" "$BRIGHT" "${NAME:0:letters}" "$RESET"
+    local name_pad=$(((width - ${#NAME}) / 2))
+    ((name_pad < 0)) && name_pad=0
+    printf '\n%*s%s%s%s\n' "$name_pad" "" "$BRIGHT" "${NAME:0:letters}" "$RESET"
   fi
 }
 
