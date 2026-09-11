@@ -33,7 +33,16 @@ jobs:
       # so fetch-depth below is silently meaningless and package_version.py
       # fails with "not a git repository".
       - name: install git before the checkout
-        run: pacman -Sy --noconfirm --needed git
+        # The probe from prepare-container.sh, which cannot help yet - it
+        # lives in the checkout this step exists to make possible. pacman 7
+        # confines downloads with Landlock and the ALARM container's
+        # seccomp profile blocks the syscalls, so the first sync fails
+        # there and every aarch64 package silently stops building.
+        run: |
+          if ! pacman -Sy --noconfirm >/dev/null 2>&1; then
+            sed -i '0,/^\[options\]/s//[options]\nDisableSandbox/' /etc/pacman.conf
+          fi
+          pacman -Sy --noconfirm --needed git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # package_version.py derives pkgver/pkgrel from how many commits
@@ -92,7 +101,16 @@ jobs:
       # so fetch-depth below is silently meaningless and package_version.py
       # fails with "not a git repository".
       - name: install git before the checkout
-        run: pacman -Sy --noconfirm --needed git
+        # The probe from prepare-container.sh, which cannot help yet - it
+        # lives in the checkout this step exists to make possible. pacman 7
+        # confines downloads with Landlock and the ALARM container's
+        # seccomp profile blocks the syscalls, so the first sync fails
+        # there and every aarch64 package silently stops building.
+        run: |
+          if ! pacman -Sy --noconfirm >/dev/null 2>&1; then
+            sed -i '0,/^\[options\]/s//[options]\nDisableSandbox/' /etc/pacman.conf
+          fi
+          pacman -Sy --noconfirm --needed git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # package_version.py derives pkgver/pkgrel from how many commits
@@ -117,6 +135,21 @@ jobs:
         env:
           GPG_KEYID: ${{ vars.GPG_KEYID }}
         run: .github/scripts/build-package.sh "packages/${{ matrix.package }}"
+      # continue-on-error above turns a failed aarch64 build into a green
+      # job, which is how way-displays was missing from the aarch64
+      # repository for a week without anyone noticing. The tolerance is
+      # right - one absent package beats a blocked repository - but it has
+      # to say so.
+      - name: report a tolerated aarch64 failure
+        if: steps.build.outcome == 'failure'
+        run: |
+          echo "::warning title=aarch64 build failed::${{ matrix.package }}           did not build for aarch64 and will be absent from that database.           The repository is still published; ARM users lose this package."
+          {
+            echo "### :warning: ${{ matrix.package }} failed to build for aarch64"
+            echo
+            echo "It will be absent from the aarch64 database. This is tolerated,"
+            echo "not ignored: fix it or drop the package's aarch64 support."
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: collect the packages
         if: steps.build.outcome == 'success'
         working-directory: packages/${{ matrix.package }}
