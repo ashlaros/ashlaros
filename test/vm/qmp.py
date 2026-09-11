@@ -68,6 +68,10 @@ DE_KEYS = dict(
         "=": "shift-0",
         "y": "z",
         "z": "y",
+        # de puts these where us has the semicolon and quote keys
+        ";": "shift-comma",
+        ":": "shift-dot",
+        "'": "shift-backslash",
     },
 )
 
