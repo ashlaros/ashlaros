@@ -115,7 +115,8 @@ export async function serveObject(request, bucket, key, extraHeaders = {}) {
  *
  * A site supplies: `bucket` (the binding name), `title`, `resolveKey`,
  * `listing`, `headers`, and optionally `routes` for anything it serves
- * that is not a bucket object.
+ * that is not a bucket object. A route is called with
+ * (request, bucket, env, url).
  */
 export function handler(site) {
   return async (request, env) => {
@@ -137,8 +138,11 @@ export function handler(site) {
       });
     }
 
+    // (request, bucket, env, url) rather than just the bucket: /geo needs
+    // request.cf, and a stats route would need env and the query. One
+    // signature covering both beats each adding its own parameter.
     const route = site.routes?.[requested];
-    if (route) return route(bucket);
+    if (route) return route(request, bucket, env, url);
 
     const key = site.resolveKey(requested);
     if (key === null) return notFound();

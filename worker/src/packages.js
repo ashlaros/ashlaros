@@ -55,7 +55,7 @@ export const site = {
   routes: {
     // the signing key, so a new machine can trust the repository before it
     // can install the keyring package the repository serves
-    'ashlaros.gpg': async (bucket) => {
+    'ashlaros.gpg': async (request, bucket) => {
       const key = await bucket.get('ashlaros.gpg');
       if (!key) return notFound();
       return new Response(key.body, {

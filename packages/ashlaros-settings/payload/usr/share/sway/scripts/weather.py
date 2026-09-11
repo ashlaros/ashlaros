@@ -35,6 +35,10 @@ USER_AGENT = "ashlaros-weather/1.0 github.com/ashlaros/ashlaros"
 
 FORECAST_URL = "https://api.met.no/weatherapi/locationforecast/2.0/complete"
 
+# Our own worker rather than a third-party geo-ip service: the desktop
+# should not tell anyone else its IP address on every weather refresh.
+GEO_URL = environ.get("ASHLAROS_GEO_URL", "https://ashlaros.download/geo")
+
 # MET's symbol vocabulary, which replaces open-meteo's WMO integers. The
 # whole set, not only what one sample happened to return: a code we do not
 # know renders as an empty icon, and that is a bug a user sees on the one
@@ -180,15 +184,17 @@ def symbol_parts(symbol_code):
 def resolve_location(name):
     """Coordinates and display name for a city, or for this machine's IP.
 
-    'auto' asks geojs.io where the request came from, the same thing the
-    worker used to read off the request itself; anything else is geocoded
-    by open-meteo, which MET has no equivalent for. geojs rather than
-    ipapi.co: the latter answers 429 to an unauthenticated caller.
+    'auto' asks our own worker, which reads the geo data Cloudflare already
+    attached to the request at its edge - so the machine's IP goes to us
+    rather than to a third party. Anything else is geocoded by open-meteo,
+    which MET has no equivalent for and which a city name typed by the user
+    cannot be derived from.
     """
     if name == 'auto':
-        result = requests.get(
-            "https://get.geojs.io/v1/ip/geo.json", timeout=10).json()
-        return result['latitude'], result['longitude'], result['city']
+        result = requests.get(GEO_URL, timeout=10)
+        result.raise_for_status()
+        geo = result.json()
+        return geo['latitude'], geo['longitude'], geo.get('city')
 
     result = requests.get(
         "https://geocoding-api.open-meteo.com/v1/search",

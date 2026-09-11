@@ -13,6 +13,7 @@
  */
 
 import { handler } from './serve.js';
+import { geo } from './geo.js';
 import { site as isoSite } from './iso.js';
 import { site as packagesSite } from './packages.js';
 
@@ -40,7 +41,11 @@ export function isDocsHost(hostname) {
 
 export default {
   fetch(request, env, ctx) {
-    const { hostname } = new URL(request.url);
+    const { hostname, pathname } = new URL(request.url);
+    // Ahead of the docs binding, which otherwise answers for the whole
+    // apex. The desktop reads this instead of telling a third party its
+    // IP address; nothing about the request is logged or stored.
+    if (isDocsHost(hostname) && pathname === '/geo') return geo(request);
     if (isDocsHost(hostname)) return env.DOCS.fetch(request);
     return handler(siteFor(hostname))(request, env, ctx);
   },
