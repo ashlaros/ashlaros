@@ -32,6 +32,25 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from package_version import NoHistory, version_of  # noqa: E402
 
 
+class UnreadableRootfs(Exception):
+    """The built rootfs has no readable package database."""
+
+
+def trust_checkout() -> None:
+    """Let git read this checkout's history inside a container.
+
+    The workflow runs in a container, so the checkout is owned by a different
+    uid than the one running git, and git refuses it as dubious ownership -
+    which surfaces here as "not a git repository" and every version
+    underivable. build-package.sh does the same thing for the same reason.
+    """
+    subprocess.run(
+        ["git", "config", "--global", "--add", "safe.directory", str(ROOT)],
+        check=False,
+        capture_output=True,
+    )
+
+
 def installed_versions(rootfs: Path) -> dict[str, str]:
     """{name: version} for every ashlaros-* package in a built rootfs.
 
@@ -43,8 +62,12 @@ def installed_versions(rootfs: Path) -> dict[str, str]:
         ["pacman", "-Qr", str(rootfs)],
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
+    if result.returncode != 0:
+        # an empty or unreadable database is not staleness; say which it is
+        # rather than dying in a traceback
+        raise UnreadableRootfs(result.stderr.strip() or "pacman -Qr failed")
     versions = {}
     for line in result.stdout.splitlines():
         name, _, version = line.partition(" ")
@@ -79,13 +102,20 @@ def main() -> int:
         print(f"no pacman database under {args.rootfs}", file=sys.stderr)
         return 2
 
+    trust_checkout()
+
     try:
         expected = expected_versions()
     except NoHistory as exc:
         print(f"cannot derive versions: {exc}", file=sys.stderr)
         return 2
 
-    installed = installed_versions(args.rootfs)
+    try:
+        installed = installed_versions(args.rootfs)
+    except UnreadableRootfs as exc:
+        print(f"cannot read the rootfs: {exc}", file=sys.stderr)
+        return 2
+
     if not installed:
         print("no ashlaros-* packages in the rootfs", file=sys.stderr)
         return 2
