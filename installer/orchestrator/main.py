@@ -24,6 +24,7 @@ def build_phases():
     """
     from .phases_impl import (
         configure_login,
+        configure_mdns,
         configure_system,
         enable_services,
         enroll_tpm,
@@ -41,6 +42,7 @@ def build_phases():
         ("Detecting hardware", run_hardware_detection),
         ("Configuring login", configure_login),
         ("Enabling services", enable_services),
+        ("Resolving .local names", configure_mdns),
         ("Validating boot", validate_boot),
     ]
 

@@ -104,6 +104,18 @@ DESKTOP_PACKAGES = [
     "gvfs-smb",
     "gvfs-nfs",
     "tpm2-tools",
+    # Printing. cups pulls cups-filters and avahi itself, so neither is
+    # listed: cups-pk-helper is what lets a desktop user add a printer
+    # without root, and system-config-printer is the dialog that does it.
+    "cups",
+    "cups-pk-helper",
+    "system-config-printer",
+    # a printer on USB, which cups only reaches through libusb
+    "libusb",
+    # .local resolution: avahi arrives with cups, but the glibc side is a
+    # separate package, and without it avahi answers on D-Bus while
+    # `ping printer.local` still fails
+    "nss-mdns",
     # firmware updates: LVFS metadata is refreshed by a timer, but nothing
     # is ever flashed unattended - see enable_services
     "fwupd",
@@ -659,12 +671,51 @@ SERVICES = (
     "bluetooth.service",
     "systemd-timesyncd.service",
     "fwupd-refresh.timer",
+    # printing, and the mDNS responder that finds a network printer without
+    # anyone typing an address
+    "cups.service",
+    "avahi-daemon.service",
 )
 
 
 def enable_services(ctx: InstallContext) -> None:
     for service in SERVICES:
         run_command(["arch-chroot", str(ctx.target), "systemctl", "enable", service])
+
+
+def configure_mdns(ctx: InstallContext) -> None:
+    """Teach the resolver about .local names.
+
+    Installing nss-mdns drops the libraries in and changes nothing: the
+    `hosts:` line decides what glibc actually consults, and Arch ships it
+    without mdns. So avahi answers on D-Bus while `ping printer.local`
+    still fails, which looks like a broken printer rather than an unedited
+    config file.
+
+    mdns4_minimal goes before `resolve`, and carries [NOTFOUND=return] so a
+    name that is not on the link falls through to DNS instead of ending the
+    lookup.
+    """
+    nsswitch = ctx.target / "etc/nsswitch.conf"
+    lines = nsswitch.read_text().splitlines()
+    for index, line in enumerate(lines):
+        if not line.startswith("hosts:"):
+            continue
+        if "mdns" in line:
+            return
+        entries = line.split()
+        # after `files`/`myhostname` if present, so a local override still
+        # wins, and before `resolve` and `dns`, which is the point
+        cut = next(
+            (i for i, e in enumerate(entries) if e in ("resolve", "dns")),
+            len(entries),
+        )
+        entries.insert(cut, "mdns4_minimal [NOTFOUND=return]")
+        lines[index] = " ".join(entries)
+        nsswitch.write_text("\n".join(lines) + "\n")
+        info("› .local names resolve over mdns")
+        return
+    error("no hosts: line in nsswitch.conf - .local names will not resolve")
 
 
 def run_hardware_detection(ctx: InstallContext) -> None:
