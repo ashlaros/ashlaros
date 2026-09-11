@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# Lay the ashlar courses, then resolve the name. Once.
+#
+# The mark is three courses of dressed stone with offset joints, so the
+# animation that matches it is the courses appearing in sequence and the
+# name settling underneath - a wall being built, held for a beat, done.
+# Not a spinner.
+#
+# Every frame is derived from logo.txt, never hand-copied: rows 1-2 are the
+# first course, 3-4 the second, 5-6 the third, and row 8 the letter-spaced
+# name. If the mark changes, that file changes and this follows. A frame
+# transcribed here would drift the first time the favicon was redrawn.
+#
+# It runs before anything else on the live medium, so it degrades rather
+# than fails: no logo.txt, no tty, no colour - still exits 0 and lets the
+# installer start.
+set -uo pipefail
+
+LOGO_PATH="${ASHLAROS_PATH:-/usr/share/ashlaros}/logo.txt"
+TTY_PATH="${ASHLAROS_ANIMATE_TTY:-/dev/tty}"
+
+# Seconds each course rests before the next is laid, and each letter of the
+# name. Eight letters plus three courses keeps the whole thing under a
+# second - it runs ahead of a form that waits on a human, but a splash
+# that outlasts the boot is a delay, not branding.
+COURSE_DELAY="${ASHLAROS_ANIMATE_COURSE_DELAY:-0.10}"
+LETTER_DELAY="${ASHLAROS_ANIMATE_LETTER_DELAY:-0.035}"
+HOLD="${ASHLAROS_ANIMATE_HOLD:-0.30}"
+
+CSI=$'\033['
+RESET="${CSI}0m"
+STONE="${CSI}37m"
+BRIGHT="${CSI}97m"
+CLEAR="${CSI}2J${CSI}H"
+HIDE_CURSOR="${CSI}?25l"
+SHOW_CURSOR="${CSI}?25h"
+
+[[ -r $LOGO_PATH ]] || exit 0
+[[ -w $TTY_PATH ]] || exit 0
+
+mapfile -t LOGO_ROWS <"$LOGO_PATH"
+((${#LOGO_ROWS[@]} >= 6)) || exit 0
+
+# the name is whatever follows the six course rows, blank lines dropped:
+# reading it back rather than assuming row 8 survives a reflowed logo.txt
+NAME=""
+for ((i = 6; i < ${#LOGO_ROWS[@]}; i++)); do
+  [[ -n ${LOGO_ROWS[i]// /} ]] && NAME="${LOGO_ROWS[i]}" && break
+done
+
+# shellcheck disable=SC2329  # invoked by the EXIT trap
+restore() {
+  printf '%s%s' "$SHOW_CURSOR" "$RESET" >"$TTY_PATH" 2>/dev/null
+}
+trap restore EXIT
+
+# The console grows after boot - the framebuffer settles late, especially
+# in VMs - so measure per frame rather than trusting startup geometry.
+# Getting this wrong leaves the animation misaligned against the static
+# logo the configurator draws a moment later.
+term_width() {
+  local width
+  width=$(stty size 2>/dev/null <"$TTY_PATH" | awk '{print $2}')
+  [[ $width =~ ^[0-9]+$ ]] && ((width > 0)) && echo "$width" || echo "${COLUMNS:-80}"
+}
+
+logo_width() {
+  local row max=0
+  for row in "${LOGO_ROWS[@]}"; do
+    ((${#row} > max)) && max=${#row}
+  done
+  echo "$max"
+}
+
+LOGO_WIDTH=$(logo_width)
+
+# Padding is computed from the logo's own width so every row shares one
+# left edge, exactly as clear_logo does in the configurator. Centring each
+# row independently would ripple the wall's left edge as courses appear.
+pad_for() {
+  local width=$1
+  local pad=$(((width - LOGO_WIDTH) / 2))
+  ((pad < 0)) && pad=0
+  printf '%*s' "$pad" ""
+}
+
+# Draw the first `courses` courses, and `letters` characters of the name.
+frame() {
+  local courses=$1 letters=$2 width pad row
+  width=$(term_width)
+  pad=$(pad_for "$width")
+
+  printf '%s%s' "$CLEAR" "$HIDE_CURSOR"
+  printf '\n'
+  for ((row = 0; row < courses * 2; row++)); do
+    printf '%s%s%s%s\n' "$pad" "$STONE" "${LOGO_ROWS[row]}" "$RESET"
+  done
+  if ((letters > 0)) && [[ -n $NAME ]]; then
+    printf '\n%s%s%s%s\n' "$pad" "$BRIGHT" "${NAME:0:letters}" "$RESET"
+  fi
+}
+
+# A keypress abandons the animation and starts the installer immediately.
+# The screen is left as the configurator expects to find it - cleared -
+# rather than half-built.
+interrupted() {
+  read -rsn1 -t "$1" 2>/dev/null <"$TTY_PATH"
+}
+
+{
+  for course in 1 2 3; do
+    frame "$course" 0
+    interrupted "$COURSE_DELAY" && exit 0
+  done
+
+  # Step over the name's visible characters, not its columns: it is
+  # letter-spaced ("A S H L A R O S") and its leading indent is part of
+  # the row, so counting columns spends half the frames revealing spaces
+  # and opens with four that show nothing at all.
+  if [[ -n $NAME ]]; then
+    for ((column = 1; column <= ${#NAME}; column++)); do
+      [[ ${NAME:column-1:1} == " " ]] && continue
+      frame 3 "$column"
+      interrupted "$LETTER_DELAY" && exit 0
+    done
+  fi
+
+  # the complete mark is what rests on screen, and it is what the
+  # configurator redraws a moment later - so the handover is seamless
+  frame 3 "${#NAME}"
+  interrupted "$HOLD"
+} >"$TTY_PATH" 2>/dev/null
+
+exit 0

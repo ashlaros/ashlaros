@@ -36,7 +36,8 @@ jobs:
             installer/ashlaros-install \
             .github/scripts/*.sh \
             test/vm/*.sh \
-            iso/airootfs/root/.automated_script.sh
+            iso/airootfs/root/.automated_script.sh \
+            branding/ashlaros-logo-animate
 
   python:
     runs-on: ubuntu-latest

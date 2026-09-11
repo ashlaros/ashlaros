@@ -27,6 +27,9 @@ package() {
   # the installer's TUI header reads this; see installer/configurator
   install -Dm644 "${branding}/logo.txt" "${pkgdir}/usr/share/ashlaros/logo.txt"
   install -Dm644 "${branding}/palette.conf" "${pkgdir}/usr/share/ashlaros/palette.conf"
+  # derives its frames from logo.txt above, so the two ship together
+  install -Dm755 "${branding}/ashlaros-logo-animate" \
+    "${pkgdir}/usr/bin/ashlaros-logo-animate"
 
   # the desktop's wallpaper lookup and os-release's LOGO= both read the
   # freedesktop locations rather than /usr/share/ashlaros

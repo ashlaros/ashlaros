@@ -32,6 +32,14 @@ systemctl is-active --quiet pacman-init.service ||
   systemctl start pacman-init.service 2>/dev/null
 
 cd /root || exit 1
+
+# The one place the mark can animate without repeating: the configurator's
+# clear_logo runs before every form and the dashboard redraws each second,
+# so both of those stay static. Drawn on the tty directly, ahead of the
+# stdout tee, because the frames are overdrawn - the log wants the result,
+# not twelve copies of a wall being built.
+ashlaros-logo-animate 2>/dev/null >/dev/tty
+
 ashlaros-configurator || exit $?
 
 ASHLAROS_DASHBOARD_TTY=$(tty)
