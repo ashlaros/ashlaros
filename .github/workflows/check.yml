@@ -35,6 +35,7 @@ jobs:
             installer/dashboard \
             installer/ashlaros-install \
             .github/scripts/*.sh \
+            test/vm/*.sh \
             iso/airootfs/root/.automated_script.sh
 
   python:
@@ -47,7 +48,7 @@ jobs:
       - name: ruff
         run: |
           pip install ruff
-          ruff check scripts installer/orchestrator
+          ruff check scripts installer/orchestrator test/vm
 
   arm-repo:
     # The aarch64 half of the repository has no other test: the ISO is

@@ -78,6 +78,21 @@ aarch64, a broken man-page step removed — so that merge is three-way against
 `packages/.upstream/` and conflicts are left for a human. Nothing merges
 itself.
 
+## Testing
+
+Most of what matters here is only observable at runtime — the ISO boots
+UEFI-only, the installer is a TUI, the desktop is sway. `test/vm/` boots a
+published ISO under QEMU with a software TPM, drives the installer through
+its four screens, and lets a command be typed on the installed system:
+
+```sh
+test/vm/run.sh fetch
+test/vm/run.sh install
+```
+
+See [test/vm/README.md](test/vm/README.md); it takes about 35 minutes,
+because there is no KVM inside the container.
+
 ## Licence
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
