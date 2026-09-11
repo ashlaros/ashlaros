@@ -186,7 +186,10 @@
         "signal": 14
     },
     "custom/menu": {
-        "format": "",
+        // three stacked courses: the ashlar mark at one character, where
+        // Manjaro's logo used to sit. U+2630 is in the shipped nerd font
+        // and in any monospace fallback, unlike a private-use glyph.
+        "format": "☰",
         "on-click": "swaymsg exec \\$menu",
         "tooltip": false
     },

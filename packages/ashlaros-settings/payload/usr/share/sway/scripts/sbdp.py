@@ -79,7 +79,10 @@ translations = {
     'Mod1': "Alt",
     'Mod2': "",
     'Mod3': "󰘲",
-    'Mod4': "",
+    # the super key, not a distro badge. It was Manjaro's logo, which is
+    # simply the wrong mark here, and no nerd font carries an AshlarOS
+    # one to swap in - so name the key instead of branding it.
+    'Mod4': "Super",
     'Mod5': "Scroll",
     'question': "?",
     'space': "␣",
