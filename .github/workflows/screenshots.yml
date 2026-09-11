@@ -30,16 +30,17 @@ jobs:
       - name: install the desktop
         # from the published repository, not from this checkout: the picture
         # should show what users can install today
-        env:
-          OUT_DIR: ${{ github.workspace }}/out
-        run: screenshots/setup.sh
+        # github.workspace is the host path; inside a job container the
+        # checkout is mounted somewhere else entirely, and $PWD is the only
+        # name that is right on both sides
+        run: OUT_DIR="$PWD/out" screenshots/setup.sh
       - name: capture
         # the checkout is root-owned and the shots are taken as a user, so
         # the manifest is read from the repository and only the output
         # directory is handed over
         run: |
-          su ashlar -c "MANIFEST=${{ github.workspace }}/screenshots/shots.yaml \
-            ${{ github.workspace }}/screenshots/capture.sh ${{ github.workspace }}/out"
+          su ashlar -c "MANIFEST=$PWD/screenshots/shots.yaml \
+            $PWD/screenshots/capture.sh $PWD/out"
       - name: upload to R2
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
@@ -57,4 +58,5 @@ jobs:
           path: |
             out/*.png
             out/*.log
+          if-no-files-found: warn
           retention-days: 7
