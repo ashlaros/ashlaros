@@ -604,12 +604,22 @@ def configure_login(ctx: InstallContext) -> None:
     greetd_dir = ctx.target / "etc/greetd"
     greetd_dir.mkdir(parents=True, exist_ok=True)
 
+    # Through a login shell, not bare: the shipped ~/.profile is where the
+    # session's environment lives - QT_QPA_PLATFORM, the portal theme,
+    # MOZ_ENABLE_WAYLAND, EDITOR - and greetd execs its command directly,
+    # so nothing reads it otherwise. Every one of those variables was
+    # empty on an installed machine before this.
+    # sh, not zsh: ~/.profile is a POSIX sh file and sh is what reads it as
+    # a login shell. zsh would look for ~/.config/zsh/.zprofile instead,
+    # because .zshenv sets ZDOTDIR - and no such file is shipped.
+    session = "sh -lc sway"
+
     config = [
         "[terminal]",
         "vt = 1",
         "",
         "[default_session]",
-        'command = "tuigreet --time --remember --cmd sway"',
+        f'command = "tuigreet --time --remember --cmd \'{session}\'"',
         'user = "greeter"',
     ]
 
@@ -619,7 +629,7 @@ def configure_login(ctx: InstallContext) -> None:
             "# autologin: the disk passphrase (or its TPM enrolment) is the",
             "# authentication that matters on a single-user machine",
             "[initial_session]",
-            'command = "sway"',
+            f'command = "{session}"',
             f'user = "{ctx.username}"',
         ]
 
