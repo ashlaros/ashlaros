@@ -62,6 +62,10 @@ td:not(:first-child) { color: #8a8f98; }
 a:hover, .row:hover { color: #c9ccd1; }
 p { color: #8a8f98; font-size: 0.85rem; line-height: 1.6; }
 code { font-family: monospace; color: #c9ccd1; }
+/* width and height are on the element too: the page ships no external css,
+   so a late-loading image would otherwise reflow the downloads under it */
+.shots { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1rem 0; }
+.shot { width: 480px; height: 270px; object-fit: cover; border: 1px solid #3a4043; }
 `;
 
 export function page(title, body) {

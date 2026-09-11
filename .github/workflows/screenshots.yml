@@ -1,0 +1,60 @@
+name: screenshots
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - packages/ashlaros-settings/**
+      - screenshots/**
+      - .github/workflows/screenshots.yml
+  workflow_dispatch:
+
+concurrency:
+  group: screenshots
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+      # Arch's sway carries cap_sys_nice=ep, and exec'ing a file whose
+      # capability is outside the bounding set fails with EPERM - even as
+      # root, which reads like a corrupt binary rather than a missing
+      # capability. Not --privileged: one capability is what is needed.
+      options: --cap-add=SYS_NICE
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: install the desktop
+        # from the published repository, not from this checkout: the picture
+        # should show what users can install today
+        env:
+          OUT_DIR: ${{ github.workspace }}/out
+        run: screenshots/setup.sh
+      - name: capture
+        # the checkout is root-owned and the shots are taken as a user, so
+        # the manifest is read from the repository and only the output
+        # directory is handed over
+        run: |
+          su ashlar -c "MANIFEST=${{ github.workspace }}/screenshots/shots.yaml \
+            ${{ github.workspace }}/screenshots/capture.sh ${{ github.workspace }}/out"
+      - name: upload to R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ashlaros-iso
+        run: |
+          pacman -S --noconfirm --needed python-boto3
+          python3 scripts/upload_screenshots.py --shot-dir out
+      - name: keep the shots when something looks wrong
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: screenshots
+          path: |
+            out/*.png
+            out/*.log
+          retention-days: 7

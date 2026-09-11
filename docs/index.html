@@ -87,6 +87,11 @@
       .muted {
         color: #8a8f98;
       }
+      .shot {
+        width: 100%;
+        height: auto;
+        border: 1px solid #3a4043;
+      }
     </style>
   </head>
   <body>
@@ -97,6 +102,19 @@
         v3-optimised repositories layered over it, <code>linux-cachyos</code>,
         <code>chwd</code> for hardware detection, systemd-boot, and a sway
         desktop.
+      </p>
+
+      <!-- width and height are set: the page ships no external stylesheet,
+           so a late-loading image would reflow everything under it -->
+      <p>
+        <img
+          class="shot"
+          src="https://iso.ashlaros.download/latest/screenshots/desktop.png"
+          alt="The AshlarOS desktop: sway with waybar, the generated wallpaper, and a terminal"
+          width="1920"
+          height="1080"
+          loading="lazy"
+        />
       </p>
 
       <h2>Download</h2>

@@ -1,0 +1,58 @@
+# What to photograph, one entry per picture.
+#
+# A manifest rather than a script that grows an `if` per shot: adding a
+# picture is a block here, and the ordering is data instead of control flow.
+#
+# `commands` run in order, each detached; `settle` is the one unavoidable
+# wait - a compositor has no "everything has drawn" signal, and grim will
+# happily capture a half-painted surface. Keep it as small as the slowest
+# app in the shot allows.
+#
+# `layout` is swaymsg run after the windows exist, so placement is stated
+# rather than hoped for.
+
+- name: desktop
+  description: the default session - waybar, wallpaper, a terminal
+  commands:
+    - footclient
+  settle: 3
+  layout:
+    # floating, because a tiled window fills the output and the wallpaper -
+    # half of what this picture is for - would be entirely behind it
+    - '[app_id="foot"] floating enable'
+    - '[app_id="foot"] resize set 1100 620'
+    - '[app_id="foot"] move position center'
+
+- name: tiling
+  description: three terminals tiled, which is what the window manager is for
+  commands:
+    # Something on screen in each: three empty prompts show the layout but
+    # not that anything runs in them. All shipped by the settings package -
+    # there is no fastfetch or neofetch in the dependency set.
+    #
+    # Deliberately not btop, which is otherwise the obvious choice: it
+    # renders the build machine's CPU model, real memory, and a process
+    # list naming the capture script and docker. A published picture should
+    # not contain the host that made it.
+    - footclient calcurse
+    # the split runs between launches: sway applies it to what is focused,
+    # so stacking all three first and arranging afterwards cannot work.
+    # This puts the second beside the first and the third below it, which
+    # shows both split directions in one picture.
+    - swaymsg splitv
+    # not bluetuith: it exits immediately with no bluetooth adapter, and a
+    # pane that closes leaves a two-window shot pretending to be three
+    - footclient sh -c 'pacman -Q | tail -20; exec zsh'
+    - swaymsg splith
+    - footclient sh -c 'pacman -Q | wc -l | xargs printf "%s packages\n"; sway --version; exec zsh'
+  settle: 8
+
+- name: launcher
+  description: rofi over the desktop
+  commands:
+    - footclient
+  settle: 3
+  # rofi grabs the keyboard and never returns, so it runs detached and the
+  # capture happens underneath it
+  overlay: rofi -show drun -show-icons -font 'JetBrainsMono Nerd Font 10' -lines 10
+  overlay_settle: 2

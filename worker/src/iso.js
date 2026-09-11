@@ -22,7 +22,27 @@ export function versionOf(key) {
   return cut === -1 ? null : key.slice(0, cut);
 }
 
-export function renderIndex(byVersion) {
+/**
+ * The strip of desktop shots above the downloads.
+ *
+ * A picture of what you are about to download belongs on the page offering
+ * it. They are never listed as rows: the listing skips `latest/` entirely,
+ * which is where the screenshot job publishes.
+ */
+function renderShots(shots) {
+  if (!shots.length) return '';
+  const images = shots
+    .map(
+      (key) =>
+        `<a href="/${escapeHtml(key)}"><img class="shot" src="/${escapeHtml(key)}"` +
+        ` alt="${escapeHtml(key.split('/').pop().replace(/\.png$/, ''))}"` +
+        ' width="480" height="270" loading="lazy" /></a>',
+    )
+    .join('\n');
+  return `<div class="shots">\n${images}\n</div>`;
+}
+
+export function renderIndex(byVersion, shots = []) {
   // version prefixes sort chronologically, so the newest is last
   const versions = [...byVersion.keys()].sort().reverse();
   const sections = versions
@@ -46,6 +66,7 @@ export function renderIndex(byVersion) {
         <a href="/latest/ashlaros.iso"><code>/latest/ashlaros.iso</code></a>.
         Verify a download against the <code>SHA256SUMS</code> beside it.
         <a class="link" href="/stats">Download stats</a>.</p>
+${renderShots(shots)}
 ${sections || '<p>No images published yet.</p>'}`,
   );
 }
@@ -134,14 +155,21 @@ export const site = {
   listing: async (bucket) => {
     const listed = await bucket.list({ limit: 1000 });
     const byVersion = new Map();
+    const shots = [];
     for (const object of listed.objects) {
       const version = versionOf(object.key);
-      // latest/ is an alias of an image already listed under its version
-      if (!version || version === 'latest') continue;
+      if (!version) continue;
+      // latest/ is an alias of an image already listed under its version,
+      // so nothing below it becomes a download row - the screenshots there
+      // are shown as pictures instead
+      if (version === 'latest') {
+        if (object.key.startsWith('latest/screenshots/')) shots.push(object.key);
+        continue;
+      }
       if (!byVersion.has(version)) byVersion.set(version, []);
       byVersion.get(version).push(object);
     }
-    return html(renderIndex(byVersion));
+    return html(renderIndex(byVersion, shots.sort()));
   },
 
   headers: (key) => {

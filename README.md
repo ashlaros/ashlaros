@@ -5,6 +5,8 @@ v3-optimised repositories layered over it, `chwd` for hardware detection,
 `linux-cachyos` as the kernel, systemd-boot, and a sway desktop carried over
 from [manjaro-sway](https://github.com/manjaro-sway/manjaro-sway).
 
+![The AshlarOS desktop](https://iso.ashlaros.download/latest/screenshots/desktop.png)
+
 One repository holds everything: the packages we build, the ISO profile, the
 installer, and the branding.
 
@@ -94,6 +96,40 @@ The third line is not a typo: `foot-theme.ini` is generated from a
 half has to exist before the first toggle can merge anything. `skel`
 rewrites all of this from the shipped defaults if you would rather start
 clean — it backs up `~/.config` first.
+
+## Screenshots
+
+`screenshots/` photographs the desktop and publishes to
+[`iso.ashlaros.download/latest/screenshots/`](https://iso.ashlaros.download/latest/screenshots/desktop.png),
+which is what the picture above and the landing page point at. They are not
+committed: a handful of PNGs regenerated on every settings change is a
+repository that grows forever for files nobody diffs.
+
+A shot of the booted ISO would show bare sway. `iso/packages.x86_64` installs
+`sway`, `foot` and `firefox` and deliberately leaves `ashlaros-settings` out,
+because the live system is the installer plus a rescue environment. So the
+capture installs the settings package from the published repository into a
+container and runs sway on wlroots' headless backend, which draws a full
+session with no GPU and no seat. Seconds, no nested virtualisation, and it
+renders the real configured desktop.
+
+What it is not: proof that anything boots or installs. It is a picture of the
+desktop, and the ISO build has its own checks for the other question.
+
+`screenshots/shots.yaml` is one entry per picture - the commands to run, the
+`swaymsg` placement between them, and how long to let it settle. Adding a
+picture is a block there rather than another `if` in a script.
+
+Publishing is only under `latest/screenshots/`. The desktop changes when
+`packages/ashlaros-settings/payload/` changes, which is decoupled from the
+ISO build, so writing these under `<version>/screenshots/` would say "this is
+what that ISO looked like" while meaning "what the desktop looked like
+whenever this last ran".
+
+Consecutive runs differ - the bar shows a clock, the weather, and a pending
+update count. That is fine for publishing and fatal for diffing, so there is
+deliberately no "screenshots changed" check. These are pictures, not golden
+files.
 
 ## Download stats
 

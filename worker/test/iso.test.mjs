@@ -17,6 +17,8 @@ const KEYS = [
   '2026.09.10/SHA256SUMS',
   '2026.08.01/ashlaros-2026.08.01-x86_64.iso',
   'latest/ashlaros.iso',
+  'latest/screenshots/desktop.png',
+  'latest/screenshots/tiling.png',
 ];
 
 const env = () => ({ PACKAGES: bucketOf([]), ISO: bucketOf(KEYS) });
@@ -75,4 +77,27 @@ test('versionOf reads the prefix, and rejects a bare key', () => {
 
 test('an empty bucket renders a page rather than failing', () => {
   assert.match(renderIndex(new Map()), /No images published yet/);
+});
+
+test('a screenshot is shown as a picture, never offered as a download', async () => {
+  // the index lists what is in the bucket, and the screenshots live in it -
+  // without this they read as things to download beside the images
+  const body = await (await worker.fetch(req(''), env())).text();
+  assert.match(body, /<img class="shot" src="\/latest\/screenshots\/desktop\.png"/);
+  assert.doesNotMatch(body, /class="row" href="\/latest\/screenshots/);
+});
+
+test('a screenshot renders in the browser rather than downloading', async () => {
+  // content-disposition: attachment is right for a 2 GB image and wrong for
+  // a picture the README points at
+  const res = await worker.fetch(req('latest/screenshots/desktop.png'), env());
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-disposition'), null);
+});
+
+test('a screenshot is revalidated, like everything else under latest/', async () => {
+  // republished in place by every screenshot run, so an immutable cache
+  // would pin the first one a cache happened to see
+  const res = await worker.fetch(req('latest/screenshots/desktop.png'), env());
+  assert.equal(res.headers.get('cache-control'), 'no-cache');
 });
