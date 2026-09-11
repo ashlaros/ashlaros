@@ -18,6 +18,10 @@ depends=(
     'foot-terminfo'           # terminal info for foot
     'rofi'                    # launcher; provides rofi-wayland since 2.0
     'rofimoji'                # emoji picker
+    'wtype'                   # the only wayland typer rofimoji supports;
+                              # without it the picker falls through to its
+                              # NoopTyper and raises NoTyperFoundException
+                              # on its default action, which is "type"
     'mako'                    # desktop notifications
     'brightnessctl'           # cli to control brightness
     'wob'                     # overlay bar for brightness and volume

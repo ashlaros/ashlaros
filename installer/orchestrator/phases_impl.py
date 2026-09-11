@@ -128,6 +128,13 @@ DESKTOP_PACKAGES = [
     "tldr",
     # plocate rather than mlocate: it enables its own updatedb timer
     "plocate",
+    # We run a third-party rolling kernel, so the window between a
+    # linux-cachyos upgrade and a reboot is one a user will sit in: without
+    # this the running kernel's modules are gone from disk, and plugging in
+    # a USB device in that window fails with "module not found".
+    "kernel-modules-hook",
+    # laptop power profiles; we ship nothing that offers them today
+    "power-profiles-daemon",
     # firmware updates: LVFS metadata is refreshed by a timer, but nothing
     # is ever flashed unattended - see enable_services
     "fwupd",
@@ -687,6 +694,11 @@ SERVICES = (
     # anyone typing an address
     "cups.service",
     "avahi-daemon.service",
+    # Both carry [Install] sections, so neither starts on its own -
+    # power-profiles-daemon is Type=dbus but is still WantedBy graphical,
+    # and the cleanup service is what removes the kept module trees.
+    "power-profiles-daemon.service",
+    "linux-modules-cleanup.service",
 )
 
 
