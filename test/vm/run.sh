@@ -121,7 +121,7 @@ install)
   rm -f "$workspace/target.qcow2" "$workspace/ovmf_vars.fd" \
     "$workspace/qmp.sock" "$workspace"/out/*.ppm "$workspace"/out/*.png
   start
-  wait_for_installer
+  wait_for_installer 900
   docker exec -d "$container" python3 /vm/install.py
   echo "## driving the installer; expect ~35 minutes under TCG"
   ;;
