@@ -1,3 +1,11 @@
+# Hand sway's environment to the systemd user manager and to D-Bus, before
+# anything below is started. Everything here is a user unit, and a user unit
+# inherits the manager's environment, not sway's - so without this,
+# foot-server, waybar and the rest come up without QT_QPA_PLATFORM, the Qt
+# portal theme, MOZ_ENABLE_WAYLAND or EDITOR, whatever ~/.profile says. The
+# terminal is a footclient of that server, which is where it shows.
+set $import_environment 'systemctl --user import-environment EDITOR SHELL TERMINAL_COMMAND XDG_CONFIG_HOME QT_QPA_PLATFORM QT_QPA_PLATFORMTHEME QT_STYLE_OVERRIDE QT_WAYLAND_DISABLE_WINDOWDECORATION GTK_CSD GTK_USE_PORTAL MOZ_ENABLE_WAYLAND MOZ_DBUS_REMOTE ELECTRON_OZONE_PLATFORM_HINT _JAVA_AWT_WM_NONREPARENTING OPENCV_LOG_LEVEL WLR_NO_HARDWARE_CURSORS WAYLAND_DISPLAY DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && dbus-update-activation-environment --systemd --all'
+
 # units (enabled via systemd --user enable)
 # --no-reload: `systemctl enable` forces a full daemon-reload (~370ms) even when
 # the symlink already exists. Without it these ~18 calls serialize into a ~6s

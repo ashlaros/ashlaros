@@ -604,14 +604,15 @@ def configure_login(ctx: InstallContext) -> None:
     greetd_dir = ctx.target / "etc/greetd"
     greetd_dir.mkdir(parents=True, exist_ok=True)
 
-    # Through a login shell, not bare: the shipped ~/.profile is where the
-    # session's environment lives - QT_QPA_PLATFORM, the portal theme,
-    # MOZ_ENABLE_WAYLAND, EDITOR - and greetd execs its command directly,
-    # so nothing reads it otherwise. Every one of those variables was
-    # empty on an installed machine before this.
-    # sh, not zsh: ~/.profile is a POSIX sh file and sh is what reads it as
-    # a login shell. zsh would look for ~/.config/zsh/.zprofile instead,
-    # because .zshenv sets ZDOTDIR - and no such file is shipped.
+    # Not "sway" bare: the shipped ~/.profile holds the session's
+    # environment - QT_QPA_PLATFORM, the portal theme, MOZ_ENABLE_WAYLAND,
+    # EDITOR - and greetd execs its command directly, so a login shell is
+    # the only thing in the chain that reads it.
+    #
+    # This gets those variables into sway. Getting them into the desktop
+    # needs the other half: sway's autostart hands them to the systemd user
+    # manager, because everything else here is a user unit and inherits the
+    # manager's environment rather than sway's.
     session = "sh -lc sway"
 
     config = [
@@ -660,12 +661,15 @@ def enable_services(ctx: InstallContext) -> None:
 def run_hardware_detection(ctx: InstallContext) -> None:
     """Let chwd pick the graphics driver for this machine.
 
-    -a pci free 0300 is chwd's own "install the free driver for the display
-    controller" invocation. A machine it has no profile for is not a failure:
-    the kernel's built-in drivers still bring up a display.
+    0300 is the PCI class for a display controller; -a takes it as its one
+    optional argument. chwd used to spell this "-a pci free 0300", which
+    1.24 rejects outright - "unexpected argument 'free' found" - so every
+    install was silently getting no driver profile at all. A machine chwd
+    has no profile for is still not a failure: the kernel's built-in
+    drivers bring up a display.
     """
     result = subprocess.run(
-        ["arch-chroot", str(ctx.target), "chwd", "-a", "pci", "free", "0300"],
+        ["arch-chroot", str(ctx.target), "chwd", "-a", "0300"],
         capture_output=True,
         text=True,
     )
