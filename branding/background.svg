@@ -1,12 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160" width="3840" height="2160">
   <rect fill="#141a1b" width="3840" height="2160"/>
-  <!-- the mark at 20x, anchored bottom-right the way manjaro-sway placed its own -->
+  <!-- the mark at 20x, anchored bottom-right the way manjaro-sway placed its own.
+       Recessed, not raised: this is a background, and text is laid over it.
+       In #eee the stones matched the body text exactly - 1:1, the words
+       disappeared where the two met, which is what any wide viewport does
+       once `cover` slides the mark under the copy. Cut into the field
+       instead and every foreground colour reads better over the mark than
+       over the bare page: #eee 14.1:1, #c9ccd1 10.1:1, #8a8f98 5.0:1
+       against 4.5:1 on the page itself. -->
   <g transform="translate(2760 1020) scale(20)">
-    <rect fill="#eee" x="4" y="10" width="26" height="8"/>
-    <rect fill="#eee" x="32" y="10" width="12" height="8"/>
-    <rect fill="#8a8f98" x="4" y="20" width="12" height="8"/>
-    <rect fill="#eee" x="18" y="20" width="26" height="8"/>
-    <rect fill="#eee" x="4" y="30" width="18" height="8"/>
-    <rect fill="#eee" x="24" y="30" width="20" height="8"/>
+    <rect fill="#1b2122" x="4" y="10" width="26" height="8"/>
+    <rect fill="#1b2122" x="32" y="10" width="12" height="8"/>
+    <!-- the accent course, a step apart so the mark still reads as three
+         courses with offset joints rather than one flat block. Darker than
+         the stone, not lighter: the svg's own field is #141a1b but the web
+         page behind it is #282828, and a lighter accent disappears on the
+         latter (1.01:1) while a darker one reads on both. -->
+    <rect fill="#121718" x="4" y="20" width="12" height="8"/>
+    <rect fill="#1b2122" x="18" y="20" width="26" height="8"/>
+    <rect fill="#1b2122" x="4" y="30" width="18" height="8"/>
+    <rect fill="#1b2122" x="24" y="30" width="20" height="8"/>
   </g>
 </svg>
