@@ -116,6 +116,18 @@ DESKTOP_PACKAGES = [
     # separate package, and without it avahi answers on D-Bus while
     # `ping printer.local` still fails
     "nss-mdns",
+    # The CLI set. We already ship grml-zsh-config, starship and both zsh
+    # plugins - the decision that the shell should be pleasant is made, and
+    # stopping before the tools that make it so is the inconsistency.
+    # fzf and zoxide are not here: the shipped .zshrc sources them, which
+    # makes them dependencies of the settings package instead.
+    "ripgrep",
+    "fd",
+    "bat",
+    "eza",
+    "tldr",
+    # plocate rather than mlocate: it enables its own updatedb timer
+    "plocate",
     # firmware updates: LVFS metadata is refreshed by a timer, but nothing
     # is ever flashed unattended - see enable_services
     "fwupd",

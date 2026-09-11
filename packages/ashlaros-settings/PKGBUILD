@@ -49,6 +49,9 @@ depends=(
     'ashlaros-branding'       # logo, wallpaper and palette
     ## shell
     'zsh'
+    'fzf'                     # ^R over history, ^T over files; the shipped
+                              # .zshrc sources its key bindings
+    'zoxide'                  # `z` frecency jump, also sourced there
     'grml-zsh-config'         # arch's own zsh baseline, in place of oh-my-zsh
     'zsh-autosuggestions'
     'zsh-syntax-highlighting'
