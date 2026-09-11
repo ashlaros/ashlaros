@@ -5,11 +5,22 @@
 # request's own geo-ip data and computed sunrise/sunset. We run no such
 # worker, so the location comes from geojs.io (no key, no account, no rate
 # limit - ipapi.co answers 429 to an unauthenticated caller) and the sun
-# times from open-meteo, already the source the weather module uses.
+# times from MET Norway, already the source the weather module uses.
+# MET asks callers to identify themselves - see weather.py - so the same
+# User-Agent goes on these requests.
 # Consumers - sunset.sh and theme-toggle.sh - read .latitude/.longitude/
 # .city/.sunrise/.sunset/.sunrise_tomorrow/.sunset_tomorrow, so this emits
 # exactly those keys.
 set -u
+
+# MET wants to know who is calling and how to reach them; see weather.py.
+USER_AGENT="ashlaros-weather/1.0 github.com/ashlaros/ashlaros"
+
+sun_for() {
+	curl -fsSL --max-time 10 -H "User-Agent: $USER_AGENT" \
+		"https://api.met.no/weatherapi/sunrise/3.0/sun?lat=$1&lon=$2&date=$3&offset=$4" \
+		2>/dev/null
+}
 
 cache_file="$HOME/.cache/geoip"
 cache_time=$(date -r "$cache_file" +%s 2>/dev/null || echo 0)
@@ -27,22 +38,27 @@ if [ ! -f "$cache_file" ] || [ "$cache_time" -lt "$six_hours_ago" ] || [ "$cache
 	longitude=$(echo "$location" | jq -r '.longitude // empty')
 
 	if [ -n "$latitude" ] && [ -n "$longitude" ]; then
-		sun=$(curl -fsSL --max-time 10 \
-			"https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=sunrise,sunset&forecast_days=2&timezone=auto" 2>/dev/null)
-		# open-meteo returns local ISO timestamps, which is what date -d in
-		# theme-toggle.sh parses
+		# MET's sunrise API answers for one date per call, where open-meteo
+		# returned two days at once - hence two requests. The offset comes
+		# from geojs's timezone so the timestamps come back offset-aware,
+		# which is the form date -d in theme-toggle.sh parses.
+		offset=$(TZ="$(echo "$location" | jq -r '.timezone // "UTC"')" date +%:z)
+		sun_today=$(sun_for "$latitude" "$longitude" "$(date +%Y-%m-%d)" "$offset")
+		sun_tomorrow=$(sun_for "$latitude" "$longitude" "$(date -d tomorrow +%Y-%m-%d)" "$offset")
+
 		echo "$location" | jq \
-			--argjson sun "${sun:-null}" \
+			--argjson today "${sun_today:-null}" \
+			--argjson tomorrow "${sun_tomorrow:-null}" \
 			'{
 				latitude: (.latitude | tonumber),
 				longitude: (.longitude | tonumber),
 				city,
 				country: .country_code,
 				timezone,
-				sunrise: ($sun.daily.sunrise[0] // null),
-				sunset: ($sun.daily.sunset[0] // null),
-				sunrise_tomorrow: ($sun.daily.sunrise[1] // null),
-				sunset_tomorrow: ($sun.daily.sunset[1] // null)
+				sunrise: ($today.properties.sunrise.time // null),
+				sunset: ($today.properties.sunset.time // null),
+				sunrise_tomorrow: ($tomorrow.properties.sunrise.time // null),
+				sunset_tomorrow: ($tomorrow.properties.sunset.time // null)
 			}' > "$tmp_file"
 	fi
 

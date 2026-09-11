@@ -49,7 +49,11 @@ jobs:
       - name: ruff
         run: |
           pip install ruff
-          ruff check scripts installer/orchestrator test/vm
+          # the payload's python is otherwise linted by nothing. Only
+          # weather.py is listed: the rest of that directory carries 22
+          # pre-existing findings, and fixing those is not this job.
+          ruff check scripts installer/orchestrator test/vm \
+            packages/ashlaros-settings/payload/usr/share/sway/scripts/weather.py
 
   arm-repo:
     # The aarch64 half of the repository has no other test: the ISO is
