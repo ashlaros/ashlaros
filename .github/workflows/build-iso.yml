@@ -27,6 +27,11 @@ jobs:
       options: --privileged
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # check_iso_packages.py derives each authored package's version from
+          # its commit history; a shallow clone makes every one of them
+          # <date>-1 and the staleness check meaningless
+          fetch-depth: 0
       - name: install archiso
         run: |
           pacman -Sy --noconfirm --needed archiso git
@@ -45,6 +50,12 @@ jobs:
         run: |
           mkarchiso -v -w /tmp/work -o out iso/
           ls -la out/
+      - name: the iso carries this commit's packages
+        # build-packages publishes to the same repository this pacstrap just
+        # read from, and the two workflows do not wait for each other. Without
+        # this the ISO is silently one commit behind and only an unsquashfs
+        # would show it - see issue #25.
+        run: python3 scripts/check_iso_packages.py --rootfs /tmp/work/x86_64/airootfs
       - name: checksum
         working-directory: out
         run: sha256sum ./*.iso > SHA256SUMS
