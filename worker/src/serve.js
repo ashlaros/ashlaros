@@ -86,6 +86,11 @@ ${body}
 export const html = (body) =>
   new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 
+export const json = (body) =>
+  new Response(`${JSON.stringify(body)}\n`, {
+    headers: { 'content-type': 'application/json' },
+  });
+
 export const notFound = () => new Response('not found', { status: 404 });
 
 /**
@@ -149,6 +154,11 @@ export function handler(site) {
 
     if (site.isListing(key)) return site.listing(bucket, key);
 
-    return serveObject(request, bucket, key, site.headers(key));
+    const response = await serveObject(request, bucket, key, site.headers(key));
+    // after the response, because only its status says whether anything was
+    // transferred. Optional and site-specific: the packages site defines no
+    // record, so pacman traffic is never counted.
+    site.record?.(env, key, response.status, request.method);
+    return response;
   };
 }

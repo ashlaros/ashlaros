@@ -95,6 +95,36 @@ half has to exist before the first toggle can merge anything. `skel`
 rewrites all of this from the shipped defaults if you would rather start
 clean — it backs up `~/.config` first.
 
+## Download stats
+
+`iso.ashlaros.download/stats` counts ISO downloads, and `/stats.json` is the
+same data machine-readable. A download is one whole-image `GET` that
+returned `200`: a resumed download issues many range requests and would
+otherwise report one image as dozens, a revalidation transfers nothing, and
+`SHA256SUMS` is not a download. Only the ISO site counts — every
+`pacman -Sy` is a database fetch, and that volume would drown the signal.
+
+Images taken from `/latest/` carry no version in their URL, so they are
+counted as their own row rather than attributed to whichever image happened
+to be newest. That number is worth having on its own: it is how many people
+take the current image without pinning one.
+
+Two stores, because neither works alone. Analytics engine takes the writes —
+`writeDataPoint` is non-blocking, so counting costs a download nothing — but
+retains three months. KV keeps the archive indefinitely, written once a
+month by a cron on the 2nd rather than per download: KV allows one write per
+second per key and propagates for up to a minute, so a per-download counter
+would lose counts to last-write-wins. The 2nd rather than the 1st because
+ingestion is not instant, and a closed month's last events have to be
+queryable before the month is archived.
+
+Writing needs no credentials; reading does. Analytics engine has no query
+binding, so the page reads over the SQL API with a token
+(`wrangler secret put ANALYTICS_TOKEN`, scoped *Account · Account Analytics ·
+Read*). That asymmetry is deliberate: downloads are counted whether or not
+the token is set, and it can be added later without losing anything already
+counted. Until it is, the page says so rather than answering 500.
+
 ## Using the repository on an existing system
 
 The `ashlaros` repository is dual-arch: `x86_64` and `aarch64`. The ISO is

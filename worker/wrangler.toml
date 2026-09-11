@@ -39,3 +39,27 @@ bucket_name = "ashlaros"
 [[r2_buckets]]
 binding = "ISO"
 bucket_name = "ashlaros-iso"
+
+# Download counting. Writes need no credentials - writeDataPoint goes
+# through the binding - so downloads are recorded whether or not the read
+# token is set, and the token can be added later without losing anything
+# already counted.
+[[analytics_engine_datasets]]
+binding = "ANALYTICS_ENGINE"
+dataset = "ashlaros-iso-downloads"
+
+# Analytics engine keeps three months. A cron on the 2nd - not the 1st,
+# because a closed month's last events must be queryable before it is
+# archived and ingestion is not instant - rolls each closed month into one
+# key here, which is kept indefinitely.
+[[kv_namespaces]]
+binding = "STATS"
+id = "8304376d0f2a4e5aa4302eb1061cd04c"
+
+[triggers]
+crons = ["17 3 2 * *"]
+
+[vars]
+# not a secret: the account id is already in this file in plaintext above.
+# ANALYTICS_TOKEN is the secret, and goes in with `wrangler secret put`.
+ACCOUNT_ID = "fc8102dae7e1eb7a1ecec012dcb0dfaf"

@@ -14,6 +14,7 @@
 
 import { handler } from './serve.js';
 import { geo } from './geo.js';
+import { archiveMonth, closedMonth } from './stats.js';
 import { site as isoSite } from './iso.js';
 import { site as packagesSite } from './packages.js';
 
@@ -40,6 +41,19 @@ export function isDocsHost(hostname) {
 }
 
 export default {
+  /**
+   * Fold the month that just closed into kv, before analytics engine
+   * forgets it - it retains three months, kv keeps this for good.
+   *
+   * The month comes from the trigger time rather than from "now", so a
+   * late or re-run invocation archives the same month instead of drifting
+   * onto the wrong one.
+   */
+  async scheduled(event, env, ctx) {
+    if (!env.ANALYTICS_TOKEN || !env.STATS) return;
+    ctx.waitUntil(archiveMonth(env, closedMonth(event.scheduledTime)));
+  },
+
   fetch(request, env, ctx) {
     const { hostname, pathname } = new URL(request.url);
     // Ahead of the docs binding, which otherwise answers for the whole
