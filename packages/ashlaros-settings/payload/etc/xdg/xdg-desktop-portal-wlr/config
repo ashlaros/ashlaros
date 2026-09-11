@@ -1,0 +1,7 @@
+# xdg-desktop-portal-wlr configuration for ashlaros
+# caps CPU during screencast (otherwise captures at output refresh rate)
+max_fps=60
+# pin the screencast chooser: simple + explicit cmd is more stable than
+# xdpw's auto-detection list, which changes as packages come/go
+chooser_type=simple
+chooser_cmd=slurp -b 000000cc -c ffffffff -w 2 -d

@@ -90,6 +90,7 @@ DESKTOP_PACKAGES = [
     "qt6-wayland",
     "gnome-keyring",
     "polkit-gnome",
+    "xdg-desktop-portal-gtk",
     "xdg-desktop-portal-wlr",
     "xdg-user-dirs",
     "pcmanfm-qt",
