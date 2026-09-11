@@ -72,6 +72,18 @@ DE_KEYS = dict(
         ";": "shift-comma",
         ":": "shift-dot",
         "'": "shift-backslash",
+        # AltGr characters. Inherited from KEYS these land on whatever de
+        # puts at the us position - a piped command arrives as an unclosed
+        # quote and the shell sits at a continuation prompt, which reads
+        # like a hung guest rather than a typo.
+        "|": "alt_r-less",
+        "\\": "alt_r-minus",
+        "@": "alt_r-q",
+        "~": "alt_r-bracket_right",
+        "[": "alt_r-8",
+        "]": "alt_r-9",
+        "{": "alt_r-7",
+        "}": "alt_r-0",
     },
 )
 
