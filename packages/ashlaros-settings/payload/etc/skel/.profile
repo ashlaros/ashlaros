@@ -34,9 +34,6 @@ export _JAVA_AWT_WM_NONREPARENTING=1
 export SHELL=/usr/bin/zsh
 export TERMINAL_COMMAND=xdg-terminal-exec
 
-# add default location for zeit.db
-export ZEIT_DB="$HOME/.config/zeit.db"
-
 # set ozone platform to wayland
 export ELECTRON_OZONE_PLATFORM_HINT=wayland
 

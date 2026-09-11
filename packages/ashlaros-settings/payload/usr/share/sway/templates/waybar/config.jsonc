@@ -29,7 +29,6 @@
         "sway/language",
         "custom/github",
         "custom/clipboard",
-        "custom/zeit",
         "cpu",
         // "temperature",
         // "memory",
@@ -305,19 +304,6 @@
         "on-click": "xdg-open \"https://wttr.in/$(/usr/share/sway/scripts/geoip.sh | jq -r '.city')\"",
         "on-click-right": "waybar-signal weather",
         "signal": 16
-    },
-    "custom/zeit": {
-        "return-type": "json",
-        "interval": "once",
-        "format": "{icon}",
-        "format-icons": {
-            "tracking": "󰖷",
-            "stopped": "󰋣"
-        },
-        "exec": "/usr/share/sway/scripts/zeit.sh status",
-        "on-click": "/usr/share/sway/scripts/zeit.sh click; waybar-signal zeit",
-        "exec-if": "[ -x \"$(command -v zeit)\" ]",
-        "signal": 10
     },
     "custom/dnd": {
         "interval": "once",
