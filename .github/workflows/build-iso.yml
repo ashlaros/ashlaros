@@ -26,6 +26,12 @@ jobs:
       # chroot; none of that works under the default profile
       options: --privileged
     steps:
+      - name: install git before the checkout
+        # actions/checkout falls back to a REST tarball when git is missing -
+        # "The repository will be downloaded using the GitHub REST API" - and
+        # a tarball has no .git at all, so fetch-depth is ignored and
+        # check_iso_packages.py cannot derive a version from history
+        run: pacman -Sy --noconfirm --needed git
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # check_iso_packages.py derives each authored package's version from
@@ -34,7 +40,7 @@ jobs:
           fetch-depth: 0
       - name: install archiso
         run: |
-          pacman -Sy --noconfirm --needed archiso git
+          pacman -S --noconfirm --needed archiso
           pacman-key --init
           pacman-key --populate archlinux
       - name: trust the repositories the profile pulls from
