@@ -222,6 +222,32 @@ aarch64, a broken man-page step removed — so that merge is three-way against
 `packages/.upstream/` and conflicts are left for a human. Nothing merges
 itself.
 
+### Where a package belongs
+
+Three lists exist, and the boundary between them was decided ad hoc until
+it was written down here.
+
+`iso/packages.x86_64` is the **live** system: the installer plus a rescue
+environment. It deliberately does not carry the desktop — `ashlaros-settings`
+is absent, so the ISO installs sway, foot and firefox and nothing else of
+the configured desktop, because pulling it in twice only makes the image
+bigger.
+
+`DESKTOP_PACKAGES` in `installer/orchestrator/phases_impl.py` is the
+**installed** system: everything the desktop needs that is not implied by a
+config file we ship.
+
+`depends` in `packages/ashlaros-settings/PKGBUILD` is for a package **a
+shipped config file references**. The shipped `.zshrc` sources fzf's key
+bindings and initialises zoxide, so both are dependencies; `ripgrep` and
+`bat` are not, because nothing we ship mentions them. The test is
+mechanical: if removing the package would leave a config file pointing at
+something absent, it is a dependency.
+
+The reason for the split is `arch=any`: `ashlaros-settings` is installable
+on ARM, so a dependency that only builds for x86_64 cannot go in it. That
+is why `yay` is in `DESKTOP_PACKAGES` and only an optdepend here.
+
 ## Testing
 
 Most of what matters here is only observable at runtime — the ISO boots
