@@ -135,6 +135,8 @@ DESKTOP_PACKAGES = [
     "kernel-modules-hook",
     # laptop power profiles; we ship nothing that offers them today
     "power-profiles-daemon",
+    # a firewall, which we had none of
+    "ufw",
     # firmware updates: LVFS metadata is refreshed by a timer, but nothing
     # is ever flashed unattended - see enable_services
     "fwupd",
@@ -699,12 +701,38 @@ SERVICES = (
     # and the cleanup service is what removes the kept module trees.
     "power-profiles-daemon.service",
     "linux-modules-cleanup.service",
+    "ufw.service",
 )
 
 
 def enable_services(ctx: InstallContext) -> None:
     for service in SERVICES:
         run_command(["arch-chroot", str(ctx.target), "systemctl", "enable", service])
+
+
+def configure_firewall(ctx: InstallContext) -> None:
+    """Deny incoming, allow outgoing.
+
+    A desktop listens for nothing by default, so the policy costs nothing
+    and the machine stops answering whatever a hotel or conference network
+    probes for. Enabling ufw.service without this leaves the defaults ufw
+    ships, which is a firewall that is running and permitting everything.
+
+    No hole for mDNS: ufw's before.rules already ACCEPTs udp to
+    224.0.0.251:5353, and ufw-not-local RETURNs on MULTICAST before the
+    drop, so .local resolution and printer discovery survive. Checked
+    against the shipped rules rather than assumed, because a firewall that
+    silently breaks printing is worse than no firewall.
+
+    Printing itself needs no hole either: cups talks outbound to a printer,
+    and only sharing a local queue would need 631 inbound.
+    """
+    for args in (
+        ["default", "deny", "incoming"],
+        ["default", "allow", "outgoing"],
+    ):
+        run_command(["arch-chroot", str(ctx.target), "ufw", *args])
+    info("› firewall denies incoming, allows outgoing")
 
 
 def configure_mdns(ctx: InstallContext) -> None:

@@ -23,6 +23,7 @@ def build_phases():
     the initramfs around it, so it cannot precede either.
     """
     from .phases_impl import (
+        configure_firewall,
         configure_login,
         configure_mdns,
         configure_system,
@@ -43,6 +44,7 @@ def build_phases():
         ("Configuring login", configure_login),
         ("Enabling services", enable_services),
         ("Resolving .local names", configure_mdns),
+        ("Configuring the firewall", configure_firewall),
         ("Validating boot", validate_boot),
     ]
 
