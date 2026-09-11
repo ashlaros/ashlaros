@@ -113,6 +113,16 @@
         Every build, with checksums:
         <a class="link" href="https://iso.ashlaros.download/">iso.ashlaros.download</a>
       </p>
+      <p class="muted">
+        <strong>UEFI only.</strong> The image carries one boot path,
+        systemd-boot, and no BIOS one. A machine in legacy or CSM mode will
+        not see it as bootable at all — switch the firmware to UEFI.
+      </p>
+      <p class="muted">
+        Write it to a stick with <code>dd</code> or <code>cp</code> straight
+        to the device. The image is a hybrid ISO and needs no help; a writer
+        that repacks it can leave the EFI partition unbootable.
+      </p>
 
       <h2>The repository, on an existing Arch system</h2>
       <p>

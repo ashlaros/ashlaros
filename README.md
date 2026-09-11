@@ -19,6 +19,16 @@ scripts/      publish tooling for the repository
 
 ## Installing
 
+The ISO is **UEFI only**: `bootmodes=('uefi.systemd-boot')`, so the image
+carries one El Torito entry and no BIOS one. A machine in legacy or CSM
+mode does not see it as bootable at all. That is deliberate — the package
+stack is `x86_64_v3`, which already excludes every machine old enough to
+need a BIOS path — but the firmware has to be in UEFI mode.
+
+Write it with `dd` or `cp` straight to the device; it is a hybrid image
+with a protective MBR and a GPT, so it needs no preparation. A writer that
+repacks the image can leave the EFI partition unbootable.
+
 The installer asks four questions, each with a default, so Enter through all
 of them installs: locale and keyboard, user and password, encryption, disk
 layout. Encryption is on by default and the disk is LUKS2 with the root
