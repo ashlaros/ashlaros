@@ -31,19 +31,25 @@ image/bmp=imv.desktop
 image/x-portable-graymap=imv.desktop
 image/x-portable-pixmap=imv.desktop
 inode/directory=pcmanfm-qt.desktop
-text/x-c++src=nvim-qt.desktop
-text/x-pascal=nvim-qt.desktop
-text/x-google-video-pointer=nvim-qt.desktop
-text/x-c++hdr=nvim-qt.desktop
-text/html=nvim-qt.desktop
-text/plain=nvim-qt.desktop
-text/tcl=nvim-qt.desktop
-text/x-csrc=nvim-qt.desktop
-text/x-makefile=nvim-qt.desktop
-text/x-chdr=nvim-qt.desktop
-text/x-tex=nvim-qt.desktop
-text/x-java=nvim-qt.desktop
-text/x-moc=nvim-qt.desktop
+# vim.desktop is the package's own file and carries Terminal=true, which
+# libfm.conf honours through xdg-terminal-exec - so a double click opens a
+# terminal with the file in it rather than nothing at all.
+text/x-c++src=vim.desktop
+text/x-pascal=vim.desktop
+text/x-c++hdr=vim.desktop
+# firefox already owns every other html-shaped type above; an editor here
+# was inherited from a list that predates that
+text/html=firefox.desktop
+text/plain=vim.desktop
+# vim.desktop declares text/x-tcl; this is the same thing spelled the way
+# shared-mime-info emits it
+text/tcl=vim.desktop
+text/x-csrc=vim.desktop
+text/x-makefile=vim.desktop
+text/x-chdr=vim.desktop
+text/x-tex=vim.desktop
+text/x-java=vim.desktop
+text/x-moc=vim.desktop
 video/3gpp=mplayer.desktop
 video/ogg=mplayer.desktop
 video/quicktime=mplayer.desktop

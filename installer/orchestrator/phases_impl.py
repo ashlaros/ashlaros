@@ -98,6 +98,13 @@ DESKTOP_PACKAGES = [
     # firmware updates: LVFS metadata is refreshed by a timer, but nothing
     # is ever flashed unattended - see enable_services
     "fwupd",
+    # An editor has to exist: $EDITOR is set in the shipped .profile and
+    # git, visudo and systemctl edit all consume it, including from a TTY
+    # or an ssh session. vim carries the desktop file the mime list points
+    # at; nano is 2.7 MiB and is what someone who did not choose vim needs
+    # when a commit drops them into it. The live ISO already has both.
+    "vim",
+    "nano",
     # AUR helper, from the cachyos repository rather than vendored. Not an
     # optional extra: every shipped theme lists packages, and the four
     # catppuccin ones name AUR-only ones, so ashlaros-theme calls yay

@@ -1,8 +1,11 @@
 #!/bin/sh
 export XDG_CONFIG_HOME=$HOME/.config
 
-# make default editor Helix
-export EDITOR=helix
+# vim rather than something larger: this has to work where $EDITOR is
+# actually consumed - git commit, visudo, systemctl edit - which includes
+# a TTY and an ssh session with no graphical anything. nano ships too, for
+# whoever meets a modal editor by surprise.
+export EDITOR=vim
 
 # Most pure GTK3 apps use wayland by default, but some,
 # such as Firefox, require the backend to be explicitly selected.
