@@ -1,0 +1,41 @@
+# way-displays configuration for AshlarOS.
+#
+# This file REPLACES /etc/way-displays/cfg.yaml rather than extending it:
+# way-displays takes the first cfg.yaml it finds, in the order
+#
+#   $XDG_CONFIG_HOME/way-displays/cfg.yaml
+#   $HOME/.config/way-displays/cfg.yaml
+#   /usr/local/etc/way-displays/cfg.yaml
+#   /etc/way-displays/cfg.yaml
+#
+# so anything the packaged default sets has to be repeated here to survive.
+# That is why LAPTOP_LID_MONITOR and the eDP rule below are spelled out.
+#
+# It is watched for changes and applied immediately - edit it and see the
+# result without restarting anything. It is yours: nothing regenerates it.
+
+# Run on every change way-displays makes, including plug, unplug and lid
+# events. The generated snippet is what gives sway the right scales on the
+# next reload without a flicker; without this callback it was only ever
+# written by the manual scale keybind, so it went stale the moment a
+# display changed on its own.
+#
+# A block, so the packaged default's desktop notification survives
+# alongside it - way-displays takes one command, not a list.
+CALLBACK_CMD: |
+  /usr/share/sway/scripts/generate-displays-config.sh
+  notify-send "way-displays ${CALLBACK_LEVEL}" "${CALLBACK_MSG}"
+
+# Lid state comes from libinput, which needs the user in the `input` group;
+# the installer puts them there.
+LAPTOP_LID_MONITOR: TRUE
+
+# One of: FATAL, ERROR, WARNING, INFO (default), DEBUG
+# Applies to logs and callbacks.
+LOG_THRESHOLD: INFO
+
+DISABLED:
+  # the laptop panel switches off when the lid is closed
+  '!^eDP-[0-9]':
+    IF:
+    - LID: CLOSED

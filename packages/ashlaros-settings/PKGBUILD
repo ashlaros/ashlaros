@@ -31,6 +31,10 @@ depends=(
     'xdg-terminal-exec'       # execute-in-terminal xdg standard
     'idlehack'                # inhibit swayidle on screensaver-inhibit dbus calls
     'swayr'                   # lru window switcher for sway
+    'way-displays'            # display management; the user unit, the
+                              # autostart entry and the skel cfg.yaml here
+                              # all assume it, and without it the desktop
+                              # loses auto-scale, hotplug and lid handling
     'nwg-wrapper'             # conky like onscreen information
     'dex'                     # executes desktop entries on autostart
     'jq'                      # json parsing, used across the scripts
@@ -68,7 +72,6 @@ optdepends=(
     'gtklock: lockscreen based on gtkgreet'
     'swaylock-effects: minimalistic lockscreen with fancy effects'
     'wlsunset: time & place based light temperature'
-    'way-displays: automated display management'
     'autotiling: automated tiling'
     'sworkstyle: dynamic workspace names (icons) in waybar'
     'cliphist: clipboard manager'

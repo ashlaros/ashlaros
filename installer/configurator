@@ -431,6 +431,13 @@ write_config() {
   hash_json=$(printf '%s' "$password_hash" | jq -Rsa .)
   password_json=$(printf '%s' "$password" | jq -Rsa .)
 
+  # groups: input, so way-displays can read the laptop lid switch through
+  # libinput - without it the lid-closed rule in its cfg.yaml never fires.
+  # The trade is real and worth stating: input grants read access to
+  # /dev/input/*, which is every keystroke on the machine. This user is
+  # already sudo, and this installer builds single-user machines, so it
+  # concedes nothing that was not already conceded. It would matter on a
+  # multi-user box; we do not build one.
   cat >"$OUTPUT_DIR/user_credentials.json" <<-EOF
 	{
 	    "root_enc_password": $hash_json,
@@ -438,7 +445,7 @@ write_config() {
 	        {
 	            "username": "$username",
 	            "enc_password": $hash_json,
-	            "groups": [],
+	            "groups": ["input"],
 	            "sudo": true
 	        }
 	    ]$([[ $encrypt == true ]] && printf ',\n    "encryption_password": %s' "$password_json")
