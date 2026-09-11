@@ -95,6 +95,14 @@ DESKTOP_PACKAGES = [
     "xdg-user-dirs",
     "pcmanfm-qt",
     "gvfs",
+    # gvfs is only the framework; a backend is what actually mounts
+    # something. Without these a phone plugged into a running desktop does
+    # nothing at all and a share has no way to be reached by name, which
+    # reads as "the file manager is broken" rather than as a missing
+    # package. pcmanfm-qt names gvfs-mtp in its own optdepends.
+    "gvfs-mtp",
+    "gvfs-smb",
+    "gvfs-nfs",
     "tpm2-tools",
     # firmware updates: LVFS metadata is refreshed by a timer, but nothing
     # is ever flashed unattended - see enable_services
