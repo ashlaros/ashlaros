@@ -1,0 +1,26 @@
+Drop the truthiness test on a va_list, which does not compile on aarch64.
+
+va_list is an array type on aarch64, so `__args` in a boolean context is
+an array-to-pointer decay GCC rejects outright:
+
+    src/log.c:124:22: error: invalid operands to binary && (have 'int' and 'va_list')
+
+On x86_64 va_list is a pointer, the test is vacuously true, and it builds -
+which is why upstream has not noticed. The test was never meaningful
+either way: every caller of log_line() runs va_start immediately before
+it, so __args is always valid, and __format alone is the real guard.
+
+Reported upstream is worth doing; until then the aarch64 leg of our build
+fails here and way-displays is absent from the aarch64 repository.
+
+--- a/src/log.c
++++ b/src/log.c
+@@ -121,7 +121,7 @@
+ 	char *l;
+ 
+ 	// allocate the line for output and capture
+-	if (__format && __args)
++	if (__format)
+ 		l = vsnprintf_alloc(MAX_LINE_LEN, __format, __args);
+ 	else
+ 		l = strdup("");
