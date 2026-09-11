@@ -63,7 +63,6 @@ DE_KEYS = dict(
     KEYS,
     **{
         "-": "slash",
-        "/": "shift-7",
         "_": "shift-slash",
         "=": "shift-0",
         "y": "z",
@@ -72,11 +71,29 @@ DE_KEYS = dict(
         ";": "shift-comma",
         ":": "shift-dot",
         "'": "shift-backslash",
+        # us has " on shift-apostrophe, which on de is A-umlaut - so a
+        # quoted sed expression arrives full of umlauts and sed reports an
+        # unrecognised option rather than a typo
+        '"': "shift-2",
+        # the rest of the shift row. & is the one that bites: inherited
+        # from us it is shift-7, which on de is /, so "cmd && cmd" types as
+        # "cmd // cmd" and the second half silently never runs.
+        "&": "shift-6",
+        "/": "shift-7",
+        "%": "shift-5",
         # AltGr characters. Inherited from KEYS these land on whatever de
         # puts at the us position - a piped command arrives as an unclosed
         # quote and the shell sits at a continuation prompt, which reads
         # like a hung guest rather than a typo.
         "|": "alt_r-less",
+        # de has an extra key left of Y that us does not, so the angle
+        # brackets move there and the parens shift one place left. Without
+        # these a redirect types as ":" and a subshell as "$)", which the
+        # shell reports as a syntax error rather than anything recognisable.
+        ">": "shift-less",
+        "<": "less",
+        "(": "shift-8",
+        ")": "shift-9",
         "\\": "alt_r-minus",
         "@": "alt_r-q",
         "~": "alt_r-bracket_right",
