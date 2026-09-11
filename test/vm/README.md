@@ -57,6 +57,11 @@ reboot for exactly this reason.
 | `install.py` | drives the installer, Enter through every default |
 | `run.sh` | the front end; the only file you normally call |
 
+`run.sh film <name> [count] [gap]` samples the framebuffer on a loop.
+One `shot` cannot catch anything that moves: the entry animation runs for
+under a second before the configurator draws over it, so by the time a
+single screenshot is asked for, only the settled screen is left.
+
 Screenshots are PPM from qemu, converted to PNG by `run.sh` with nothing
 but the standard library — the container has no Pillow and does not need
 it.
