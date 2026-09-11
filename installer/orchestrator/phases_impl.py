@@ -95,6 +95,9 @@ DESKTOP_PACKAGES = [
     "pcmanfm-qt",
     "gvfs",
     "tpm2-tools",
+    # firmware updates: LVFS metadata is refreshed by a timer, but nothing
+    # is ever flashed unattended - see enable_services
+    "fwupd",
 ]
 
 
@@ -609,8 +612,23 @@ def configure_login(ctx: InstallContext) -> None:
     run_command(["arch-chroot", str(ctx.target), "systemctl", "enable", "greetd.service"])
 
 
+# fwupd.service is deliberately absent: it is Type=dbus with a D-Bus
+# activation file and no [Install] section, so it cannot be enabled and
+# does not need to be - it starts when something talks to it.
+#
+# fwupd-refresh.timer only downloads LVFS metadata. Applying an update
+# stays an explicit `fwupdmgr update`: a bad capsule bricks a board, and
+# there is no rollback from the OS side on hardware we do not control.
+SERVICES = (
+    "NetworkManager.service",
+    "bluetooth.service",
+    "systemd-timesyncd.service",
+    "fwupd-refresh.timer",
+)
+
+
 def enable_services(ctx: InstallContext) -> None:
-    for service in ("NetworkManager.service", "bluetooth.service", "systemd-timesyncd.service"):
+    for service in SERVICES:
         run_command(["arch-chroot", str(ctx.target), "systemctl", "enable", service])
 
 

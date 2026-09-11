@@ -17,6 +17,36 @@ worker/       cloudflare worker serving the repository and the ISOs from R2
 scripts/      publish tooling for the repository
 ```
 
+## Installing
+
+The installer asks four questions, each with a default, so Enter through all
+of them installs: locale and keyboard, user and password, encryption, disk
+layout. Encryption is on by default and the disk is LUKS2 with the root
+filesystem on btrfs; the ESP is mounted at `/boot`.
+
+### After a firmware update, expect a passphrase prompt
+
+If the machine has a TPM, the installer enrols the LUKS passphrase against
+**PCR 7**, so an ordinary boot unlocks without typing anything. PCR 7
+measures the Secure Boot policy and key databases. A vendor firmware update
+that ships new `dbx` or `KEK` contents therefore changes it, and the
+enrolled keyslot stops matching.
+
+Nothing is lost when that happens — the passphrase still unlocks the disk,
+which is why the installer requires one. But the prompt arrives with no
+explanation, and it is easy to read as a corrupted disk. It is not. Re-enrol
+afterwards:
+
+```sh
+sudo systemd-cryptenroll --wipe-slot=tpm2 --tpm2-device=auto --tpm2-pcrs=7 /dev/<luks-partition>
+```
+
+`fwupd` is installed and `fwupd-refresh.timer` is enabled, so LVFS metadata
+stays current and `fwupdmgr get-updates` has something to say. Nothing is
+ever flashed unattended: applying an update is an explicit `fwupdmgr
+update`. A bad capsule bricks a board and there is no rollback from the OS
+side, so that stays a decision someone makes.
+
 ## Using the repository on an existing system
 
 The `ashlaros` repository is dual-arch: `x86_64` and `aarch64`. The ISO is
