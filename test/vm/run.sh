@@ -6,6 +6,8 @@
 #   run.sh install           boot the ISO and drive the installer
 #   run.sh boot              boot the installed disk
 #   run.sh shot <name>       screenshot the framebuffer, as PNG
+#   run.sh film <name> [n] [gap]  sample the framebuffer repeatedly, for
+#                            anything that moves faster than a single shot
 #   run.sh run '<cmd>' <name>  type a command on the guest, screenshot it
 #   run.sh de '<cmd>' <name>   the same, on an installed (de keymap) guest
 #   run.sh stop              kill the VM
@@ -131,6 +133,27 @@ boot)
 shot)
   docker exec "$container" python3 /vm/qmp.py '' "$2" 1 >/dev/null
   png "$2"
+  ;;
+film)
+  # One shot cannot catch a sub-second animation: by the time a screenshot
+  # is asked for, it has finished and the settled screen is all that is
+  # left. Sampling on a tight loop is the only way to show it ever moved.
+  count="${3:-20}"
+  gap="${4:-0.15}"
+  docker exec "$container" python3 -c "
+import sys, time
+sys.path.insert(0, '/vm')
+from qmp import Qmp
+q = Qmp()
+name, count, gap = sys.argv[1], int(sys.argv[2]), float(sys.argv[3])
+for i in range(count):
+    q.shot(f'{name}-{i:02d}')
+    time.sleep(gap)
+" "$2" "$count" "$gap" >/dev/null
+  for ((i = 0; i < count; i++)); do
+    png "$(printf '%s-%02d' "$2" "$i")" >/dev/null
+  done
+  echo "$workspace/out/$2-*.png"
   ;;
 run)
   docker exec "$container" python3 /vm/qmp.py "$2" "$3" "${4:-6}" >/dev/null
