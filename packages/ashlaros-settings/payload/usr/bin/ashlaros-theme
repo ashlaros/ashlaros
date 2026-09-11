@@ -13,6 +13,19 @@ install() {
     local missing_pkgs
     missing_pkgs=$(pacman -T $(cat "$1/packages") 2>/dev/null)
     if [ -n "$missing_pkgs" ]; then
+        # The installer ships yay, but a user can remove it, and the four
+        # catppuccin themes name AUR-only packages - so say what is missing
+        # rather than exiting into a window that closes before it is read.
+        if ! command -v yay >/dev/null; then
+            echo "> This theme needs packages that are not installed:"
+            # pacman -T returns one per line; indent each rather than only
+            # the first, which is what an unquoted echo would do
+            echo "$missing_pkgs" | sed 's/^/    /'
+            echo "> They are in the AUR, and yay is not installed."
+            echo "> Install it with 'sudo pacman -S yay', then pick the theme again."
+            prompt
+            return 1
+        fi
         echo "> Installing theme requirements using yay"
         foot --app-id floating_shell --window-size-chars 82x25 yay -S --needed $missing_pkgs
     fi

@@ -57,6 +57,20 @@ ever flashed unattended: applying an update is an explicit `fwupdmgr
 update`. A bad capsule bricks a board and there is no rollback from the OS
 side, so that stays a decision someone makes.
 
+### yay is installed
+
+An AUR helper ships with the desktop, from the `cachyos` repository rather
+than vendored here. It is not a convenience: every shipped theme lists the
+packages it needs, and the four catppuccin themes name AUR-only ones, so
+the theme switcher cannot do its job without a helper present.
+
+What that means is worth stating rather than leaving implicit. The AUR is
+arbitrary code from arbitrary maintainers, built and run on the machine at
+install time. Shipping `yay` puts that one command away instead of two. It
+is the usual trade for an Arch-derived desktop, and the same one
+manjaro-sway made, but it is a real one — `pacman -R yay` removes it, and
+the theme switcher then says which packages it would have needed.
+
 ## Using the repository on an existing system
 
 The `ashlaros` repository is dual-arch: `x86_64` and `aarch64`. The ISO is
