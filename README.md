@@ -71,6 +71,30 @@ is the usual trade for an Arch-derived desktop, and the same one
 manjaro-sway made, but it is a real one — `pacman -R yay` removes it, and
 the theme switcher then says which packages it would have needed.
 
+### Installs made before 2026-09-11 need one rename for the theme toggle
+
+The theme switcher shipped with the sway config named its stashed theme
+`theme.night.conf_`, while the toggle that reads it looked for
+`theme.light.conf_`. The two never met, so the waybar theme module never
+appeared at all. Both halves say `light` now.
+
+A fresh install is correct. An existing one keeps the old name in `$HOME`,
+where no package upgrade will touch it — nothing here rummages through home
+directories. Two renames fix it:
+
+```sh
+cd ~/.config
+mv sway/definitions.d/theme.night.conf_ sway/definitions.d/theme.light.conf_
+mv foot/foot-theme.night.ini_ foot/foot-theme.light.ini_
+cp foot/foot-theme.ini foot/foot-theme.dark.ini_
+```
+
+The third line is not a typo: `foot-theme.ini` is generated from a
+`.dark.` and a `.light.` half rather than being one of them, so the dark
+half has to exist before the first toggle can merge anything. `skel`
+rewrites all of this from the shipped defaults if you would rather start
+clean — it backs up `~/.config` first.
+
 ## Using the repository on an existing system
 
 The `ashlaros` repository is dual-arch: `x86_64` and `aarch64`. The ISO is

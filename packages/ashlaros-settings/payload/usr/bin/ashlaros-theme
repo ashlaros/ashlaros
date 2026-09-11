@@ -41,21 +41,24 @@ LIGHT_THEME=$(echo "$THEMES" | rofi -dmenu -p "Select night theme")
 LIGHT_THEME_DIR="${THEME_DIR}/${LIGHT_THEME}"
 install "$LIGHT_THEME_DIR"
 
-FALLBACK_THEME="day"
-FALLBACK_THEME_DIR=$DARK_THEME_DIR
-SECONDARY_THEME="light"
-SECONDARY_THEME_DIR=$LIGHT_THEME_DIR
-
-if [ "$FALLBACK_THEME" == "night" ]; then
-    FALLBACK_THEME_DIR=$LIGHT_THEME_DIR
-    SECONDARY_THEME="dark"
-    SECONDARY_THEME_DIR=$DARK_THEME_DIR
-fi
+# The day theme becomes the active one; the night theme is stashed beside
+# it under the name theme-toggle.sh looks for. Those names are load-bearing
+# in both directions there - it reads them to decide which theme is live
+# and writes them back when toggling - so "light" is not a label here, it
+# is the other half of a contract.
+ACTIVE_THEME_DIR=$DARK_THEME_DIR
+STASHED_THEME="light"
+STASHED_THEME_DIR=$LIGHT_THEME_DIR
 
 # copy the sway theme
-[ -f "$FALLBACK_THEME_DIR/theme.conf" ] && /usr/bin/cp --backup -v "$FALLBACK_THEME_DIR/theme.conf" "$HOME/.config/sway/definitions.d/theme.conf" && swaymsg reload
-[ -f "$SECONDARY_THEME_DIR/theme.conf" ] && /usr/bin/cp --backup -v "$SECONDARY_THEME_DIR/theme.conf" "$HOME/.config/sway/definitions.d/theme.${SECONDARY_THEME}.conf_"
+[ -f "$ACTIVE_THEME_DIR/theme.conf" ] && /usr/bin/cp --backup -v "$ACTIVE_THEME_DIR/theme.conf" "$HOME/.config/sway/definitions.d/theme.conf" && swaymsg reload
+[ -f "$STASHED_THEME_DIR/theme.conf" ] && /usr/bin/cp --backup -v "$STASHED_THEME_DIR/theme.conf" "$HOME/.config/sway/definitions.d/theme.${STASHED_THEME}.conf_"
 
-# copy the foot theme
-[ -f "$FALLBACK_THEME_DIR/foot-theme.ini" ] && /usr/bin/cp --backup -v "$FALLBACK_THEME_DIR/foot-theme.ini" "$HOME/.config/foot/foot-theme.ini"
-[ -f "$SECONDARY_THEME_DIR/foot-theme.ini" ] && /usr/bin/cp --backup -v "$SECONDARY_THEME_DIR/foot-theme.ini" "$HOME/.config/foot/foot-theme.${SECONDARY_THEME}.ini_"
+# Copy the foot themes. Unlike sway, foot-theme.ini is not one of the pair:
+# theme-toggle.sh regenerates it from both .dark. and .light. halves, so
+# writing it here would be undone by the first toggle. Write the halves and
+# let the toggle merge them.
+[ -f "$ACTIVE_THEME_DIR/foot-theme.ini" ] && /usr/bin/cp --backup -v "$ACTIVE_THEME_DIR/foot-theme.ini" "$HOME/.config/foot/foot-theme.dark.ini_"
+[ -f "$STASHED_THEME_DIR/foot-theme.ini" ] && /usr/bin/cp --backup -v "$STASHED_THEME_DIR/foot-theme.ini" "$HOME/.config/foot/foot-theme.${STASHED_THEME}.ini_"
+# the active terminal colours, merged from the two halves just written
+/usr/share/sway/scripts/theme-toggle.sh merge-foot 2>/dev/null || true

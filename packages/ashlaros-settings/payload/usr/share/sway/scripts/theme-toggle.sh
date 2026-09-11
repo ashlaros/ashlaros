@@ -117,6 +117,12 @@ case $1'' in
     [ -f "$DARK_SWAY_THEME" ] || [ -f "$LIGHT_SWAY_THEME" ]
     exit $?
     ;;
+'merge-foot')
+    # ashlaros-theme writes the two halves and needs foot-theme.ini rebuilt
+    # without a toggle: the theme it just applied is the active one.
+    merge_foot_themes "$CURRENT_PRIMARY_THEME"
+    exit $?
+    ;;
 'status')
     #Returns a string for Waybar
     text="switch to ${CURRENT_SECONDARY_THEME} theme\r(Right click to switch automatically)"
