@@ -37,7 +37,10 @@ jobs:
             .github/scripts/*.sh \
             test/vm/*.sh \
             iso/airootfs/root/.automated_script.sh \
-            branding/ashlaros-logo-animate
+            branding/ashlaros-logo-animate \
+            packages/ashlaros-settings/payload/usr/bin/ashlaros-migrate \
+            packages/ashlaros-settings/payload/usr/share/ashlaros/migrations/*.sh \
+            screenshots/*.sh
 
   python:
     runs-on: ubuntu-latest

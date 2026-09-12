@@ -106,5 +106,6 @@ package() {
     # cp -a keeps the source tree's modes; the scripts must be executable
     # whatever the checkout looked like
     find "${pkgdir}/usr/bin" "${pkgdir}/usr/local/bin" \
-        "${pkgdir}/usr/share/sway/scripts" -type f -exec chmod 755 {} +
+        "${pkgdir}/usr/share/sway/scripts" \
+        "${pkgdir}/usr/share/ashlaros/migrations" -type f -exec chmod 755 {} +
 }
