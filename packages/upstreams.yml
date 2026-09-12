@@ -88,6 +88,11 @@ packages:
     arch: any
 
   # vendored from manjaro-contrib, which maintains these outside the AUR
+  zen-browser-bin:
+    # upstream releases often - expect this to be one of the noisier
+    # tracker entries, one PR per Zen release
+    upstream: https://aur.archlinux.org/zen-browser-bin.git
+    arch: both
   grimshot:
     upstream: https://github.com/manjaro-contrib/grimshot
     arch: any
