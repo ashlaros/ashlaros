@@ -161,6 +161,34 @@ Read*). That asymmetry is deliberate: downloads are counted whether or not
 the token is set, and it can be added later without losing anything already
 counted. Until it is, the page says so rather than answering 500.
 
+## Settings
+
+`ashlaros-settings-tui` (`Super+,`) is one entry point for the settings
+that are otherwise commands you have to know: locale and keyboard layout,
+time and timezone, kernel variants from the cachyos repository, and chwd's
+hardware profiles. Displays and package installation dispatch to
+`ashlaros-displays` and `pacseek`.
+
+**A launcher, not a control panel.** Every entry either runs an existing
+tool or collects input and runs one command; the menu owns no settings
+logic. An entry whose binary is not installed is absent rather than
+present and broken.
+
+Root is taken per action rather than by running the whole thing under
+`sudo` — a long-running root TUI on a desktop is a bigger blast radius
+than it needs.
+
+The kernel entry installs; **which kernel boots stays systemd-boot's own
+menu**, which already lists every entry and cannot leave a machine
+unbootable. After an install it checks the three things that decide whether
+the new kernel can boot at all — the `mkinitcpio.d` preset, an image in
+`/boot`, and a loader entry naming it — and says plainly when one is
+missing. A kernel package ships nothing in `/boot`, only
+`usr/lib/modules/<kver>/vmlinuz`, and mkinitcpio's hook copies it only if a
+preset named for the pkgbase exists; without one the machine gains an entry
+that silently does not boot. It reports rather than repairs: writing a
+preset for a kernel we did not package is guesswork.
+
 ## Displays
 
 `ashlaros-displays` (`Alt+d`, beside the scale keybinds) configures

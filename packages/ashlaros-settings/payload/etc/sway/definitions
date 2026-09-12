@@ -73,6 +73,10 @@ set $scale_default $script_path/scale.sh default
 # VRR, per-display disable
 set $configure_displays $term_float ashlaros-displays
 
+# One entry point for the settings that are otherwise commands you have to
+# know - locale, keyboard, time, kernels, hardware profiles
+set $settings $term_float ashlaros-settings-tui
+
 # Audio control
 set $sink_volume wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%d", $2*100}'
 set $source_volume wpctl get-volume @DEFAULT_AUDIO_SOURCE@ | awk '{printf "%d", $2*100}'

@@ -41,6 +41,7 @@ jobs:
             packages/ashlaros-settings/payload/usr/bin/ashlaros-migrate \
             packages/ashlaros-settings/payload/usr/bin/ashlaros-snapshot \
             packages/ashlaros-settings/payload/usr/bin/ashlaros-displays \
+            packages/ashlaros-settings/payload/usr/bin/ashlaros-settings-tui \
             packages/ashlaros-settings/payload/usr/share/ashlaros/migrations/*.sh \
             packages/ashlaros-settings/payload/usr/share/sway/scripts/hw/* \
             screenshots/*.sh

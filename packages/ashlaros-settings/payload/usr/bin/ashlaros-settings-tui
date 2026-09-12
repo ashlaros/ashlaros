@@ -1,0 +1,316 @@
+#!/usr/bin/env bash
+# One entry point for the settings that are otherwise commands you have to
+# know: localectl, timedatectl, chwd, the kernel variants in the cachyos
+# repository.
+#
+# A launcher, not a control panel. Every entry either runs an existing tool
+# or collects input and runs one command; the menu owns no settings logic
+# of its own. If an entry grows past that, it belongs in its own tool with
+# its own issue - which is what way-displays got.
+#
+# gum and the padding conventions are the installer's (installer/
+# configurator); this deliberately does not invent a second TUI style.
+#
+# Privileges are taken per action rather than by running the whole thing
+# under sudo: a long-running root TUI on a desktop is a bigger blast radius
+# than it needs, and the installed user is a sudoer, so a prompt is
+# expected where one is due.
+set -uo pipefail
+
+export GUM_CHOOSE_CURSOR_FOREGROUND="7"
+export GUM_CHOOSE_SELECTED_FOREGROUND="15"
+export GUM_CONFIRM_SELECTED_BACKGROUND="8"
+export GUM_CONFIRM_SELECTED_FOREGROUND="15"
+export GUM_CONFIRM_UNSELECTED_FOREGROUND="7"
+
+PADDING_LEFT=2
+padding() {
+  local p="0 0 0 $PADDING_LEFT"
+  export GUM_CHOOSE_PADDING="$p" GUM_INPUT_PADDING="$p" GUM_CONFIRM_PADDING="$p"
+  export GUM_FILTER_PADDING="$p"
+}
+padding
+
+say() { gum style --padding "0 0 0 $PADDING_LEFT" "$@"; }
+warn() { gum style --foreground 3 --padding "0 0 0 $PADDING_LEFT" "$@"; }
+oops() { gum style --foreground 1 --padding "0 0 0 $PADDING_LEFT" "$@"; }
+
+screen() {
+  printf '\033[H\033[2J'
+  say "$1"
+  echo
+}
+
+pause() {
+  echo
+  gum confirm --affirmative "Back" --negative "" "" >/dev/null 2>&1
+}
+
+# Runs a command as root and reports rather than failing silently: a
+# permission error that prints nothing is indistinguishable from a setting
+# that did not take.
+root_run() {
+  local out
+  if ! out=$(sudo "$@" 2>&1); then
+    oops "That needed root and did not succeed:"
+    say "${out:-no output}"
+    return 1
+  fi
+  [[ -n $out ]] && say "$out"
+  return 0
+}
+
+# 1. LOCALE AND KEYBOARD
+#
+# localectl is the mechanism #14 settled on: it writes
+# /etc/X11/xorg.conf.d/00-keyboard.conf, which keyboard.sh reads at sway
+# startup. Setting it here and re-running that script is what makes the
+# change reach the session that is already running, rather than the next
+# login.
+keyboard_menu() {
+  local layout
+  screen "Keyboard layout"
+  say "Current: $(localectl status | sed -n 's/.*X11 Layout: *//p' | head -1)"
+  echo
+
+  layout=$(localectl list-x11-keymap-layouts 2>/dev/null |
+    gum filter --header "Layout" --placeholder "type to filter") || return 0
+  [[ -n $layout ]] || return 0
+
+  root_run localectl set-x11-keymap "$layout" || { pause; return 0; }
+
+  # the running session, not just the next one
+  if [[ -x /usr/share/sway/scripts/keyboard.sh ]] && [[ -n ${SWAYSOCK:-} ]]; then
+    /usr/share/sway/scripts/keyboard.sh >/dev/null 2>&1
+    say "Applied to this session too."
+  fi
+
+  # A user's own config.d wins by design - keyboard.sh leaves a layout it
+  # finds there alone - so say so rather than letting the setting look
+  # ignored.
+  if grep -rqs 'xkb_layout' "$HOME/.config/sway/config.d/" 2>/dev/null; then
+    warn "Your sway config.d sets xkb_layout, and that wins over this."
+  fi
+  pause
+}
+
+locale_menu() {
+  local locale
+  screen "System locale"
+  say "Current: $(localectl status | sed -n 's/.*System Locale: *//p' | head -1)"
+  echo
+  locale=$(localectl list-locales 2>/dev/null |
+    gum filter --header "Locale" --placeholder "type to filter") || return 0
+  [[ -n $locale ]] || return 0
+  root_run localectl set-locale "LANG=$locale"
+  say "Takes effect for programs started after this."
+  pause
+}
+
+# 2. DISPLAYS - dispatch, never a second display UI
+displays_entry() {
+  if command -v ashlaros-displays >/dev/null; then
+    ashlaros-displays
+  else
+    screen "Displays"
+    warn "ashlaros-displays is not installed."
+    pause
+  fi
+}
+
+# 3. KERNELS
+#
+# Install only. Which kernel boots is systemd-boot's own menu, which
+# already lists every entry - and choosing there cannot leave a machine
+# unbootable, while rewriting loader entries here could.
+#
+# The check after install is the point: a kernel package ships nothing in
+# /boot, only usr/lib/modules/<kver>/vmlinuz, and mkinitcpio's alpm hook
+# copies it only if a preset named for the pkgbase exists. Without one,
+# nothing lands in /boot and the machine gains a silently unbootable entry.
+kernel_menu() {
+  local choice kernels
+  screen "Kernels"
+  say "Installed: $(pacman -Qq 2>/dev/null | grep -c '^linux-cachyos') cachyos kernel package(s)"
+  echo
+  say "This installs a kernel. Which one boots is chosen in the boot menu,"
+  say "where every entry is already listed."
+  echo
+
+  kernels=$(pacman -Sl cachyos 2>/dev/null |
+    awk '$2 ~ /^linux-cachyos/ && $2 !~ /-(headers|dbg)$/ {print $2}' | sort -u)
+  if [[ -z $kernels ]]; then
+    warn "The cachyos repository is not reachable, so nothing can be listed."
+    pause
+    return 0
+  fi
+
+  # shellcheck disable=SC2086
+  # word splitting is the point: one choice per kernel
+  choice=$(gum choose --header "Install" $kernels "Cancel") || return 0
+  [[ $choice == Cancel ]] && return 0
+
+  if pacman -Qq "$choice" >/dev/null 2>&1; then
+    say "$choice is already installed."
+    pause
+    return 0
+  fi
+
+  gum confirm --affirmative "Install" --negative "Cancel" \
+    "Install $choice?" || return 0
+
+  screen "Installing $choice"
+  root_run pacman -S --noconfirm --needed "$choice" || { pause; return 0; }
+
+  verify_kernel "$choice"
+  pause
+}
+
+# The check that keeps this entry from leaving a machine with an entry that
+# does not boot. Reported, never repaired: writing a preset for a kernel we
+# did not package is guesswork, and a wrong one is worse than an absent one.
+verify_kernel() {
+  local pkgbase=$1 ok=1
+  echo
+  if [[ -f /etc/mkinitcpio.d/$pkgbase.preset ]]; then
+    say "✓ /etc/mkinitcpio.d/$pkgbase.preset"
+  else
+    oops "✗ no /etc/mkinitcpio.d/$pkgbase.preset"
+    oops "  without it mkinitcpio copies no kernel into /boot"
+    ok=0
+  fi
+
+  if compgen -G "/boot/vmlinuz-$pkgbase*" >/dev/null; then
+    say "✓ a kernel image is in /boot"
+  else
+    oops "✗ nothing matching /boot/vmlinuz-$pkgbase"
+    ok=0
+  fi
+
+  if grep -rqs "$pkgbase" /boot/loader/entries/ 2>/dev/null; then
+    say "✓ a loader entry names it"
+  else
+    warn "! no loader entry names $pkgbase yet"
+    warn "  systemd-boot will not offer it until one exists"
+    ok=0
+  fi
+
+  ((ok)) || oops "Do not reboot expecting this kernel until the above is fixed."
+}
+
+# 4. PACKAGES - guarded and hidden rather than visible and broken
+packages_entry() {
+  xdg-terminal-exec pacseek
+}
+
+# 5. TIME AND DATE
+time_menu() {
+  local choice
+  while true; do
+    screen "Time and date"
+    say "$(timedatectl status | sed -n '1,4p')"
+    echo
+    choice=$(gum choose --header "Change" \
+      "Timezone" "Network time" "Set the clock by hand" "Back") || return 0
+    case $choice in
+      "Timezone")
+        local zone
+        zone=$(timedatectl list-timezones 2>/dev/null |
+          gum filter --header "Timezone" --placeholder "type to filter") || continue
+        [[ -n $zone ]] && root_run timedatectl set-timezone "$zone" && pause
+        ;;
+      "Network time")
+        gum confirm --affirmative "Toggle NTP" --negative "Cancel" "" || continue
+        if timedatectl status | grep -q "NTP service: active"; then
+          root_run timedatectl set-ntp false
+        else
+          root_run timedatectl set-ntp true
+        fi
+        pause
+        ;;
+      "Set the clock by hand")
+        screen "Set the clock"
+        # NTP is on from the install, and it will correct a hand-set clock
+        # within seconds - which reads as the setting being ignored rather
+        # than as NTP doing its job.
+        if timedatectl status | grep -q "NTP service: active"; then
+          warn "Network time is on, so a time set here will be corrected."
+          warn "Turn NTP off first if you mean this to stick."
+          echo
+        fi
+        local stamp
+        stamp=$(gum input --header "YYYY-MM-DD HH:MM:SS" \
+          --value "$(date '+%Y-%m-%d %H:%M:%S')") || continue
+        [[ -n $stamp ]] && root_run timedatectl set-time "$stamp" && pause
+        ;;
+      "Back") return 0 ;;
+    esac
+  done
+}
+
+# 6. HARDWARE
+#
+# The installer runs chwd for graphics only, and deliberately takes the
+# free driver. Non-free is the reason to come here.
+hardware_menu() {
+  local choice
+  while true; do
+    screen "Hardware profiles"
+    choice=$(gum choose --header "chwd" \
+      "List profiles" "Install the detected free profile" \
+      "Install the detected non-free profile" "Back") || return 0
+    case $choice in
+      "List profiles")
+        screen "Hardware profiles"
+        chwd -l 2>&1 | sed "s/^/  /"
+        pause
+        ;;
+      "Install the detected free profile")
+        root_run chwd -a 0300 && pause
+        ;;
+      "Install the detected non-free profile")
+        gum confirm --affirmative "Install" --negative "Cancel" \
+          "Non-free drivers are not covered by the distribution's licence." || continue
+        root_run chwd -a 0300 --nonfree 2>/dev/null ||
+          root_run chwd -a nonfree 0300
+        pause
+        ;;
+      "Back") return 0 ;;
+    esac
+  done
+}
+
+main() {
+  command -v gum >/dev/null || { echo "ashlaros-settings-tui: gum is not installed" >&2; exit 1; }
+
+  while true; do
+    screen "AshlarOS settings"
+
+    # Entries are built rather than listed, so one pointing at a binary
+    # that is not installed is absent rather than present and broken -
+    # which is the rot #7 removed.
+    local entries=("Keyboard layout" "System locale")
+    command -v ashlaros-displays >/dev/null && entries+=("Displays")
+    entries+=("Kernels")
+    command -v pacseek >/dev/null && entries+=("Install packages")
+    entries+=("Time and date")
+    command -v chwd >/dev/null && entries+=("Hardware profiles")
+    entries+=("Quit")
+
+    local choice
+    choice=$(gum choose --header "Settings" "${entries[@]}") || exit 0
+
+    case $choice in
+      "Keyboard layout") keyboard_menu ;;
+      "System locale") locale_menu ;;
+      "Displays") displays_entry ;;
+      "Kernels") kernel_menu ;;
+      "Install packages") packages_entry ;;
+      "Time and date") time_menu ;;
+      "Hardware profiles") hardware_menu ;;
+      "Quit") exit 0 ;;
+    esac
+  done
+}
+
+main "$@"
