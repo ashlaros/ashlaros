@@ -91,8 +91,9 @@ ${body}
 export const html = (body) =>
   new Response(body, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 
-export const json = (body) =>
+export const json = (body, status = 200) =>
   new Response(`${JSON.stringify(body)}\n`, {
+    status,
     headers: { 'content-type': 'application/json' },
   });
 
@@ -130,13 +131,24 @@ export async function serveObject(request, bucket, key, extraHeaders = {}) {
  */
 export function handler(site) {
   return async (request, env) => {
-    if (request.method !== 'GET' && request.method !== 'HEAD') {
-      return new Response('method not allowed', { status: 405 });
-    }
-
     const url = new URL(request.url);
     const requested = decodeURIComponent(url.pathname.slice(1));
     const bucket = env[site.bucket];
+
+    // Routes are checked before the method gate: a bucket only ever
+    // answers GET and HEAD, but a route may be a POST endpoint, and
+    // rejecting it here would make the route unreachable rather than
+    // wrong - which is how the score endpoint first answered 405.
+    //
+    // (request, bucket, env, url) rather than just the bucket: /geo needs
+    // request.cf, and the game routes need env and the query. One
+    // signature covering all of them beats each adding its own parameter.
+    const route = site.routes?.[requested];
+    if (route) return route(request, bucket, env, url);
+
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      return new Response('method not allowed', { status: 405 });
+    }
 
     if (requested === 'favicon.svg' || requested === 'favicon.ico') {
       // .ico callers accept an svg body, so one file serves both
@@ -147,12 +159,6 @@ export function handler(site) {
         },
       });
     }
-
-    // (request, bucket, env, url) rather than just the bucket: /geo needs
-    // request.cf, and a stats route would need env and the query. One
-    // signature covering both beats each adding its own parameter.
-    const route = site.routes?.[requested];
-    if (route) return route(request, bucket, env, url);
 
     const key = site.resolveKey(requested);
     if (key === null) return notFound();

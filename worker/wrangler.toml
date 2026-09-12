@@ -63,3 +63,26 @@ crons = ["17 3 2 * *"]
 # not a secret: the account id is already in this file in plaintext above.
 # ANALYTICS_TOKEN is the secret, and goes in with `wrangler secret put`.
 ACCOUNT_ID = "fc8102dae7e1eb7a1ecec012dcb0dfaf"
+
+# The leaderboard. One row per accepted run, indexed on (game, day, score)
+# because the daily board is the hot query and a table scan is what turns a
+# leaderboard slow as it grows.
+[[d1_databases]]
+binding = "SCORES"
+database_name = "ashlaros-scores"
+database_id = "61ec52d0-82ad-4914-960c-7dc18b4950b2"
+
+# Replaying a multi-minute run at 60Hz does not fit in the 10ms of CPU a
+# fetch handler gets on the free plan - and waitUntil draws on the same
+# budget, as does a scheduled handler. A Durable Object gets 30s per
+# invocation, free plan included, in its own isolate; a handler waiting on
+# one spends no CPU of its own. So the endpoint validates cheaply and the
+# replay happens here.
+[[durable_objects.bindings]]
+name = "VERIFIER"
+class_name = "Verifier"
+
+[[migrations]]
+tag = "v1"
+# SQLite-backed, which is what the free plan offers and what this wants
+new_sqlite_classes = ["Verifier"]

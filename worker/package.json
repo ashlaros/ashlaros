@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.mjs",
-    "deploy": "wrangler deploy"
+    "game:sync": "cp src/game/logic.js ../docs/game/logic.js",
+    "test": "npm run game:sync && node --test test/*.test.mjs",
+    "deploy": "npm run game:sync && wrangler deploy"
   }
 }

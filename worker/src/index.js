@@ -15,6 +15,9 @@
 import { handler } from './serve.js';
 import { geo } from './geo.js';
 import { archiveMonth, closedMonth } from './stats.js';
+// the Durable Object class has to be exported from the entrypoint for
+// wrangler to bind it
+export { Verifier } from './game/scores.js';
 import { site as isoSite } from './iso.js';
 import { site as packagesSite } from './packages.js';
 
@@ -60,6 +63,14 @@ export default {
     // apex. The desktop reads this instead of telling a third party its
     // IP address; nothing about the request is logged or stored.
     if (isDocsHost(hostname) && pathname === '/geo') return geo(request);
+    // The game page is a docs asset, so its own fetches go to the apex -
+    // and the docs binding would answer 404 for all of them, which the
+    // page reads as being offline. Same reasoning as /geo above: the
+    // route has to run before the binding claims the whole host.
+    if (isDocsHost(hostname) && pathname.startsWith('/game/')) {
+      const route = isoSite.routes?.[pathname.slice(1)];
+      if (route) return route(request, env[isoSite.bucket], env, new URL(request.url));
+    }
     if (isDocsHost(hostname)) return env.DOCS.fetch(request);
     return handler(siteFor(hostname))(request, env, ctx);
   },

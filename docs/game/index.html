@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Courses — AshlarOS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <style>
+      /* branding/palette.conf, carried over rather than re-picked */
+      :root {
+        --base: #141a1b;
+        --surface: #282828;
+        --foreground: #eee;
+        --accent: #8a8f98;
+        --highlight: #c9ccd1;
+      }
+      * {
+        color: var(--foreground);
+        text-decoration: none;
+        box-sizing: border-box;
+      }
+      body {
+        background: var(--surface);
+        margin: 0;
+        font-family: Roboto, Helvetica, Arial, sans-serif;
+      }
+      h1 {
+        background: var(--base);
+        color: var(--accent);
+        font-size: 0.8rem;
+        font-weight: 500;
+        line-height: 30px;
+        padding: 0 20px;
+        margin: 0;
+      }
+      main {
+        margin: 20px;
+        display: flex;
+        gap: 2rem;
+        flex-wrap: wrap;
+      }
+      canvas {
+        background: var(--base);
+        border: 1px solid #3a4043;
+        /* the mark is squared-off stone; smoothing a block grid makes it
+           look like a different project */
+        image-rendering: pixelated;
+      }
+      aside {
+        font-family: monospace;
+        min-width: 16rem;
+      }
+      h2 {
+        color: var(--accent);
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin: 1.2rem 0 0.3rem;
+      }
+      p,
+      td {
+        color: var(--accent);
+        font-size: 0.85rem;
+        line-height: 1.6;
+      }
+      table {
+        border-collapse: collapse;
+        font-family: monospace;
+        width: 100%;
+      }
+      td {
+        padding: 2px 12px 2px 0;
+        white-space: nowrap;
+      }
+      .score {
+        color: var(--foreground);
+        font-size: 1.6rem;
+      }
+      button,
+      input {
+        background: var(--base);
+        border: 1px solid #3a4043;
+        color: var(--foreground);
+        font-family: monospace;
+        padding: 0.4rem 0.7rem;
+      }
+      button:hover {
+        color: var(--highlight);
+      }
+      .muted {
+        color: var(--accent);
+        font-size: 0.75rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AshlarOS — Courses</h1>
+    <main>
+      <canvas id="board" width="300" height="660"></canvas>
+      <aside>
+        <h2>Score</h2>
+        <div class="score" id="score">0</div>
+        <p id="status">Press any key to start.</p>
+
+        <h2>Next</h2>
+        <canvas id="next" width="120" height="80"></canvas>
+
+        <h2>Keys</h2>
+        <p>
+          ← → move &nbsp; ↑ rotate &nbsp; ↓ soft drop<br />
+          space hard drop &nbsp; shift hold
+        </p>
+
+        <h2>Today's board</h2>
+        <table id="board-table"></table>
+        <p>
+          <input id="player" maxlength="24" placeholder="your name" />
+          <button id="submit" disabled>Submit run</button>
+        </p>
+        <p class="muted" id="submit-note">
+          One run per seed. Everyone gets the same pieces today, so the
+          board compares play rather than luck.
+        </p>
+      </aside>
+    </main>
+    <script type="module" src="./play.js"></script>
+  </body>
+</html>

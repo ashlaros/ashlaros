@@ -147,6 +147,44 @@ update count. That is fine for publishing and fatal for diffing, so there is
 deliberately no "screenshots changed" check. These are pictures, not golden
 files.
 
+## The game
+
+[`ashlaros.download/game/`](https://ashlaros.download/game/) is a
+falling-block game with a daily leaderboard. Everyone gets the same pieces
+on the same day, so the board compares play rather than luck.
+
+**The worker issues a seed, the game runs locally, the worker verifies the
+replay.** The design is `boredland/slopduel`'s `GAME-RULES.md`, whose
+failure modes were all found the expensive way there:
+
+- **The seed is the only source of world state**, and `Math.random()`
+  appears nowhere in the simulation — not "only for visuals", nowhere.
+- **Time is a tick index, never a wall clock.** The simulation is discrete,
+  so a timestamp would be a lossier way of naming the same integer. A
+  suspended tab owes the simulation nothing, so there is no late timestamp
+  to reject and no tolerance to tune — which is the bug that lost someone a
+  duel upstream for taking a phone call.
+- **The replay is the submission.** The server recomputes the score and
+  discards the number the client reported; the seed comes from the server's
+  record, never from the request.
+- **One attempt per seed, enforced server-side** by a unique index. The
+  board is a pure function of the seed, so a player who restarts gets the
+  same board now known — measured upstream at +34.7% for best-of-five.
+- **Integers only.** Two engines agreeing on integer arithmetic is a
+  property of the arithmetic; agreeing on floats is a hope.
+
+`worker/src/game/logic.js` is the single implementation: the page imports it
+to play and the verifier imports it to replay. `docs/game/logic.js` is
+generated from it by `npm run game:sync`, which `npm test` and the deploy
+both run — a hand-maintained second copy of a simulation is exactly the
+drift that would reject every honest score.
+
+Verification runs in a **Durable Object**, not the fetch handler. The free
+plan gives a handler 10 ms of CPU and re-stepping a multi-minute run at
+60 Hz does not fit; `waitUntil` draws on the same budget and so does a
+scheduled handler. A Durable Object gets 30 s per invocation, and a handler
+waiting on one spends no CPU of its own.
+
 ## Download stats
 
 `iso.ashlaros.download/stats` counts ISO downloads, and `/stats.json` is the

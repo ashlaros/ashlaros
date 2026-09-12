@@ -8,6 +8,7 @@
 
 import { escapeHtml, html, humanSize, json, page } from './serve.js';
 import { collect, record } from './stats.js';
+import { board, dayOf, seedFor, validateSubmission } from './game/scores.js';
 
 const TITLE = 'AshlarOS';
 
@@ -164,6 +165,67 @@ export const site = {
   record,
 
   routes: {
+    // The game endpoints. On the ISO site because that is where the
+    // download page lives and the game is a thing to do while an image
+    // downloads - and because both already share this worker.
+    'game/seed': async (request, bucket, env, url) => {
+      const game = url.searchParams.get('game') ?? 'courses';
+      const day = dayOf(Date.now());
+      return json({ game, day, seed: seedFor(game, day) });
+    },
+
+    'game/board': async (request, bucket, env, url) => {
+      const game = url.searchParams.get('game') ?? 'courses';
+      const day = url.searchParams.get('day') ?? dayOf(Date.now());
+      if (!env.SCORES) return json({ game, day, scores: [], configured: false });
+      return json({ game, day, scores: await board(env.SCORES, game, day) });
+    },
+
+    'game/score': async (request, bucket, env) => {
+      if (request.method !== 'POST') {
+        return json({ error: 'post the run' }, 405);
+      }
+      if (!env.SCORES || !env.VERIFIER) {
+        return json({ error: 'scores are not configured' }, 503);
+      }
+
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: 'body must be json' }, 400);
+      }
+
+      // cheap checks here, inside the 10ms the fetch handler gets; the
+      // replay happens in the Durable Object, which gets 30s
+      const problem = validateSubmission(body);
+      if (problem) return json({ error: problem }, 400);
+
+      const game = typeof body.game === 'string' ? body.game : 'courses';
+      const day = dayOf(Date.now());
+      // R3.2: the seed is the server's, not the submission's
+      const seed = seedFor(game, day);
+
+      const id = env.VERIFIER.idFromName(`${game}:${day}`);
+      const response = await env.VERIFIER.get(id).fetch(
+        new Request('https://verifier/', {
+          method: 'POST',
+          body: JSON.stringify({
+            game,
+            day,
+            seed,
+            player: body.player,
+            events: body.events,
+            now: Date.now(),
+          }),
+        }),
+      );
+      return new Response(response.body, {
+        status: response.status,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+
     stats: async (request, bucket, env, url) =>
       html(renderStats(await collect(env, url.searchParams.get('version')))),
     'stats.json': async (request, bucket, env, url) =>
