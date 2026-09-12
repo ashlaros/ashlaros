@@ -128,6 +128,11 @@ DESKTOP_PACKAGES = [
     "tldr",
     # plocate rather than mlocate: it enables its own updatedb timer
     "plocate",
+    # The boot splash. In DESKTOP_PACKAGES rather than as a dependency of
+    # ashlaros-branding, which is arch=any and holds assets, not machinery:
+    # the theme stays installable anywhere, the mechanism lands only where
+    # there is a boot to cover.
+    "plymouth",
     # Runtime version manager. Installed here rather than as a dependency
     # of ashlaros-settings because that package is arch=any and installs on
     # ARM, where mise does not exist at all - neither Arch Linux ARM's
@@ -656,6 +661,99 @@ def use_systemd_initramfs(ctx: InstallContext) -> None:
         lines.append(f"HOOKS=({' '.join(rewritten)})")
     conf.write_text("\n".join(lines) + "\n")
     info("› initramfs: sd-encrypt, so the TPM keyslot is actually used")
+
+
+def use_plymouth_initramfs(ctx: InstallContext) -> bool:
+    """Put the plymouth hook in the initramfs, before whatever unlocks root.
+
+    Order is the whole of it. The hook starts plymouthd and shows the
+    splash, so it has to run before sd-encrypt asks for a passphrase - if
+    it runs after, the prompt is drawn on a bare console and the splash
+    appears once the disk is already open, which looks worse than no
+    splash at all.
+
+    Returns whether the file changed, so the caller can decide whether an
+    initramfs rebuild is owed.
+    """
+    conf = ctx.target / "etc/mkinitcpio.conf"
+    lines = []
+    changed = False
+
+    for line in conf.read_text().splitlines():
+        if not line.startswith("HOOKS=") or "plymouth" in line:
+            lines.append(line)
+            continue
+        hooks = line[len("HOOKS=("):].rstrip(")").split()
+        # after `systemd`/`udev`, which set up the device nodes plymouth
+        # draws on, and before any unlocker
+        anchor = next(
+            (i for i, h in enumerate(hooks) if h in ("systemd", "udev")),
+            0,
+        )
+        hooks.insert(anchor + 1, "plymouth")
+        lines.append(f"HOOKS=({' '.join(hooks)})")
+        changed = True
+
+    if changed:
+        conf.write_text("\n".join(lines) + "\n")
+        info("› initramfs: plymouth ahead of the unlocker")
+    return changed
+
+
+def add_splash_cmdline(ctx: InstallContext) -> None:
+    """Ask the kernel to be quiet and the splash to come up.
+
+    Without `splash` plymouth shows nothing, and without `quiet` the
+    kernel's own messages are drawn over it - the splash is there but
+    scrolled off by the time anyone looks.
+
+    Separate from use_sd_encrypt_cmdline, which does its own rewriting and
+    runs only on encrypted installs: an unencrypted machine has a boot to
+    cover too, and neither path may assume the other ran.
+    """
+    entries = sorted((ctx.target / "boot/loader/entries").glob("*.conf"))
+    if not entries:
+        error("no loader entries to amend; the boot shows no splash")
+        return
+
+    for entry in entries:
+        rewritten = []
+        for line in entry.read_text().splitlines():
+            if not line.startswith("options"):
+                rewritten.append(line)
+                continue
+            words = line.split()
+            for flag in ("quiet", "splash"):
+                if flag not in words:
+                    words.append(flag)
+            rewritten.append(" ".join(words))
+        entry.write_text("\n".join(rewritten) + "\n")
+    info("› boot entries: quiet splash")
+
+
+def configure_splash(ctx: InstallContext) -> None:
+    """Select the theme and make sure the initramfs carries it.
+
+    plymouth-set-default-theme -R would rebuild the initramfs itself, which
+    on an encrypted install is a second rebuild racing the one
+    add_crypttab_tpm_option already does. So the theme is set without -R
+    and the rebuild is done once, here, after every hook edit is in place.
+    """
+    theme = ctx.target / "usr/share/plymouth/themes/ashlaros/ashlaros.plymouth"
+    if not theme.exists():
+        info("› no ashlaros plymouth theme installed, leaving the boot bare")
+        return
+
+    run_command(
+        ["arch-chroot", str(ctx.target), "plymouth-set-default-theme", "ashlaros"]
+    )
+    use_plymouth_initramfs(ctx)
+    add_splash_cmdline(ctx)
+    # Unconditional: the hook edit above may be a no-op on a re-run, but
+    # the theme change still has to reach the initramfs, and mkinitcpio is
+    # the only thing that puts it there.
+    run_command(["arch-chroot", str(ctx.target), "mkinitcpio", "-P"])
+    info("› boot splash: the ashlar courses, then the name")
 
 
 def configure_login(ctx: InstallContext) -> None:

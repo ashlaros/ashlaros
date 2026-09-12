@@ -7,6 +7,8 @@ pkgdesc="AshlarOS logo, wallpaper and palette"
 arch=('any')
 url="https://github.com/ashlaros/ashlaros"
 license=('GPL-3.0-or-later')
+# the splash script is generated from logo.txt at build time
+makedepends=('python')
 # built from branding/ in the monorepo checkout, not from a tarball: the
 # assets and the PKGBUILD move together, so a source= would only pin them
 # to a release that does not exist yet
@@ -30,6 +32,17 @@ package() {
   # derives its frames from logo.txt above, so the two ship together
   install -Dm755 "${branding}/ashlaros-logo-animate" \
     "${pkgdir}/usr/bin/ashlaros-logo-animate"
+
+  # The boot splash. Its courses are generated from logo.txt at build time
+  # rather than transcribed into the script: plymouth's language has no
+  # file I/O, so the rows must be literals, and a literal traced by hand is
+  # how a theme drifts from the mark it came from.
+  install -d "${pkgdir}/usr/share/plymouth/themes/ashlaros"
+  install -Dm644 "${branding}/plymouth/ashlaros.plymouth" \
+    "${pkgdir}/usr/share/plymouth/themes/ashlaros/ashlaros.plymouth"
+  python3 "${branding}/plymouth/generate-script.py" "${branding}/logo.txt" \
+    "${pkgdir}/usr/share/plymouth/themes/ashlaros/ashlaros.script"
+  chmod 644 "${pkgdir}/usr/share/plymouth/themes/ashlaros/ashlaros.script"
 
   # the desktop's wallpaper lookup and os-release's LOGO= both read the
   # freedesktop locations rather than /usr/share/ashlaros

@@ -1,0 +1,16 @@
+[Plymouth Theme]
+Name=AshlarOS
+Description=The ashlar courses laid in sequence, then the name
+ModuleName=script
+
+# The mark is drawn in U+2588 FULL BLOCK, so the font copied into the
+# initramfs has to carry it. fc-match resolves this name at mkinitcpio
+# time; without it plymouth takes whatever "monospace" points at, which on
+# a minimal initramfs can be a font with no block elements at all - and the
+# splash renders as a row of empty boxes.
+MonospaceFont=DejaVu Sans Mono 12
+Font=DejaVu Sans Mono 12
+
+[script]
+ImageDir=/usr/share/plymouth/themes/ashlaros
+ScriptFile=/usr/share/plymouth/themes/ashlaros/ashlaros.script

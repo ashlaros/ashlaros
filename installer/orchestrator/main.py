@@ -27,6 +27,7 @@ def build_phases():
         configure_login,
         configure_mdns,
         configure_snapshots,
+        configure_splash,
         configure_system,
         enable_services,
         enroll_tpm,
@@ -47,6 +48,10 @@ def build_phases():
         ("Resolving .local names", configure_mdns),
         ("Configuring the firewall", configure_firewall),
         ("Configuring snapshots", configure_snapshots),
+        # after the TPM work, which rewrites HOOKS and rebuilds the
+        # initramfs itself: this adds one more hook and rebuilds once more,
+        # rather than racing it
+        ("Configuring the boot splash", configure_splash),
         ("Validating boot", validate_boot),
     ]
 
