@@ -128,6 +128,13 @@ DESKTOP_PACKAGES = [
     "tldr",
     # plocate rather than mlocate: it enables its own updatedb timer
     "plocate",
+    # Runtime version manager. Installed here rather than as a dependency
+    # of ashlaros-settings because that package is arch=any and installs on
+    # ARM, where mise does not exist at all - neither Arch Linux ARM's
+    # extra nor cachyos carries it, and Arch's own package declares
+    # arch=('x86_64'), so ALARM will not inherit it later. A hard
+    # dependency would make the settings package uninstallable there.
+    "mise",
     # We run a third-party rolling kernel, so the window between a
     # linux-cachyos upgrade and a reboot is one a user will sit in: without
     # this the running kernel's modules are gone from disk, and plugging in

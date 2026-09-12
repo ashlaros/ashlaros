@@ -22,6 +22,13 @@ ZSH_HIGHLIGHT_STYLES[comment]='fg=blue'
 # zoxide shadows nothing: `cd` keeps working and `z` is the frecency jump
 command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
 
+# Runtime versions - node, python, go - per project. Prompt activation
+# rather than --shims: it is what mise's own docs lead with and shims do
+# not support the full feature set. The guard is load-bearing, not
+# decoration: mise does not exist on ARM at all, and an unguarded eval
+# would print an error on every shell start there.
+command -v mise >/dev/null && eval "$(mise activate zsh)"
+
 # user-defined overrides
 [ -d ~/.config/zsh/config.d/ ] && source <(cat ~/.config/zsh/config.d/*)
 
