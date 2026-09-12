@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+# Is the lid shut right now?
+#
+# Only the ACPI state answers this - the DMI fallback in `laptop` says what
+# the machine is, never what it is doing. A machine with no lid is not a
+# machine with a closed lid, so it exits 1 rather than erroring.
+set -u
+
+for state in /proc/acpi/button/lid/*/state; do
+    [ -e "$state" ] || continue
+    # "state:      closed" - the word is what matters, not the spacing
+    case "$(cat "$state" 2>/dev/null)" in
+        *closed*) exit 0 ;;
+    esac
+done
+
+exit 1

@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+# Is there AMD graphics in this machine?
+#
+# The vendor id is the whole test; gpu-vendor carries the reasoning about
+# why this reads sysfs and not lspci, and why the class match is 0x03*.
+set -u
+
+exec "$(dirname "$0")/gpu-vendor" 0x1002

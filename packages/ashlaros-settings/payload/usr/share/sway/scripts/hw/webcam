@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Is there a camera?
+#
+# A v4l2 node is the test, but not every /dev/video* is a camera: the
+# metadata node of a UVC device enumerates beside the capture node. The
+# name is what tells them apart - the metadata node is named for the same
+# device, so the index file is checked instead, which only capture-capable
+# nodes carry.
+set -u
+
+for device in /sys/class/video4linux/*; do
+    [ -e "$device/index" ] || continue
+    exit 0
+done
+
+exit 1

@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+# Is there a touchpad?
+#
+# /proc/bus/input/devices rather than libinput or swaymsg -t get_inputs:
+# this has to answer without a compositor and without a seat, and libinput
+# list-devices needs read access to /dev/input that a plain user does not
+# have.
+#
+# The name line is what carries "Touchpad" or "Synaptics"; the property
+# bitmask below it would be more precise but differs across kernels in a
+# way the name does not.
+set -u
+
+devices=/proc/bus/input/devices
+[ -r "$devices" ] || exit 1
+
+grep -qiE '^N: Name=.*(touchpad|synaptics|glidepoint)' "$devices"

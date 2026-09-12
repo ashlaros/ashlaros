@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# Lid shut, and still driving a screen.
+#
+# Composed rather than reimplemented: the two halves are the interesting
+# tests and this is only their conjunction. That is also why a machine with
+# no lid answers 1 here for free.
+set -u
+
+dir=$(dirname "$0")
+"$dir/laptop-closed" && "$dir/external-monitors"

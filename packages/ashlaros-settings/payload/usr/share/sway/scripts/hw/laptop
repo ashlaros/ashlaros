@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+# Is this machine clamshell-capable?
+#
+# A lid switch is the definitive signal: a machine that reports one has a
+# lid, whatever its chassis claims to be.
+#
+# The DMI fallback exists because the ACPI button is not universal - some
+# firmware exposes the lid only through an input device - and chassis_type
+# is the one field every vendor fills in. It is a fallback rather than the
+# primary test because vendors get it wrong in both directions: this
+# machine reports 35, which is in no laptop list and is correct, but 3
+# (Desktop) shows up on mini PCs that are not desktops either.
+set -u
+
+for state in /proc/acpi/button/lid/*/state; do
+    [ -e "$state" ] && exit 0
+done
+
+# 8=Portable 9=Laptop 10=Notebook 14=Sub Notebook
+# 30=Tablet 31=Convertible 32=Detachable
+case "$(cat /sys/class/dmi/id/chassis_type 2>/dev/null)" in
+    8 | 9 | 10 | 14 | 30 | 31 | 32) exit 0 ;;
+esac
+
+exit 1

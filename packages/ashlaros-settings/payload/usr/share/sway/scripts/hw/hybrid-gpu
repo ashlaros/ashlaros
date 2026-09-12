@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# More than one display adapter: an integrated one plus a discrete one.
+#
+# The count is over distinct PCI devices of display class, not over
+# vendors: an Intel iGPU beside an NVIDIA dGPU and an AMD APU beside an AMD
+# dGPU are the same situation for anything that has to pick which card to
+# render on, and a vendor test would miss the second.
+set -u
+
+count=0
+for device in /sys/bus/pci/devices/*; do
+    [ -e "$device/class" ] || continue
+    case "$(cat "$device/class" 2>/dev/null)" in
+        0x03*) count=$((count + 1)) ;;
+    esac
+done
+
+[ "$count" -gt 1 ]

@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+# Is anything driving a screen that is not the built-in panel?
+#
+# Read from DRM rather than from swaymsg: this has to answer on a TTY, in
+# the installer, and before a compositor exists.
+#
+# eDP and LVDS are the built-in panel by definition and are skipped. A
+# connector whose status is "unknown" does not count - Writeback-1 reports
+# exactly that on this machine and is not a monitor, it is a capture
+# target.
+set -u
+
+for status in /sys/class/drm/card*-*/status; do
+    [ -e "$status" ] || continue
+
+    connector=$(basename "$(dirname "$status")")
+    case "$connector" in
+        *-eDP-* | *-LVDS-*) continue ;;
+    esac
+
+    [ "$(cat "$status" 2>/dev/null)" = "connected" ] && exit 0
+done
+
+exit 1

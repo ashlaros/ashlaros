@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+# Does this machine's DMI identity contain the given string?
+#
+# usage: match "xps 13"
+#
+# Both product_name and product_family are checked because vendors split
+# the useful part between them: Dell puts "XPS 13 9310" in the name, Lenovo
+# puts "ThinkPad" only in the family. Case-insensitive, because the casing
+# is not stable across firmware revisions of the same machine.
+#
+# We ship no quirk catalogue - that is a maintenance commitment against
+# hardware we do not own - but the primitive is worth having for a user
+# writing their own rule in config.d.
+set -u
+
+[ $# -eq 1 ] || { echo "usage: $(basename "$0") <substring>" >&2; exit 2; }
+
+needle=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+
+for field in product_name product_family; do
+    value=$(cat "/sys/class/dmi/id/$field" 2>/dev/null) || continue
+    haystack=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+    case "$haystack" in
+        *"$needle"*) exit 0 ;;
+    esac
+done
+
+exit 1

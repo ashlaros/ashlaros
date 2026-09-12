@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+# Does this machine have a display adapter from the given PCI vendor?
+#
+# usage: gpu-vendor 0x10de
+#
+# Read the cached sysfs IDs rather than lspci, which reads PCI config space
+# and resumes runtime-suspended GPUs. That matters because a bar module
+# polls these: `lspci | grep -i nvidia` in a loop keeps a sleeping
+# discrete GPU awake and costs a laptop its battery.
+#
+# The class check is 0x03 (display controller) rather than exactly
+# 0x030000 (VGA): a discrete GPU in a hybrid laptop often enumerates as
+# 0x030200 (3D controller) with no VGA at all, and skipping it would
+# report the machine as having no NVIDIA in exactly the case that matters.
+set -u
+
+[ $# -eq 1 ] || { echo "usage: $(basename "$0") <pci-vendor-id>" >&2; exit 2; }
+wanted=$1
+
+for device in /sys/bus/pci/devices/*; do
+    [ -e "$device/vendor" ] || continue
+    [ "$(cat "$device/vendor" 2>/dev/null)" = "$wanted" ] || continue
+    case "$(cat "$device/class" 2>/dev/null)" in
+        0x03*) exit 0 ;;
+    esac
+done
+
+exit 1

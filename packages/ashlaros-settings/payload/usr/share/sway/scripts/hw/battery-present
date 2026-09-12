@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+# Is there a battery?
+#
+# type=Battery is the test rather than the name: power_supply also carries
+# the AC adapter, and on a laptop it carries UPS and even connected game
+# controllers, which report themselves as batteries but are not the
+# machine's.
+#
+# scope=Device marks exactly those peripherals; a machine battery has
+# either no scope file or scope=System.
+set -u
+
+for supply in /sys/class/power_supply/*; do
+    [ -e "$supply/type" ] || continue
+    [ "$(cat "$supply/type" 2>/dev/null)" = "Battery" ] || continue
+    case "$(cat "$supply/scope" 2>/dev/null)" in
+        Device) continue ;;
+    esac
+    exit 0
+done
+
+exit 1
