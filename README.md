@@ -171,16 +171,44 @@ one on demand, `ashlaros-snapshot list` shows what is there.
 
 **Rollback is a rescue-media procedure, not a boot-menu one.** Omarchy gets
 boot-menu rollback from limine; we boot with systemd-boot, which has no
-equivalent of `limine-snapper-restore`. So recovery is:
+equivalent of `limine-snapper-restore`.
+
+**`snapper rollback` is not the command.** It was tried on a real install
+and does not work on this layout: archinstall mounts `@` by `subvol=` in
+fstab rather than by setting it as the filesystem's default subvolume, so
+snapper reports *"Cannot detect ambit since default subvolume is unknown"*.
+Forcing it with `--ambit classic` is worse than useless — it reports
+success and sets the default subvolume, but fstab's `subvol=/@` still wins
+at the next boot, so the machine comes back **still broken** while the tool
+said it recovered.
+
+What works is replacing `@` itself. Verified end to end: a machine with a
+deliberately destroyed `/etc/os-release` came back reading `AshlarOS` with
+`$HOME` intact and a deleted binary restored.
 
 1. Boot the AshlarOS ISO.
 2. Unlock the disk — `cryptsetup open /dev/nvme0n1p2 root`. The passphrase,
    not the TPM: TPM enrolment is bound to PCR 7 and a firmware update can
    invalidate that keyslot, so the passphrase is the one credential that
    always works.
-3. Mount the top level and roll back: `mount /dev/mapper/root /mnt`, then
-   `snapper --no-dbus -c root rollback <number>` against it.
-4. Reboot.
+3. Mount the **top level**, which is where the subvolumes live:
+
+   ```sh
+   mount -o subvolid=5 /dev/mapper/root /mnt
+   ls /mnt                      # @  @home  @log  @pkg
+   ls /mnt/@/.snapshots         # the snapshots, numbered
+   ```
+
+4. Put the broken root aside and take the snapshot's place:
+
+   ```sh
+   mv /mnt/@ /mnt/@.broken
+   btrfs subvolume snapshot /mnt/@.broken/.snapshots/<number>/snapshot /mnt/@
+   ```
+
+5. Reboot. Delete `@.broken` later with
+   `btrfs subvolume delete /mnt/@.broken` once the machine is known good —
+   it costs nothing until the snapshots inside it diverge.
 
 `$HOME` survives a root rollback, because `@home` is its own subvolume and
 only `@` is replaced. `@log` and `@pkg` are separate for the same reason —

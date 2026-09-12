@@ -6,10 +6,13 @@
 # that breaks the kernel, the GPU driver or systemd otherwise leaves a live
 # ISO and a manual chroot, on an Arch base running a third-party kernel.
 #
-# Recovery is NOT from the boot menu. We boot with systemd-boot and there
-# is no systemd-boot equivalent of limine-snapper-restore, so rolling back
-# means booting the ISO and running `snapper rollback` from a chroot. The
-# README says so plainly; this tool must not imply otherwise.
+# Recovery is NOT from the boot menu, and it is NOT `snapper rollback`.
+# That was tried on a real install: archinstall mounts @ by subvol= in
+# fstab rather than as the filesystem's default subvolume, so snapper
+# cannot detect its ambit, and forcing it with --ambit reports success
+# while fstab still wins at the next boot - the machine comes back broken
+# having been told it was fixed. Recovery is replacing @ with a snapshot
+# from rescue media; the README has the commands, verified end to end.
 #
 # The failure modes matter more than the happy path. A snapshot tool that
 # quietly does nothing is worse than no snapshot tool, because it turns "I
@@ -32,8 +35,9 @@ usage: ashlaros-snapshot <create|list> [description]
   create   snapshot the root subvolume now
   list     what has been captured
 
-Rollback is a rescue-media procedure: boot the ISO, unlock the disk,
-and `snapper rollback`. See the README.
+Rollback is a rescue-media procedure: boot the ISO, unlock the disk, and
+replace @ with a snapshot. NOT `snapper rollback`, which cannot work on
+this layout. The README has the commands.
 EOF
 }
 
