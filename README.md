@@ -161,6 +161,35 @@ Read*). That asymmetry is deliberate: downloads are counted whether or not
 the token is set, and it can be added later without losing anything already
 counted. Until it is, the page says so rather than answering 500.
 
+## Displays
+
+`ashlaros-displays` (`Alt+d`, beside the scale keybinds) configures
+displays: per-display scale, mode, rotation, VRR and enable/disable, plus
+arrangement, order and the scaling globals.
+
+**There are no profiles, deliberately.** way-displays has no such concept
+and this does not invent one. Its model is declarative and reactive:
+`cfg.yaml` describes what should be true for a set of connected displays,
+and the daemon applies it whenever that set changes. Plugging the dock *is*
+the switch, so "when I dock, use this layout" is a conditional rule rather
+than a profile to select. Layering profiles on top would mean swapping the
+file the daemon watches and writes, which is two sources of truth for one
+config.
+
+Every change goes through `way-displays --set/--delete/--toggle`, never by
+writing YAML: the daemon stays the single writer, so there is no parser
+here to drift and no fight over `--write`. Note that `--write` **destroys
+comments and formatting** in `cfg.yaml` — hand-edits to that file are lost
+the next time anything persists a change, whether from this tool or from
+way-displays itself.
+
+The one thing the CLI cannot express is a *conditional* rule, so the
+lid-closed case prints the YAML block to add rather than writing it behind
+the daemon's back and losing it at the next `--write`.
+
+The three scale keybinds stay: a nudge is faster with a key than through a
+menu, and they write through way-displays exactly as the TUI does.
+
 ## Snapshots, and what recovery actually involves
 
 The default layout is btrfs, and `snapper` plus `snap-pac` are installed

@@ -170,6 +170,9 @@ $bindsym $alt_mod+minus exec $scale_down
 ## Action // Scale default  ##
 $bindsym $mod+equal exec $scale_default
 
+## Action // Configure displays ##
+$bindsym $alt_mod+d exec $configure_displays
+
 ## Action // Toggle floating ##
 $bindsym $mod+Shift+space floating toggle
 

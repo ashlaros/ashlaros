@@ -1,0 +1,368 @@
+#!/usr/bin/env bash
+# Display configuration, without editing YAML or memorising a CLI.
+#
+# way-displays has no profile concept and this does not invent one. Its
+# model is declarative and reactive: cfg.yaml describes what should be true
+# for a set of connected displays, and the daemon applies it whenever that
+# set changes. Plugging the dock IS the switch, so "when I dock, use this
+# layout" is a conditional rule rather than a profile to select. This is a
+# structured editor over that one config.
+#
+# Everything goes through `way-displays --set/--delete/--toggle`, never by
+# writing YAML here. The daemon stays the single writer, which means no
+# parser, no format drift, and no fighting `--write` over who owns the
+# file. The cost is stated in the UI: --write destroys comments.
+#
+# gum and the padding conventions are the installer's (installer/
+# configurator); this deliberately does not invent a second TUI style.
+set -uo pipefail
+
+export GUM_CHOOSE_CURSOR_FOREGROUND="7"
+export GUM_CHOOSE_SELECTED_FOREGROUND="15"
+export GUM_CONFIRM_SELECTED_BACKGROUND="8"
+export GUM_CONFIRM_SELECTED_FOREGROUND="15"
+export GUM_CONFIRM_UNSELECTED_FOREGROUND="7"
+
+PADDING_LEFT=2
+padding() {
+  local p="0 0 0 $PADDING_LEFT"
+  export GUM_CHOOSE_PADDING="$p" GUM_INPUT_PADDING="$p" GUM_CONFIRM_PADDING="$p"
+}
+padding
+
+say() { gum style --padding "0 0 0 $PADDING_LEFT" "$@"; }
+warn() { gum style --foreground 3 --padding "0 0 0 $PADDING_LEFT" "$@"; }
+oops() { gum style --foreground 1 --padding "0 0 0 $PADDING_LEFT" "$@"; }
+
+screen() {
+  printf '\033[H\033[2J'
+  say "$1"
+  echo
+}
+
+# way-displays exits 0 whatever happens - a missing $WAYLAND_DISPLAY, a
+# daemon that is not running and a successful call all return 0 - so the
+# output is the only signal there is. Every call goes through here.
+wd() {
+  local out
+  out=$(way-displays "$@" 2>&1)
+  if printf '%s' "$out" | grep -q '^FATAL:'; then
+    printf '%s' "$out" >&2
+    return 1
+  fi
+  printf '%s' "$out"
+}
+
+require_daemon() {
+  local out
+  if ! out=$(wd --list 2>&1); then
+    screen "Displays"
+    oops "way-displays is not answering."
+    echo
+    say "${out#FATAL: }"
+    echo
+    say "It runs as a user service with the session:"
+    say "  systemctl --user status way-displays"
+    echo
+    gum confirm --affirmative "Close" --negative "" "" >/dev/null 2>&1
+    exit 1
+  fi
+}
+
+# What is connected, read from sway's JSON rather than scraped out of
+# way-displays --list: the list output is formatted for a human and its
+# shape is not a contract, so an indentation rule over it picks up section
+# headings as if they were monitors. jq over get_outputs cannot.
+#
+# Identify by description, never by name. Upstream is explicit that names
+# are nondeterministic - DP-3 today is DP-5 after a reboot - and a rule
+# keyed on a name silently stops matching. This is the same
+# "<make> <model> (<name>" string scale.sh already builds, which is what
+# way-displays matches a rule against.
+descriptions() {
+  swaymsg -t get_outputs |
+    jq -r '.[] | select(.active or .dpms != null) | "\(.make) \(.model) (\(.name)"'
+}
+
+# The modes that display reports, from the same place. Largest first,
+# because that is what someone is usually reaching for, and deduplicated
+# because rounding the refresh to whole Hz makes 59.997 and 60.000 the same
+# entry.
+#
+# The dedupe is `unique` inside jq over the whole string, not `sort -u` on
+# a delimiter: splitting on "x" compares only the width, which silently
+# dropped every mode sharing a resolution with another - a 4K panel lost
+# its 30Hz entry and nobody could pick it.
+modes_for() {
+  swaymsg -t get_outputs |
+    jq -r --arg d "$1" '
+      [ .[] | select("\(.make) \(.model) (\(.name)" == $d) | .modes[]
+        | { w: .width, h: .height, hz: ((.refresh / 1000) | round) } ]
+      | unique
+      | sort_by(-.w, -.h, -.hz)[]
+      | "\(.w)x\(.h)@\(.hz)Hz"'
+}
+
+display_menu() {
+  local target=$1
+  while true; do
+    screen "$target"
+    local choice
+    choice=$(gum choose --header "Change" \
+      "Scale" "Mode" "Rotation" "Variable refresh rate" \
+      "Disable when the lid closes" "Enable or disable now" \
+      "Back") || return 0
+
+    case $choice in
+      "Scale") set_scale "$target" ;;
+      "Mode") set_mode "$target" ;;
+      "Rotation") set_transform "$target" ;;
+      "Variable refresh rate") toggle_vrr "$target" ;;
+      "Disable when the lid closes") lid_rule "$target" ;;
+      "Enable or disable now") toggle_disabled "$target" ;;
+      "Back") return 0 ;;
+    esac
+  done
+}
+
+set_scale() {
+  local target=$1 choice
+  screen "Scale — $target"
+  say "Auto lets way-displays pick from the display's DPI."
+  echo
+  choice=$(gum choose --header "Scale" \
+    "Auto" "1" "1.25" "1.5" "1.75" "2" "2.5" "3" "Cancel") || return 0
+  case $choice in
+    Cancel) return 0 ;;
+    Auto) apply --delete SCALE "$target" ;;
+    *) apply --set SCALE "$target" "$choice" ;;
+  esac
+}
+
+# The modes the display actually reports, so nothing here can offer one it
+# cannot do. MAX is way-displays' own token for "the best it has".
+set_mode() {
+  local target=$1 choice modes
+  screen "Mode — $target"
+  modes=$(modes_for "$target")
+
+  if [[ -z $modes ]]; then
+    warn "The daemon reported no modes for this display."
+    echo
+    modes=""
+  fi
+
+  # shellcheck disable=SC2086
+  # word splitting is the point: each mode is its own choice
+  choice=$(gum choose --header "Mode" "Best available" $modes "Cancel") || return 0
+  case $choice in
+    Cancel) return 0 ;;
+    "Best available") apply --set MODE "$target" MAX ;;
+    *)
+      local w h hz
+      w=${choice%%x*}
+      h=${choice#*x}; h=${h%%@*}
+      hz=${choice##*@}; hz=${hz%Hz}
+      apply --set MODE "$target" "$w" "$h" "$hz"
+      ;;
+  esac
+}
+
+set_transform() {
+  local target=$1 choice
+  screen "Rotation — $target"
+  choice=$(gum choose --header "Rotation" \
+    "None" "90" "180" "270" "flipped" "flipped-90" "flipped-180" "flipped-270" \
+    "Cancel") || return 0
+  case $choice in
+    Cancel) return 0 ;;
+    None) apply --delete TRANSFORM "$target" ;;
+    *) apply --set TRANSFORM "$target" "$choice" ;;
+  esac
+}
+
+toggle_vrr() {
+  local target=$1
+  screen "Variable refresh rate — $target"
+  say "VRR is on unless it has been turned off for this display."
+  echo
+  gum confirm --affirmative "Toggle" --negative "Cancel" \
+    "Toggle VRR for this display?" || return 0
+  apply --toggle VRR_OFF "$target"
+}
+
+toggle_disabled() {
+  local target=$1
+  screen "Enable or disable — $target"
+  gum confirm --affirmative "Toggle" --negative "Cancel" \
+    "Toggle this display off or back on?" || return 0
+  apply --toggle DISABLED "$target"
+}
+
+# The laptop case: the panel switches off when the lid shuts, and comes
+# back when it opens. way-displays reads the lid itself, which is why this
+# is a rule rather than something a script has to watch.
+lid_rule() {
+  local target=$1
+  screen "Lid rule — $target"
+
+  if ! /usr/share/sway/scripts/hw/laptop; then
+    warn "This machine reports no lid, so the rule would never fire."
+    echo
+    gum confirm --affirmative "Set it anyway" --negative "Cancel" "" || return 0
+  fi
+
+  say "way-displays disables this display while the lid is closed."
+  echo
+  gum confirm --affirmative "Add the rule" --negative "Cancel" "" || return 0
+
+  # --set DISABLED takes no condition, so the conditional form is the one
+  # thing here that cfg.yaml must carry itself. Say so rather than writing
+  # YAML behind the daemon's back and losing it at the next --write.
+  screen "Lid rule — $target"
+  say "way-displays' CLI cannot express a conditional rule; only the"
+  say "config file can. Add this to ~/.config/way-displays/cfg.yaml:"
+  echo
+  say "  DISABLED:"
+  say "    '$target':"
+  say "      IF:"
+  say "      - LID: CLOSED"
+  echo
+  warn "The daemon applies it as soon as the file is saved."
+  echo
+  gum confirm --affirmative "Got it" --negative "" "" >/dev/null 2>&1
+}
+
+# Apply, then persist: --set changes the running state and --write puts it
+# in cfg.yaml. Doing only the first leaves a change that dies at logout;
+# doing only the second is fine but slower to see. Both, and say which.
+apply() {
+  local out
+  if ! out=$(wd "$@" 2>&1); then
+    oops "way-displays refused that:"
+    say "${out#FATAL: }"
+    echo
+    gum confirm --affirmative "Back" --negative "" "" >/dev/null 2>&1
+    return 1
+  fi
+
+  if ! out=$(wd --write 2>&1); then
+    warn "Applied, but not saved: ${out#FATAL: }"
+    echo
+    gum confirm --affirmative "Back" --negative "" "" >/dev/null 2>&1
+    return 1
+  fi
+  return 0
+}
+
+arrangement_menu() {
+  local row col
+  screen "Arrangement"
+  say "How displays are laid out relative to each other."
+  echo
+  row=$(gum choose --header "Arrange" "row" "column" "Cancel") || return 0
+  [[ $row == Cancel ]] && return 0
+
+  if [[ $row == row ]]; then
+    col=$(gum choose --header "Align" "top" "middle" "bottom" "Cancel") || return 0
+  else
+    col=$(gum choose --header "Align" "left" "middle" "right" "Cancel") || return 0
+  fi
+  [[ $col == Cancel ]] && return 0
+
+  apply --set ARRANGE_ALIGN "$row" "$col"
+}
+
+order_menu() {
+  local ordered=() remaining choice
+  screen "Order"
+  say "Pick displays in the order they sit, left to right or top to bottom."
+  echo
+
+  mapfile -t remaining < <(descriptions)
+  if ((${#remaining[@]} < 2)); then
+    warn "Only one display is connected, so order means nothing yet."
+    echo
+    gum confirm --affirmative "Back" --negative "" "" >/dev/null 2>&1
+    return 0
+  fi
+
+  while ((${#remaining[@]} > 0)); do
+    choice=$(gum choose --header "Next in order" "${remaining[@]}" "Done") || return 0
+    [[ $choice == Done ]] && break
+    ordered+=("$choice")
+    local rest=()
+    for d in "${remaining[@]}"; do [[ $d == "$choice" ]] || rest+=("$d"); done
+    remaining=("${rest[@]}")
+  done
+
+  ((${#ordered[@]} == 0)) && return 0
+  apply --set ORDER "${ordered[@]}"
+}
+
+scaling_menu() {
+  local choice
+  while true; do
+    screen "Scaling"
+    choice=$(gum choose --header "Scaling" \
+      "Toggle scaling on or off" \
+      "Toggle automatic scaling" \
+      "Back") || return 0
+    case $choice in
+      "Toggle scaling on or off") apply --toggle SCALING ;;
+      "Toggle automatic scaling") apply --toggle AUTO_SCALE ;;
+      "Back") return 0 ;;
+    esac
+  done
+}
+
+show_state() {
+  screen "Current configuration"
+  wd --get | sed "s/^/  /"
+  echo
+  gum confirm --affirmative "Back" --negative "" "" >/dev/null 2>&1
+}
+
+main() {
+  for tool in way-displays gum; do
+    command -v "$tool" >/dev/null || { echo "ashlaros-displays: $tool is not installed" >&2; exit 1; }
+  done
+
+  require_daemon
+
+  while true; do
+    screen "Displays"
+    local choice
+    choice=$(gum choose --header "Configure" \
+      "A display" "Arrangement" "Order" "Scaling" \
+      "Show current configuration" "Reapply" "Quit") || exit 0
+
+    case $choice in
+      "A display")
+        local target
+        mapfile -t targets < <(descriptions)
+        if ((${#targets[@]} == 0)); then
+          warn "The daemon reports no connected displays."
+          echo
+          gum confirm --affirmative "Back" --negative "" "" >/dev/null 2>&1
+          continue
+        fi
+        target=$(gum choose --header "Display" "${targets[@]}" "Back") || continue
+        [[ $target == Back ]] && continue
+        display_menu "$target"
+        ;;
+      "Arrangement") arrangement_menu ;;
+      "Order") order_menu ;;
+      "Scaling") scaling_menu ;;
+      "Show current configuration") show_state ;;
+      "Reapply")
+        # disable, reset failed modes, enable - the fix for a display that
+        # came back wrong after a suspend or a cable change
+        wd --reapply >/dev/null || true
+        ;;
+      "Quit") exit 0 ;;
+    esac
+  done
+}
+
+main "$@"

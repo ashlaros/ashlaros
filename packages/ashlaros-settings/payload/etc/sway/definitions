@@ -61,9 +61,17 @@ set $brightness_up $brightness up | $onscreen_bar
 set $brightness_down $brightness down | $onscreen_bar
 
 # Scaling
+#
+# The keybinds stay beside the TUI rather than being replaced by it: a
+# nudge of the focused display's scale is faster with a key than through a
+# menu, and they write through way-displays exactly as the TUI does.
 set $scale_up $script_path/scale.sh up
 set $scale_down $script_path/scale.sh down
 set $scale_default $script_path/scale.sh default
+
+# Everything the keybinds cannot reach: arrangement, order, mode, rotation,
+# VRR, per-display disable
+set $configure_displays $term_float ashlaros-displays
 
 # Audio control
 set $sink_volume wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%d", $2*100}'
