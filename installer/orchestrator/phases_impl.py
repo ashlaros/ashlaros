@@ -916,9 +916,18 @@ def configure_firewall(ctx: InstallContext) -> None:
     for args in (
         ["default", "deny", "incoming"],
         ["default", "allow", "outgoing"],
+        # `ufw default` writes policy and nothing else: ENABLED stays "no"
+        # in /etc/ufw/ufw.conf, and ufw.service honours that flag - so
+        # enabling the unit alone starts a firewall that is switched off.
+        # Verified on an installed machine, where `ufw status` read
+        # "inactive" with the service enabled.
+        #
+        # --force because `ufw enable` prompts about disrupting ssh, and
+        # there is no one at the other end of an install.
+        ["--force", "enable"],
     ):
         run_command(["arch-chroot", str(ctx.target), "ufw", *args])
-    info("› firewall denies incoming, allows outgoing")
+    info("› firewall active: denies incoming, allows outgoing")
 
 
 def configure_mdns(ctx: InstallContext) -> None:
