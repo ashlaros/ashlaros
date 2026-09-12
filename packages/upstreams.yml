@@ -74,6 +74,9 @@ packages:
   sworkstyle:
     upstream: https://aur.archlinux.org/sworkstyle.git
     arch: both
+  topgrade:
+    upstream: https://aur.archlinux.org/topgrade.git
+    arch: both
   way-displays:
     upstream: https://aur.archlinux.org/way-displays.git
     arch: both

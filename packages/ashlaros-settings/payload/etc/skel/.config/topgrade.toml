@@ -1,0 +1,27 @@
+# topgrade is what the bar's update button runs.
+#
+# Yours to edit: nothing regenerates this file. The defaults below are the
+# ones that would otherwise have to live in a user's head.
+
+[misc]
+# The binary comes from pacman, so a self-update would replace a packaged
+# file behind pacman's back - the next -Syu would then either revert it or
+# report a conflict. Updates arrive as package updates.
+no_self_update = true
+
+# Ask before each step rather than assuming yes: this runs ~200 updaters
+# and some of them touch things a user did not expect to be in scope.
+# assume_yes = true
+
+# Steps to skip entirely, by name. Nothing is skipped by default - a step
+# with nothing to do costs a subprocess and prints one line.
+# disable = ["system", "emacs"]
+
+[linux]
+# yay ships on every x86_64 desktop (DESKTOP_PACKAGES), so AUR packages are
+# updated alongside the repository ones rather than silently left behind.
+arch_package_manager = "yay"
+
+# The Arch news is worth reading before a -Syu breaks something; it is the
+# one place a manual intervention gets announced.
+show_arch_news = true

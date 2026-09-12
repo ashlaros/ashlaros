@@ -50,6 +50,11 @@ depends=(
     'bluetuith'               # bluetooth management tool
     'noto-fonts-emoji'        # emoji font, e.g. weather icons
     'pacman-contrib'          # checkupdates, for the updates module
+    'topgrade'                # the update path the bar clicks through to;
+                              # a depends rather than an optdepend because
+                              # "default update path" and "optional" are
+                              # contradictory - if it may be missing, the
+                              # fallback chain has to stay
     'ashlaros-branding'       # logo, wallpaper and palette
     ## shell
     'zsh'
@@ -85,7 +90,6 @@ optdepends=(
     'swaycwd: open here helper'
     'poweralertd: battery and power notifications'
     'wluma: adaptive brightness based on screen contents and ALS'
-    'pacseek: package manager tui'
     # the installer puts this on every x86_64 desktop; it stays optional
     # here because this package is arch=any and yay is not built for ARM
     'yay: AUR helper, required by ashlaros-theme for the catppuccin themes'

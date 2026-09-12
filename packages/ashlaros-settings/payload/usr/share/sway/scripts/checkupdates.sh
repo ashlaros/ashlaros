@@ -17,24 +17,30 @@ get_updates() {
 case $1'' in
 'status')
     UPDATES=$(get_updates)
-    COUNT=$(echo "$UPDATES" | grep -v '^$' | wc -l)
+    COUNT=$(echo "$UPDATES" | grep -cv '^$')
     TOOLTIP=$(echo "$UPDATES" | awk 1 ORS='\\n' | sed 's/\\n$//')
+    # The badge counts pacman and AUR, which is all that can be counted
+    # cheaply. Clicking runs topgrade, which also updates flatpaks, cargo
+    # binaries, firmware and git checkouts - so the tooltip says what the
+    # number is rather than letting it read as a prediction of the run.
+    TOOLTIP="$TOOLTIP\n\npacman and AUR. Updating also runs topgrade's other steps."
     jq -cn --arg count "$COUNT" --arg tooltip "$TOOLTIP" '{"text": $count, "tooltip": $tooltip}'
     ;;
 'check')
     UPDATES=$(get_updates)
-    [ $(echo "$UPDATES" | grep -v '^$' | wc -l) -gt 0 ]
+    [ "$(echo "$UPDATES" | grep -cv '^$')" -gt 0 ]
     exit $?
     ;;
 'upgrade')
-    if [ -x "$(command -v pacseek)" ]; then
-        xdg-terminal-exec pacseek -u
-    elif [ -x "$(command -v topgrade)" ]; then
-        xdg-terminal-exec topgrade
-    elif [ -x "$(command -v yay)" ]; then
-        xdg-terminal-exec yay -Syu
-    else
-        xdg-terminal-exec sudo pacman -Syu
-    fi
+    # topgrade is a hard dependency of ashlaros-settings, so the four-branch
+    # fallback chain this had was three dead branches: a guaranteed package
+    # does not need a chain, and dead branches rot.
+    #
+    # The number beside this button counts pacman and AUR updates, while
+    # topgrade also updates flatpaks, cargo binaries, firmware and git
+    # checkouts. That mismatch is deliberate - topgrade has no count-only
+    # mode, and never will for ~200 updaters - so the tooltip says so
+    # rather than the badge pretending to predict the run.
+    xdg-terminal-exec topgrade
     ;;
 esac
