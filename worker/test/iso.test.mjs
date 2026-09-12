@@ -19,6 +19,7 @@ const KEYS = [
   'latest/ashlaros.iso',
   'latest/screenshots/desktop.png',
   'latest/screenshots/tiling.png',
+  'latest/video/tour.webm',
 ];
 
 const env = () => ({ PACKAGES: bucketOf([]), ISO: bucketOf(KEYS) });
@@ -99,5 +100,28 @@ test('a screenshot is revalidated, like everything else under latest/', async ()
   // republished in place by every screenshot run, so an immutable cache
   // would pin the first one a cache happened to see
   const res = await worker.fetch(req('latest/screenshots/desktop.png'), env());
+  assert.equal(res.headers.get('cache-control'), 'no-cache');
+});
+
+test('the tour plays on the page and is never a download row', async () => {
+  // same rule as the stills: the listing skips latest/ entirely, so a video
+  // there has to be rendered deliberately or it is invisible
+  const body = await (await worker.fetch(req(''), env())).text();
+  assert.match(body, /<video class="tour" src="\/latest\/video\/tour\.webm"/);
+  assert.doesNotMatch(body, /class="row" href="\/latest\/video/);
+});
+
+test('the tour is not preloaded for every visitor', async () => {
+  // a few hundred KB on a download page that most visitors never play
+  const body = await (await worker.fetch(req(''), env())).text();
+  assert.match(body, /preload="metadata"/);
+});
+
+test('the tour serves as video, not as an attachment', async () => {
+  const res = await worker.fetch(req('latest/video/tour.webm'), env());
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-disposition'), null);
+  // republished by every recording run, so an immutable cache would pin
+  // whichever one a cache happened to see first
   assert.equal(res.headers.get('cache-control'), 'no-cache');
 });

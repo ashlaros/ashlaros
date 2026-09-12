@@ -29,6 +29,23 @@ export function versionOf(key) {
  * it. They are never listed as rows: the listing skips `latest/` entirely,
  * which is where the screenshot job publishes.
  */
+/**
+ * The desktop tour, above the stills.
+ *
+ * preload="metadata" rather than auto: the file is a few hundred KB and
+ * every visitor to the download page would otherwise pay for it unasked.
+ * muted and playsinline so it can autoplay at all, loop because it is a
+ * few seconds long, and width/height set for the same no-reflow reason the
+ * stills carry them.
+ */
+function renderTour(key) {
+  if (!key) return '';
+  return (
+    `<video class="tour" src="/${escapeHtml(key)}" width="960" height="540"` +
+    ' autoplay muted loop playsinline preload="metadata"></video>'
+  );
+}
+
 function renderShots(shots) {
   if (!shots.length) return '';
   const images = shots
@@ -42,7 +59,7 @@ function renderShots(shots) {
   return `<div class="shots">\n${images}\n</div>`;
 }
 
-export function renderIndex(byVersion, shots = []) {
+export function renderIndex(byVersion, shots = [], tour = null) {
   // version prefixes sort chronologically, so the newest is last
   const versions = [...byVersion.keys()].sort().reverse();
   const sections = versions
@@ -66,6 +83,7 @@ export function renderIndex(byVersion, shots = []) {
         <a href="/latest/ashlaros.iso"><code>/latest/ashlaros.iso</code></a>.
         Verify a download against the <code>SHA256SUMS</code> beside it.
         <a class="link" href="/stats">Download stats</a>.</p>
+${renderTour(tour)}
 ${renderShots(shots)}
 ${sections || '<p>No images published yet.</p>'}`,
   );
@@ -156,6 +174,7 @@ export const site = {
     const listed = await bucket.list({ limit: 1000 });
     const byVersion = new Map();
     const shots = [];
+    let tour = null;
     for (const object of listed.objects) {
       const version = versionOf(object.key);
       if (!version) continue;
@@ -164,12 +183,13 @@ export const site = {
       // are shown as pictures instead
       if (version === 'latest') {
         if (object.key.startsWith('latest/screenshots/')) shots.push(object.key);
+        if (object.key.endsWith('.webm')) tour = object.key;
         continue;
       }
       if (!byVersion.has(version)) byVersion.set(version, []);
       byVersion.get(version).push(object);
     }
-    return html(renderIndex(byVersion, shots.sort()));
+    return html(renderIndex(byVersion, shots.sort(), tour));
   },
 
   headers: (key) => {

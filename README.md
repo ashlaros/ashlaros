@@ -116,6 +116,22 @@ renders the real configured desktop.
 What it is not: proof that anything boots or installs. It is a picture of the
 desktop, and the ISO build has its own checks for the other question.
 
+`screenshots/record.sh` records a short silent tour beside the stills,
+published at
+[`latest/video/tour.webm`](https://iso.ashlaros.download/latest/video/tour.webm)
+and shown on the download page. A still cannot show tiling, a launcher
+opening or the theme switching; thirty seconds can. The session setup is
+`screenshots/session.sh`, shared with the capture script rather than copied
+into it — the D-Bus re-exec and the waybar workaround are the hard-won part
+and two copies would drift.
+
+It is silent (a container has no audio, and silence means no narration to
+maintain), and the theme scene shows **the bar switching**: measured, a
+toggle repaints waybar by 79% while terminal panes change by under 14%,
+because foot takes its colours from the server that started before the
+switch. That is what the desktop really does, so that is what the tour
+shows.
+
 `screenshots/shots.yaml` is one entry per picture - the commands to run, the
 `swaymsg` placement between them, and how long to let it settle. Adding a
 picture is a block there rather than another `if` in a script.

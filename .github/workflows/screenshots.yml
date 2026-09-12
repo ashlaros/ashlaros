@@ -41,6 +41,13 @@ jobs:
         run: |
           su ashlar -c "MANIFEST=$PWD/screenshots/shots.yaml \
             $PWD/screenshots/capture.sh $PWD/out"
+      - name: record the tour
+        # ffmpeg for the duration check record.sh makes before declaring
+        # success; wf-recorder is already a settings dependency
+        run: |
+          pacman -S --noconfirm --needed wf-recorder ffmpeg
+          su ashlar -c "SCENES=$PWD/screenshots/scenes.yaml \
+            $PWD/screenshots/record.sh $PWD/out"
       - name: upload to R2
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
@@ -57,6 +64,7 @@ jobs:
           name: screenshots
           path: |
             out/*.png
+            out/*.webm
             out/*.log
           if-no-files-found: warn
           retention-days: 7

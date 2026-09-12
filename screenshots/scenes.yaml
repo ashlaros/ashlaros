@@ -1,0 +1,67 @@
+# The desktop tour, one entry per scene.
+#
+# Kept apart from shots.yaml on purpose: a still and a scene are different
+# artefacts, and merging them would compromise both - a still wants the
+# screen to stop moving, a scene wants it not to.
+#
+# Three scenes that show motion, not a tour of every application. Tiling,
+# the launcher and the theme switch are the things a still cannot show.
+#
+# `commands` run in order, each detached, except a `swaymsg` which runs in
+# the foreground because sway applies a split to whatever is focused. `hold`
+# is how long the scene rests before the next - this is the pacing, and dead
+# air is worse than no video.
+#
+# Every scene is audited for host detail frame by frame, not just at the
+# first frame: no btop (CPU model, real memory, a process list naming
+# docker), no journalctl, no fastfetch. Commands start in $HOME so no prompt
+# shows the build path.
+
+- name: tiling
+  description: windows splitting both ways, which is what the wm is for
+  commands:
+    - footclient calcurse
+    - swaymsg splitv
+    - footclient sh -c 'pacman -Q | tail -24; exec zsh'
+    - swaymsg splith
+    - footclient sh -c 'printf "%s packages\n" "$(pacman -Q | wc -l)"; sway --version; exec zsh'
+  step: 2
+  hold: 4
+
+- name: launcher
+  description: rofi over the tiled desktop
+  # rofi grabs the keyboard and does not return, so it is detached and the
+  # scene plays with it on screen
+  overlay: rofi -show drun -show-icons -font 'JetBrainsMono Nerd Font 10' -lines 10
+  overlay_settle: 2
+  hold: 4
+
+- name: theme
+  description: the desktop switching between dark and light
+  # Measured rather than assumed: after the toggle, waybar repaints by 79%
+  # while the terminal panes change by under 14%. A foot window keeps the
+  # colours it started with, and a client started after the switch still
+  # gets them from the foot *server*, which read foot-theme.ini when it
+  # launched. That is what the desktop really does - the bar and the
+  # wallpaper follow immediately, terminals follow the next time the server
+  # restarts - so the scene shows the bar switching rather than pretending
+  # the whole screen inverts at once.
+  #
+  # The windows are still closed first: a bar flickering above four
+  # unchanged panes reads as a glitch, and one clean switch reads as a
+  # switch.
+  #
+  # rofi also has to go: it grabs the keyboard and never returns, so the
+  # previous scene leaves it on screen, and a theme switch behind a
+  # launcher is a switch nobody can see. Recorded once with it up, which
+  # showed exactly that.
+  commands:
+    - pkill -x rofi
+    - swaymsg '[app_id="foot"] kill'
+    # The click a user actually performs, not the rofi-driven picker: this
+    # is what the waybar theme module runs. It needs both stashed halves,
+    # which is what #18 settled.
+    - /usr/share/sway/scripts/theme-toggle.sh toggle
+    - footclient sh -c 'printf "%s packages\n" "$(pacman -Q | wc -l)"; sway --version; exec zsh'
+  step: 3
+  hold: 6

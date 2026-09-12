@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload desktop screenshots to the ISO bucket.
+"""Upload desktop screenshots and the tour video to the ISO bucket.
 
 Only under `latest/screenshots/`, never under a version prefix. The shots
 come from a container running whatever `ashlaros-settings` currently
@@ -31,6 +31,11 @@ def main() -> int:
         log("no screenshots to upload")
         return 1
 
+    # the tour, when the recording job produced one. Same prefix rule and
+    # the same reason: it is what the desktop looked like whenever this
+    # last ran, not what a given ISO contains.
+    videos = sorted(glob.glob(os.path.join(args.shot_dir, "*.webm")))
+
     bucket = os.environ["R2_BUCKET"]
     s3 = boto3.client(
         "s3",
@@ -44,6 +49,16 @@ def main() -> int:
         key = f"latest/screenshots/{os.path.basename(shot)}"
         s3.upload_file(shot, bucket, key, ExtraArgs={"ContentType": "image/png"})
         log(f"uploaded {key} ({os.path.getsize(shot)} bytes)")
+
+    for video in videos:
+        # an empty or truncated file would publish over a working tour and
+        # nobody would notice until someone pressed play
+        if os.path.getsize(video) == 0:
+            log(f"{video} is empty, refusing to publish it")
+            return 1
+        key = f"latest/video/{os.path.basename(video)}"
+        s3.upload_file(video, bucket, key, ExtraArgs={"ContentType": "video/webm"})
+        log(f"uploaded {key} ({os.path.getsize(video)} bytes)")
 
     return 0
 
