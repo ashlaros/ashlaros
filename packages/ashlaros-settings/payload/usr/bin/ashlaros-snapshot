@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+#
+# Snapshots of the root subvolume, for the update that breaks the machine.
+#
+# We install btrfs by default and this is what it is for: a `pacman -Syu`
+# that breaks the kernel, the GPU driver or systemd otherwise leaves a live
+# ISO and a manual chroot, on an Arch base running a third-party kernel.
+#
+# Recovery is NOT from the boot menu. We boot with systemd-boot and there
+# is no systemd-boot equivalent of limine-snapper-restore, so rolling back
+# means booting the ISO and running `snapper rollback` from a chroot. The
+# README says so plainly; this tool must not imply otherwise.
+#
+# The failure modes matter more than the happy path. A snapshot tool that
+# quietly does nothing is worse than no snapshot tool, because it turns "I
+# have no backups" into "I think I have backups" - so an ext4 root and an
+# unconfigured snapper are both reported, not swallowed.
+set -uo pipefail
+
+# 127 rather than 1 when snapshots are simply not available on this
+# machine, so an update path can tell "cannot snapshot here" from "tried to
+# snapshot and failed" and keep going in the first case.
+readonly UNAVAILABLE=127
+
+warn() { printf '\033[33m%s\033[0m\n' "$*" >&2; }
+die() { printf '\033[31m%s\033[0m\n' "$*" >&2; }
+
+usage() {
+    cat <<'EOF'
+usage: ashlaros-snapshot <create|list> [description]
+
+  create   snapshot the root subvolume now
+  list     what has been captured
+
+Rollback is a rescue-media procedure: boot the ISO, unlock the disk,
+and `snapper rollback`. See the README.
+EOF
+}
+
+# btrfs is a choice at install time - the configurator offers ext4 too - so
+# everything here has to degrade to "not available" rather than error.
+require_snapper() {
+    if ! command -v snapper >/dev/null; then
+        warn "snapper is not installed, so no snapshot was taken."
+        return "$UNAVAILABLE"
+    fi
+    if [ "$(findmnt -no FSTYPE /)" != "btrfs" ]; then
+        warn "the root filesystem is not btrfs, so no snapshot was taken."
+        return "$UNAVAILABLE"
+    fi
+    # Snapper installed but unconfigured snapshots nothing. Staying quiet
+    # here reads as a successful snapshot, so the next update looks
+    # recoverable when nothing has ever been captured.
+    #
+    # The listing is read from the config file rather than from
+    # `snapper list-configs`, whose output is a D-Bus round trip: with
+    # snapperd unreachable it fails with org.freedesktop.DBus.Error rather
+    # than printing an empty table, and a grep over that failure is
+    # indistinguishable from a machine that has no config.
+    if [ ! -f /etc/snapper/configs/root ]; then
+        die "snapper has no 'root' config, so NO SNAPSHOT WAS TAKEN."
+        die "create one with: sudo snapper -c root create-config /"
+        return 1
+    fi
+    return 0
+}
+
+create() {
+    local status
+    require_snapper || return $?
+    # "single" rather than pre/post: this is a point in time to come back
+    # to, and snap-pac already brackets pacman transactions in pairs
+    snapper -c root create --type single --cleanup-algorithm number \
+        --description "${1:-manual}" || {
+        status=$?
+        die "snapper failed to create the snapshot (exit $status)."
+        return "$status"
+    }
+    printf 'snapshot taken: %s\n' "${1:-manual}"
+}
+
+main() {
+    case "${1:-}" in
+        create)
+            shift
+            create "$@"
+            ;;
+        list)
+            require_snapper || return $?
+            snapper -c root list
+            ;;
+        -h | --help)
+            usage
+            ;;
+        *)
+            usage >&2
+            return 2
+            ;;
+    esac
+}
+
+main "$@"

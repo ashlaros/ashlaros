@@ -161,6 +161,42 @@ Read*). That asymmetry is deliberate: downloads are counted whether or not
 the token is set, and it can be added later without losing anything already
 counted. Until it is, the page says so rather than answering 500.
 
+## Snapshots, and what recovery actually involves
+
+The default layout is btrfs, and `snapper` plus `snap-pac` are installed
+with it. `snap-pac` is a pacman hook, so every transaction is bracketed by
+a snapshot without anyone remembering to ask for one: the snapshot exists
+*before* the upgrade that broke things. `ashlaros-snapshot create` takes
+one on demand, `ashlaros-snapshot list` shows what is there.
+
+**Rollback is a rescue-media procedure, not a boot-menu one.** Omarchy gets
+boot-menu rollback from limine; we boot with systemd-boot, which has no
+equivalent of `limine-snapper-restore`. So recovery is:
+
+1. Boot the AshlarOS ISO.
+2. Unlock the disk — `cryptsetup open /dev/nvme0n1p2 root`. The passphrase,
+   not the TPM: TPM enrolment is bound to PCR 7 and a firmware update can
+   invalidate that keyslot, so the passphrase is the one credential that
+   always works.
+3. Mount the top level and roll back: `mount /dev/mapper/root /mnt`, then
+   `snapper --no-dbus -c root rollback <number>` against it.
+4. Reboot.
+
+`$HOME` survives a root rollback, because `@home` is its own subvolume and
+only `@` is replaced. `@log` and `@pkg` are separate for the same reason —
+the journal that records the failure, and the package cache holding the
+version you may want to reinstall, both outlive the rollback.
+
+Retention is 12 snapshots with no timeline: snapshots follow package
+transactions, not the clock. Snapper's own default keeps 50 and adds one
+every hour forever, which fills a root subvolume quietly.
+
+On an ext4 install none of this exists, and `ashlaros-snapshot` says so and
+exits 127 rather than failing — an update path can tell "cannot snapshot
+here" from "tried and failed". A snapshot tool that quietly does nothing is
+worse than no snapshot tool, because it turns "I have no backups" into "I
+think I have backups".
+
 ## Using the repository on an existing system
 
 The `ashlaros` repository is dual-arch: `x86_64` and `aarch64`. The ISO is

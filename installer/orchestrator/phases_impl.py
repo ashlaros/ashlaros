@@ -137,6 +137,16 @@ DESKTOP_PACKAGES = [
     "power-profiles-daemon",
     # a firewall, which we had none of
     "ufw",
+    # Snapshots of the root subvolume. Installed unconditionally even
+    # though the layout may be ext4: the packages are small, and the
+    # alternative is a machine where `ashlaros-snapshot` is missing rather
+    # than one where it says snapshots are not available here.
+    #
+    # snap-pac is the cheap half - a pacman hook, so the snapshot exists
+    # before the upgrade that broke things without anyone remembering to
+    # ask for one.
+    "snapper",
+    "snap-pac",
     # firmware updates: LVFS metadata is refreshed by a timer, but nothing
     # is ever flashed unattended - see enable_services
     "fwupd",
@@ -708,6 +718,77 @@ SERVICES = (
 def enable_services(ctx: InstallContext) -> None:
     for service in SERVICES:
         run_command(["arch-chroot", str(ctx.target), "systemctl", "enable", service])
+
+
+# Snapper's own template keeps 50 numbered snapshots and creates a timeline
+# one every hour forever. On a root subvolume that is a disk that fills up
+# quietly, so the numbers below are the retention policy rather than a
+# preference: a bounded number of snapshots around package transactions,
+# and no timeline at all.
+SNAPPER_ROOT_CONFIG = {
+    # snap-pac brackets every pacman transaction, so updates are what
+    # produce snapshots here - not the clock
+    "TIMELINE_CREATE": "no",
+    "TIMELINE_CLEANUP": "yes",
+    "NUMBER_CLEANUP": "yes",
+    "NUMBER_MIN_AGE": "1800",
+    "NUMBER_LIMIT": "12",
+    "NUMBER_LIMIT_IMPORTANT": "6",
+    # stop making snapshots rather than fill the disk: below these the
+    # cleanup runs harder, and a machine that cannot boot for lack of space
+    # is worse than one missing its oldest snapshot
+    "SPACE_LIMIT": "0.3",
+    "FREE_LIMIT": "0.2",
+}
+
+
+def configure_snapshots(ctx: InstallContext) -> None:
+    """Configure snapper, when the root is btrfs.
+
+    The configurator offers ext4 as well, so this has to be a no-op there
+    rather than a failure - nothing in the update path may depend on
+    snapshots existing.
+
+    create-config makes /.snapshots itself; the subvolume layout the
+    configurator asks archinstall for (@ for root, @home separate) is what
+    makes a root rollback leave $HOME alone.
+    """
+    fstype = subprocess.run(
+        ["findmnt", "-no", "FSTYPE", str(ctx.target)],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if fstype != "btrfs":
+        info(f"› root is {fstype or 'not btrfs'}, so snapshots are not configured")
+        return
+
+    result = subprocess.run(
+        ["arch-chroot", str(ctx.target), "snapper", "--no-dbus", "-c", "root",
+         "create-config", "/"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        # not fatal: an installed system without snapshots still boots, and
+        # ashlaros-snapshot says loudly that it has no config rather than
+        # pretending a snapshot was taken
+        error(f"snapper create-config failed: {result.stderr.strip()}")
+        return
+
+    config = ctx.target / "etc/snapper/configs/root"
+    lines = config.read_text().splitlines()
+    for index, line in enumerate(lines):
+        key = line.split("=", 1)[0]
+        if key in SNAPPER_ROOT_CONFIG:
+            lines[index] = f'{key}="{SNAPPER_ROOT_CONFIG[key]}"'
+    config.write_text("\n".join(lines) + "\n")
+
+    # the timeline timer is what the config just turned off; cleanup is what
+    # enforces the numbers above
+    run_command(
+        ["arch-chroot", str(ctx.target), "systemctl", "enable", "snapper-cleanup.timer"]
+    )
+    info("› snapshots configured, keeping 12 around package transactions")
 
 
 def configure_firewall(ctx: InstallContext) -> None:

@@ -26,6 +26,7 @@ def build_phases():
         configure_firewall,
         configure_login,
         configure_mdns,
+        configure_snapshots,
         configure_system,
         enable_services,
         enroll_tpm,
@@ -45,6 +46,7 @@ def build_phases():
         ("Enabling services", enable_services),
         ("Resolving .local names", configure_mdns),
         ("Configuring the firewall", configure_firewall),
+        ("Configuring snapshots", configure_snapshots),
         ("Validating boot", validate_boot),
     ]
 
