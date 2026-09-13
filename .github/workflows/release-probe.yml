@@ -42,15 +42,15 @@ jobs:
             && echo "EDIT_TARGET_SAME ok" || echo "EDIT_TARGET_SAME failed $?"
 
           echo "== edit --target, DIFFERENT commit (a real tag move) =="
-          # build-iso's actual case: the tag exists on yesterday's commit
-          # and the rebuild tries to drag it to today's
+          # build-iso's actual case: the release exists at HEAD and the
+          # rebuild drags its tag to another commit. Created at HEAD (the
+          # default) because creating one AT an older commit is itself
+          # refused - which the previous probe found.
           old=$(git rev-parse HEAD~1)
-          gh release delete "$TAG" --repo "$repo" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG" SHA256SUMS --repo "$repo" \
-            --title probe --notes first --target "$old" && echo "CREATE_AT_OLD ok"
-          gh release edit "$TAG" --repo "$repo" --target "$GITHUB_SHA" \
-            && echo "EDIT_TARGET_MOVE ok" || echo "EDIT_TARGET_MOVE failed $?"
-          echo "tag now at: $(gh api repos/$repo/git/refs/tags/$TAG --jq .object.sha || echo unreadable)"
+          gh release edit "$TAG" --repo "$repo" --target "$old" \
+            && echo "EDIT_TARGET_MOVE ok" || echo "EDIT_TARGET_MOVE failed"
+          echo "tag now at: $(gh api repos/$repo/git/refs/tags/$TAG --jq .object.sha 2>&1 | tail -1)"
+          echo "wanted    : $old"
           echo "HEAD is   : $GITHUB_SHA"
 
           echo "== cleanup =="
