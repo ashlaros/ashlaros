@@ -57,10 +57,15 @@ jobs:
       - name: build raylib 6.0
         run: |
           curl -sSL https://github.com/raysan5/raylib/archive/refs/tags/6.0.tar.gz | tar xz
+          # shared, as Arch ships it: a static libraylib.a leaves every
+          # X11 symbol for the final link to resolve, which is a problem
+          # the packaged build does not have
           cmake -S raylib-6.0 -B /tmp/rb -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=/usr/local
+            -DBUILD_EXAMPLES=OFF -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_INSTALL_PREFIX=/usr/local
           cmake --build /tmp/rb -j"$(nproc)"
           sudo cmake --install /tmp/rb
+          sudo ldconfig
       - name: build the client
         # /usr/local/lib is not on Ubuntu's default link path, where Arch
         # would have raylib in /usr/lib and need none of this
