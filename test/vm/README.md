@@ -28,6 +28,17 @@ even with `/dev/kvm` mapped, so this is TCG.
 The workspace defaults to `/tmp/ashlaros-vm` and holds the ISO, the target
 disk, the firmware variables and `out/`. Set `WORKSPACE` to keep several.
 
+`TPM=no` installs without a TPM, which is the passphrase-at-every-boot
+path. `LID=yes` attaches an ACPI lid button, reporting closed.
+
+The lid is worth explaining: QEMU has no lid device — `-device help` lists
+none — so the hardware predicates' positive lid path had never run against
+anything but a fabricated sysfs tree. A lid is defined by an ACPI table
+rather than by a device model, so `boot.sh` compiles a four-line SSDT with
+`iasl` and loads it with `-acpitable`. The guest kernel's own button
+driver then creates `/proc/acpi/button/lid/LID0/state`, which is the file
+`laptop` and `laptop-closed` actually read.
+
 ## Two things that will bite you
 
 **Keyboard layouts.** QMP sends key *positions*, not characters, so what

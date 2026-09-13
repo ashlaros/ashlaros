@@ -15,6 +15,7 @@ set -u
 seconds="${1:-180}"
 tpm="${TPM:-yes}"
 cdrom="${CDROM:-yes}"
+lid="${LID:-no}"
 
 mkdir -p /vm/tpm /vm/out
 [ -f /vm/target.qcow2 ] || qemu-img create -f qcow2 /vm/target.qcow2 20G >/dev/null
@@ -62,6 +63,29 @@ if [[ $tpm == yes ]]; then
   echo "## TPM attached"
 else
   echo "## no TPM"
+fi
+
+if [[ $lid == yes ]]; then
+  # A real ACPI lid button, so `laptop` and `laptop-closed` can be tested
+  # against the kernel's own button driver rather than against a
+  # fabricated sysfs tree. QEMU has no lid device - `-device help` lists
+  # none - but a lid is defined by an ACPI table, and -acpitable loads
+  # one. _LID returning 0 is a closed lid, which is the case that had
+  # never been exercised on anything reachable.
+  cat > /tmp/lid.asl <<'ASL'
+DefinitionBlock ("", "SSDT", 2, "ASHLAR", "LID", 0x1) {
+  Scope (\_SB) {
+    Device (LID0) {
+      Name (_HID, EisaId ("PNP0C0D"))
+      Name (_STA, 0x0F)
+      Method (_LID, 0) { Return (0x0) }
+    }
+  }
+}
+ASL
+  iasl /tmp/lid.asl >/dev/null 2>&1
+  args+=(-acpitable "file=/tmp/lid.aml")
+  echo "## lid attached, closed"
 fi
 
 echo "## booting for ${seconds}s"

@@ -43,7 +43,7 @@ start() {
   docker rm -f "$container" >/dev/null 2>&1 || true
   docker run -d --rm --name "$container" --platform linux/amd64 \
     --device /dev/kvm -v "$workspace:/vm" \
-    ${TPM:+-e "TPM=$TPM"} ${CDROM:+-e "CDROM=$CDROM"} \
+    ${TPM:+-e "TPM=$TPM"} ${CDROM:+-e "CDROM=$CDROM"} ${LID:+-e "LID=$LID"} \
     "$image" bash /vm/boot.sh "${SECONDS_TO_RUN:-10800}" >/dev/null
   echo "## $container started, workspace $workspace"
 }
