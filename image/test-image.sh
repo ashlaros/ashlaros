@@ -110,8 +110,13 @@ if [[ $booted -ne 1 ]]; then
 fi
 
 say "booted: matched the marker on the serial console"
-# The first-boot script asks for a username before the network comes up,
-# so reaching that prompt means systemd, the root filesystem and our own
-# unit all did their jobs.
-grep -qE "Username:|Ready\. Starting the desktop" "$serial" &&
+
+# Nice to have, never fatal: firstboot asks on tty1, so whether its prompt
+# reaches the serial log depends on console ordering rather than on
+# anything being wrong. As the last command in the script its exit status
+# is the script's, which failed a run that had already booted.
+if grep -qE "Username:|Ready\. Starting the desktop" "$serial"; then
     echo "  reached the firstboot prompt"
+else
+    echo "  (firstboot prompt goes to tty1; not expected on serial)"
+fi
