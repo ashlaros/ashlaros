@@ -138,6 +138,13 @@ say "swapping the generic kernel for the board one"
 # a replace, not an install, and -dd would leave the initramfs hooks
 # unsatisfied.
 chroot "$mount_root" pacman -Rdd --noconfirm linux-aarch64 2>/dev/null || true
+# uboot-raspberrypi goes too, and linux-rpi conflicts with it for a
+# reason worth knowing: the ALARM rpi rootfs chain-loads the kernel
+# through U-Boot, while linux-rpi is booted directly by the Pi firmware
+# reading kernel_2712.img off the FAT partition. Two boot paths, and the
+# image has to pick one - direct, because that is what a Pi 5 does and
+# what extract-rpi-kernel.sh then finds.
+chroot "$mount_root" pacman -Rdd --noconfirm uboot-raspberrypi 2>/dev/null || true
 chroot "$mount_root" pacman -S --noconfirm --needed linux-rpi raspberrypi-bootloader firmware-raspberrypi
 
 say "installing the package set"
