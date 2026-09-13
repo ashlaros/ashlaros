@@ -8,6 +8,10 @@ on:
     paths:
       - iso/**
       - .github/workflows/build-iso.yml
+      # the harness is now what decides whether an ISO publishes, so a
+      # change to it has to be exercised rather than trusted until the
+      # next time someone touches iso/
+      - test/vm/**
   workflow_dispatch:
 
 concurrency:
