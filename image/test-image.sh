@@ -63,6 +63,16 @@ qemu-system-aarch64 \
     -monitor none >"$work/qemu.out" 2>&1 &
 qemu_pid=$!
 
+# QEMU exiting at once means it refused the arguments, and the message is
+# in its stdout rather than on the serial console - swallowing it cost a
+# 16-minute run to learn "exit code 1".
+sleep 2
+if ! kill -0 "$qemu_pid" 2>/dev/null; then
+    echo "qemu exited immediately:" >&2
+    cat "$work/qemu.out" >&2
+    exit 1
+fi
+
 booted=0
 for _ in $(seq 1 "$timeout_s"); do
     sleep 1
