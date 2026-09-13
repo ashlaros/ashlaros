@@ -1,0 +1,45 @@
+name: release-probe
+
+# Throwaway. Isolates which call in build-iso's release step returns
+# HTTP 403, on a disposable release rather than by guessing at the real
+# one. Delete once the answer is recorded.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - name: probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v0.0.0-probe
+        run: |
+          repo="${{ github.repository }}"
+          gh release delete "$TAG" --repo "$repo" --yes --cleanup-tag 2>/dev/null || true
+
+          echo "== create (published, like a first build of the day) =="
+          echo probe > SHA256SUMS
+          gh release create "$TAG" SHA256SUMS --repo "$repo" \
+            --title probe --notes first && echo "CREATE ok"
+
+          echo "== upload --clobber =="
+          gh release upload "$TAG" SHA256SUMS --repo "$repo" --clobber \
+            && echo "UPLOAD ok" || echo "UPLOAD failed $?"
+
+          echo "== edit --notes only =="
+          gh release edit "$TAG" --repo "$repo" --notes second \
+            && echo "EDIT_NOTES ok" || echo "EDIT_NOTES failed $?"
+
+          echo "== edit --target (what build-iso does) =="
+          gh release edit "$TAG" --repo "$repo" --target "$GITHUB_SHA" \
+            && echo "EDIT_TARGET ok" || echo "EDIT_TARGET failed $?"
+
+          echo "== cleanup =="
+          gh release delete "$TAG" --repo "$repo" --yes --cleanup-tag
