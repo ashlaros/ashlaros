@@ -24,11 +24,26 @@ mkdir -p /vm/tpm /vm/out
 # pair, or the firmware forgets the boot entry the installer wrote
 [ -f /vm/ovmf_vars.fd ] || cp /usr/share/edk2/x64/OVMF_VARS.4m.fd /vm/ovmf_vars.fd
 
+# KVM when the kernel device is actually readable, TCG when it is not.
+# Both happen: under rootless docker /dev/kvm maps in owned by nobody and
+# cannot be opened however it is passed, while a CI runner's docker is
+# rootful and it can. The difference is not cosmetic - an install is
+# minutes with KVM and about 35 without - so it is detected rather than
+# assumed, and announced so a slow run explains itself.
+if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+  # -cpu host passes the runner's own features through, which covers the
+  # AVX2 the x86_64_v3 stack needs
+  accel=(-accel kvm -cpu host)
+  echo "## KVM"
+else
+  # -cpu max: the ISO is x86_64_v3, so the guest needs AVX2, and TCG only
+  # offers it under a model that claims everything
+  accel=(-accel tcg -cpu max)
+  echo "## no KVM, emulating - expect an install to take ~35 minutes"
+fi
+
 args=(
-  # -cpu max: the ISO is x86_64_v3, so the guest needs AVX2. KVM is not
-  # available inside this container even with /dev/kvm mapped, so this is
-  # TCG - correct, and slow enough that an install takes ~35 minutes.
-  -cpu max
+  "${accel[@]}"
   -m 4G
   -smp 2
   -drive "if=pflash,format=raw,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd"

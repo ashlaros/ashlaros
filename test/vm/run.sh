@@ -4,6 +4,8 @@
 #
 #   run.sh fetch [version]   download an ISO into the workspace
 #   run.sh install           boot the ISO and drive the installer
+#   run.sh install-start     boot the ISO and stop at the first screen
+#   run.sh wait-installed [s]  wait for the installed system to reach sway
 #   run.sh boot              boot the installed disk
 #   run.sh shot <name>       screenshot the framebuffer, as PNG
 #   run.sh film <name> [n] [gap]  sample the framebuffer repeatedly, for
@@ -75,6 +77,33 @@ sys.exit(0 if bytes([0xaa,0xaa,0xaa]) * 16 in raw else 1)
   return 1
 }
 
+# The installed system with autologin - the default - lands in sway, whose
+# wallpaper fills the screen with one colour no text console ever shows:
+# the framebuffer stops being mostly black. greetd's tuigreet, a kernel
+# panic and the loader menu are all text on black, so this distinguishes a
+# desktop from every way the boot can go wrong.
+wait_for_desktop() {
+  local deadline=$((SECONDS + ${1:-3600}))
+  while ((SECONDS < deadline)); do
+    sleep 20
+    docker exec "$container" python3 /vm/qmp.py '' probe 1 >/dev/null 2>&1 || continue
+    if docker exec "$container" python3 -c "
+import sys
+raw = open('/vm/out/probe.ppm','rb').read()
+body = raw[raw.index(b'255\n') + 4:]
+pixels = [body[i:i+3] for i in range(0, len(body) - 2, 3)]
+dark = sum(1 for p in pixels if max(p) < 24)
+# a console is nearly all black; a wallpaper is nearly none of it
+sys.exit(0 if pixels and dark < len(pixels) * 0.5 else 1)
+" 2>/dev/null; then
+      echo "## the installed system reached the desktop"
+      return 0
+    fi
+  done
+  echo "## no desktop within ${1:-3600}s" >&2
+  return 1
+}
+
 png() {
   docker exec "$container" python3 -c "
 import struct, sys, zlib
@@ -125,7 +154,24 @@ install)
   start
   wait_for_installer 900
   docker exec -d "$container" python3 /vm/install.py
-  echo "## driving the installer; expect ~35 minutes under TCG"
+  echo "## driving the installer"
+  ;;
+# Everything `install` does except the driving: boot the ISO and wait for
+# the first screen. That alone is worth a test - it covers systemd-boot
+# finding the entry, the squashfs mounting and the orchestrator importing
+# - and it answers in a couple of minutes rather than an hour.
+install-start)
+  rm -f "$workspace/target.qcow2" "$workspace/ovmf_vars.fd" \
+    "$workspace/qmp.sock" "$workspace"/out/*.ppm "$workspace"/out/*.png
+  start
+  wait_for_installer "${2:-900}"
+  ;;
+# The installer reboots into what it wrote, so the same VM comes back on
+# the disk. Waiting for the desktop rather than for the installer's own
+# "done": an install that finishes and leaves an unbootable system is
+# exactly the failure a completion message cannot report.
+wait-installed)
+  wait_for_desktop "${2:-3600}"
   ;;
 boot)
   CDROM=no start

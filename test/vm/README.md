@@ -22,8 +22,12 @@ test/vm/run.sh de 'pacman -Q sway' q   # run a command on the installed system
 test/vm/run.sh clean              # throw the workspace away
 ```
 
-`install` takes about 35 minutes. There is no KVM inside the container
-even with `/dev/kvm` mapped, so this is TCG.
+`install` takes about 35 minutes locally. `boot.sh` uses KVM when
+`/dev/kvm` is readable and TCG when it is not, and says which at startup:
+under rootless docker the device maps in owned by `nobody` and cannot be
+opened however it is passed, so a laptop gets TCG. A CI runner's docker is
+rootful and gets KVM, which is the difference between an hour and a few
+minutes.
 
 The workspace defaults to `/tmp/ashlaros-vm` and holds the ISO, the target
 disk, the firmware variables and `out/`. Set `WORKSPACE` to keep several.
@@ -89,3 +93,22 @@ types into a void and leaves the installer sitting on screen 1.
 - `CDROM=no test/vm/run.sh boot` — boots the installed disk. With a TPM
   attached and enrolled, this must reach the desktop with no passphrase
   prompt.
+
+## In CI
+
+`test/vm/ci.sh` is the same harness with an exit status instead of a
+prompt, called by two jobs in `build-iso.yml`:
+
+| job | asks |
+|---|---|
+| `test-boot` | does the freshly built ISO reach the installer's first screen |
+| `test-install` | does installing it produce a system that boots to a desktop |
+
+Both are gating - `publish` needs them, so nothing reaches R2 or a release
+until something has booted it. Screenshots and the serial log upload on
+failure as well as success, because a failure with no picture of the
+screen is one nobody can diagnose.
+
+`test-install` deliberately waits for the *desktop* rather than for the
+installer's own completion message. An install that finishes and leaves an
+unbootable disk reports success; only a boot disproves it.
