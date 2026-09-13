@@ -115,6 +115,21 @@ export async function serveObject(request, bucket, key, extraHeaders = {}) {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set('etag', object.httpEtag);
+  // writeHttpMetadata carries the stored content type and nothing about
+  // size or ranges. curl and a browser downloading an ISO do not care; a
+  // <video> element does - it probes with HEAD, finds no length and no
+  // advertised range support, concludes it cannot seek, and fails the
+  // load with a format error even though the bytes are perfect and a
+  // range request would have been answered.
+  headers.set('accept-ranges', 'bytes');
+  const ranged = object.range && 'offset' in object.range;
+  if (ranged) {
+    const { offset, length } = object.range;
+    headers.set('content-range', `bytes ${offset}-${offset + length - 1}/${object.size}`);
+    headers.set('content-length', String(length));
+  } else {
+    headers.set('content-length', String(object.size));
+  }
   for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
 
   const status = object.body ? (request.headers.get('range') ? 206 : 200) : 304;

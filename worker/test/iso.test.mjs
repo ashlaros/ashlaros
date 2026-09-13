@@ -125,3 +125,23 @@ test('the tour serves as video, not as an attachment', async () => {
   // whichever one a cache happened to see first
   assert.equal(res.headers.get('cache-control'), 'no-cache');
 });
+
+test('a media file carries the length and range support a player needs', async () => {
+  // a <video> probes with HEAD before it will play: no content-length and
+  // no accept-ranges reads as "cannot seek", and the element fails the
+  // load with a format error even though the bytes are perfect
+  const res = await worker.fetch(req('latest/video/tour.webm'), env(), {});
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('accept-ranges'), 'bytes');
+  assert.equal(res.headers.get('content-length'), '334986');
+});
+
+test('a ranged request reports which bytes it answered with', async () => {
+  const request = new Request('https://iso.ashlaros.download/latest/ashlaros.iso', {
+    headers: { range: 'bytes=100-199' },
+  });
+  const res = await worker.fetch(request, env(), {});
+  assert.equal(res.status, 206);
+  assert.equal(res.headers.get('content-range'), 'bytes 100-199/334986');
+  assert.equal(res.headers.get('content-length'), '100');
+});

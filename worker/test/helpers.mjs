@@ -14,10 +14,21 @@ export function bucketOf(keys) {
       }
       return { objects, delimitedPrefixes: [...dirs] };
     },
-    get: async (k) =>
-      keys.includes(k)
-        ? { body: 'bytes', writeHttpMetadata: () => {}, httpEtag: '"e"' }
-        : null,
+    // size and range are what R2 really returns, and what the video
+    // element needs: without them the response carries no content-length
+    get: async (k, options = {}) => {
+      if (!keys.includes(k)) return null;
+      const size = 334_986;
+      const header = options.range?.get?.('range');
+      const match = header?.match(/^bytes=(\d+)-(\d*)$/);
+      const object = { body: 'bytes', size, writeHttpMetadata: () => {}, httpEtag: '"e"' };
+      if (match) {
+        const offset = Number(match[1]);
+        const end = match[2] === '' ? size - 1 : Number(match[2]);
+        object.range = { offset, length: end - offset + 1 };
+      }
+      return object;
+    },
   };
 }
 
