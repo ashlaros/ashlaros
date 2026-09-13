@@ -123,14 +123,28 @@ pacman-key --lsign-key "$(
         awk -F: '/^fpr:/ {print $10; exit}'
 )"
 rm -f /tmp/ashlaros.gpg
-pacman -Syu --noconfirm
+# -Syy without -u: the rpi rootfs ships linux-aarch64, and a full upgrade
+# pulls a NEWER linux-aarch64 and rebuilds its initramfs - work that is
+# thrown away two lines later, and which then blocks on the linux-rpi
+# conflict because both provide `linux`. Refresh the databases, swap the
+# kernel, and upgrade after.
+pacman -Syy --noconfirm
 CHROOT
+
+say "swapping the generic kernel for the board one"
+# The rpi rootfs ships linux-aarch64, which does not boot a Pi - the
+# generic kernel has no bcm2712 support and the firmware never finds a
+# kernel it can start. linux-rpi conflicts with it on `linux`, so this is
+# a replace, not an install, and -dd would leave the initramfs hooks
+# unsatisfied.
+chroot "$mount_root" pacman -Rdd --noconfirm linux-aarch64 2>/dev/null || true
+chroot "$mount_root" pacman -S --noconfirm --needed linux-rpi raspberrypi-bootloader firmware-raspberrypi
 
 say "installing the package set"
 # comments and blank lines stripped here rather than in the file, so the
 # list stays readable and still feeds pacman directly
 mapfile -t packages < <(grep -vE '^\s*(#|$)' "$here/packages.aarch64")
-chroot "$mount_root" pacman -S --noconfirm --needed "${packages[@]}"
+chroot "$mount_root" pacman -Syu --noconfirm --needed "${packages[@]}"
 
 say "configuring first boot"
 install -Dm755 "$here/firstboot/ashlaros-firstboot" \

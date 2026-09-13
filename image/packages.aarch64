@@ -16,11 +16,11 @@
 
 # base
 base
-# the board kernel, not linux-aarch64: the generic one does not boot a Pi
-linux-rpi
+# linux-rpi and the board firmware are NOT listed here: the rootfs ships
+# linux-aarch64, and the two conflict on `linux`, so build-image.sh
+# replaces one with the other before this list is installed. Listing them
+# again would just be the conflict in a second place.
 linux-firmware
-raspberrypi-bootloader
-firmware-raspberrypi
 sudo
 which
 less
