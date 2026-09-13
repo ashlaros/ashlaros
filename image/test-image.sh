@@ -55,7 +55,13 @@ serial="$work/serial.log"
 # writing to the kernel ring buffer once journald is up, so its later
 # "Reached target" lines never reach the serial - audit keeps flowing
 # through kauditd, which is why manjaro-sway leads with it.
-marker="${BOOT_MARKER_REGEX:-audit.*hostname=ashlaros|ashlaros[-a-z]* *login:|Ready\. Starting the desktop|Username:}"
+# The re-mount is the signal that matters and it took a failing run to
+# see why: cmdline.txt carries console=tty1, so agetty's login prompt and
+# our firstboot questions go to the framebuffer, not the serial line. The
+# kernel's own messages still come out here, and systemd re-mounting the
+# root read-write is proof that userspace is up - the initramfs mounted
+# it once already, and only PID 1 does it a second time.
+marker="${BOOT_MARKER_REGEX:-re-mounted|audit.*hostname=ashlaros|ashlaros[-a-z]* *login:|Ready\. Starting the desktop|Username:}"
 
 say "booting under -M raspi4b (timeout ${timeout_s}s)"
 qemu-system-aarch64 \
