@@ -59,4 +59,9 @@ mcopy -i "$target" -o "::${initrd}" "$out_dir/initramfs-linux.img"
 mcopy -i "$target" -o "::$dtb" "$out_dir/$dtb"
 echo "$dtb" > "$out_dir/dtb-name"
 
+# The boot test must use the image's own kernel command line, not a
+# hand-written guess at it - that is how root=/dev/mmcblk1p2 (which is
+# manjaro-sway's Pi 4 layout, not ours) survived three runs.
+mcopy -i "$target" -o "::cmdline.txt" "$out_dir/cmdline" 2>/dev/null || true
+
 echo "extracted $kernel + $initrd + $dtb to $out_dir/"

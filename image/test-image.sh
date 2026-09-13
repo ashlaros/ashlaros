@@ -63,7 +63,7 @@ qemu-system-aarch64 \
     -kernel "$out_dir/Image" \
     -initrd "$out_dir/initramfs-linux.img" \
     -dtb "$out_dir/$dtb" \
-    -append "root=/dev/mmcblk1p2 rw rootwait earlycon=pl011,0xfe201000 console=ttyAMA0,115200 ignore_loglevel systemd.journald.forward_to_console=1" \
+    -append "$(cat "$out_dir/cmdline" 2>/dev/null || echo root=LABEL=ASHLAR_ROOT rw rootwait) earlycon=pl011,0xfe201000 console=ttyAMA0,115200 ignore_loglevel systemd.journald.forward_to_console=1" \
     -drive file="$image",if=sd,format=raw \
     -nographic \
     -serial "file:$serial" \

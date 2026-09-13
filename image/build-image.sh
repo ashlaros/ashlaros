@@ -210,6 +210,30 @@ LABEL=ASHLAR_ROOT  /      ext4  defaults,noatime  0 1
 LABEL=ASHLAR_BOOT  /boot  vfat  defaults          0 2
 EOF
 
+say "writing the boot configuration"
+# The Pi firmware reads these two off the FAT partition before any kernel
+# exists. Without writing them the image carries whatever ALARM's rootfs
+# shipped, which names ALARM's partition layout and not the one created
+# above - the kernel then starts, finds no root, and sits in the
+# initramfs forever.
+#
+# By label rather than by device node or PARTUUID: firstboot repartitions
+# the root to fill the card, and the label is the only one of the three
+# that survives that.
+cat > "$mount_root/boot/cmdline.txt" <<'EOF'
+root=LABEL=ASHLAR_ROOT rw rootwait console=serial0,115200 console=tty1 fsck.repair=yes
+EOF
+
+# initramfs=, or the firmware loads the kernel alone and the LABEL= above
+# has nothing to resolve it with.
+cat > "$mount_root/boot/config.txt" <<'EOF'
+# AshlarOS, Raspberry Pi 5
+arm_64bit=1
+enable_uart=1
+initramfs initramfs-linux.img followkernel
+disable_overscan=1
+EOF
+
 say "unmounting"
 rm -f "$mount_root/etc/resolv.conf"
 
