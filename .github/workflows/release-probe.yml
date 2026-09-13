@@ -37,9 +37,21 @@ jobs:
           gh release edit "$TAG" --repo "$repo" --notes second \
             && echo "EDIT_NOTES ok" || echo "EDIT_NOTES failed $?"
 
-          echo "== edit --target (what build-iso does) =="
+          echo "== edit --target, same commit (no tag move) =="
           gh release edit "$TAG" --repo "$repo" --target "$GITHUB_SHA" \
-            && echo "EDIT_TARGET ok" || echo "EDIT_TARGET failed $?"
+            && echo "EDIT_TARGET_SAME ok" || echo "EDIT_TARGET_SAME failed $?"
+
+          echo "== edit --target, DIFFERENT commit (a real tag move) =="
+          # build-iso's actual case: the tag exists on yesterday's commit
+          # and the rebuild tries to drag it to today's
+          old=$(git rev-parse HEAD~1)
+          gh release delete "$TAG" --repo "$repo" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" SHA256SUMS --repo "$repo" \
+            --title probe --notes first --target "$old" && echo "CREATE_AT_OLD ok"
+          gh release edit "$TAG" --repo "$repo" --target "$GITHUB_SHA" \
+            && echo "EDIT_TARGET_MOVE ok" || echo "EDIT_TARGET_MOVE failed $?"
+          echo "tag now at: $(gh api repos/$repo/git/refs/tags/$TAG --jq .object.sha || echo unreadable)"
+          echo "HEAD is   : $GITHUB_SHA"
 
           echo "== cleanup =="
           gh release delete "$TAG" --repo "$repo" --yes --cleanup-tag
