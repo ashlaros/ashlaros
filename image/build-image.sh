@@ -247,4 +247,11 @@ name="ashlaros-${version}-aarch64-rpi5.img.xz"
 xz -T0 -9 -c "$image" > "$out_dir/$name"
 ( cd "$out_dir" && sha256sum "$name" > "SHA256SUMS.$name" )
 
+# The build runs under sudo; everything after it does not - and the whole
+# point of the mtools boot test is that it needs no privileges. Hand the
+# output back to whoever invoked us.
+if [[ -n ${SUDO_UID:-} ]]; then
+    chown -R "$SUDO_UID:${SUDO_GID:-$SUDO_UID}" "$out_dir"
+fi
+
 say "built $out_dir/$name ($(stat -c%s "$out_dir/$name") bytes)"
