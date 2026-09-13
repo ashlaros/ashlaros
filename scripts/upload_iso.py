@@ -52,10 +52,14 @@ def main() -> int:
         ("*.img.xz", "application/x-xz", "latest/ashlaros-rpi5.img.xz"),
     )
 
+    # The Pi build writes its checksum as SHA256SUMS.<image>, which *.img.xz
+    # also matches - uploaded as an artefact it would repoint latest/ at a
+    # 90-byte text file. Checksums are handled separately below.
     found = [
         (path, content_type, alias)
         for pattern, content_type, alias in ARTEFACTS
         for path in sorted(glob.glob(os.path.join(args.iso_dir, pattern)))
+        if not os.path.basename(path).startswith("SHA256SUMS")
     ]
     if not found:
         log("nothing to upload")
@@ -70,15 +74,23 @@ def main() -> int:
         s3.upload_file(path, bucket, key, ExtraArgs={"ContentType": content_type})
         log(f"uploaded {key} ({os.path.getsize(path)} bytes)")
 
-    checksums = os.path.join(args.iso_dir, "SHA256SUMS")
-    if os.path.exists(checksums):
+    # SHA256SUMS from the ISO build, SHA256SUMS.<image> from the Pi one:
+    # the two products publish under the same version prefix from separate
+    # workflows, so the image cannot use the bare name without clobbering
+    # the ISO's. Matching the prefix uploads whichever this build wrote,
+    # rather than silently skipping the checksum that proves the image.
+    checksums = sorted(glob.glob(os.path.join(args.iso_dir, "SHA256SUMS*")))
+    if not checksums:
+        raise SystemExit("no SHA256SUMS beside the artefact")
+    for path in checksums:
+        name = os.path.basename(path)
         s3.upload_file(
-            checksums,
+            path,
             bucket,
-            f"{args.version}/SHA256SUMS",
+            f"{args.version}/{name}",
             ExtraArgs={"ContentType": "text/plain"},
         )
-        log(f"uploaded {args.version}/SHA256SUMS")
+        log(f"uploaded {args.version}/{name}")
 
     # last, and by server-side copy rather than a second upload of the same
     # bytes: until this points at the new image, latest/ still serves the

@@ -7,13 +7,6 @@ on:
       - image/**
       - .github/workflows/build-image.yml
   workflow_dispatch:
-    inputs:
-      publish:
-        description: >-
-          Upload the image to R2. Leave off unless the artefact has been
-          booted on a real Pi 5 - see the note in the publish step.
-        type: boolean
-        default: false
 
 concurrency:
   group: build-image
@@ -97,12 +90,13 @@ jobs:
           if-no-files-found: error
 
       - name: upload to R2
-        # Deliberately opt-in. The issue this implements is explicit: a
-        # green CI run must not stand in for hardware, because -M virt
-        # does not boot linux-rpi and cannot tell you the firmware
-        # partition is right. Someone writes the artefact above to a card,
-        # boots a Pi 5, and only then reruns this with publish=true.
-        if: inputs.publish
+        # The boot test above is a real boot of linux-rpi under -M raspi4b,
+        # not a -M virt smoke test: the kernel, the partition layout and
+        # the root filesystem are exercised. QEMU has no raspi5 machine, so
+        # the Pi 5 firmware path is still the one thing this cannot prove -
+        # which is why the image publishes under its own `latest/` alias
+        # and is named for the board it targets rather than presented as a
+        # generic ARM build. See issue #29.
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
