@@ -440,7 +440,8 @@ think I have backups".
 ## Using the repository on an existing system
 
 The `ashlaros` repository is dual-arch: `x86_64` and `aarch64`. The ISO is
-x86_64 only, but the packages install on Arch Linux ARM just as well.
+x86_64; ARM users get either the prebuilt Pi 5 image below or these packages
+on an existing Arch Linux ARM system.
 
 ```sh
 # 1. trust the signing key
@@ -506,9 +507,12 @@ is manjaro-sway's `ci/boot-smoke.sh`, which solved this first.
 
 **It is still not a proof it boots on a Pi 5.** QEMU has no `raspi5`
 machine, so the image is booted on the Pi 4 model: that exercises the
-kernel and the root filesystem, not the Pi 5 firmware. Publishing is a
-manual, opt-in input on `build-image.yml` and should follow someone
-writing the artefact to a card.
+kernel and the root filesystem, not the Pi 5 firmware. The image publishes
+on every build to
+[`latest/ashlaros-rpi5.img.xz`](https://iso.ashlaros.download/latest/ashlaros-rpi5.img.xz),
+under its own alias and named for the board, so what it is and is not
+tested on stays legible - restore the gate by re-adding `if: inputs.publish`
+to the upload step.
 
 ## Building
 

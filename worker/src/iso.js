@@ -91,9 +91,12 @@ export function renderIndex(byVersion, shots = [], tour = null) {
 
   return page(
     TITLE,
-    `      <p>The newest image is always at
-        <a href="/latest/ashlaros.iso"><code>/latest/ashlaros.iso</code></a>.
-        Verify a download against the <code>SHA256SUMS</code> beside it.
+    `      <p>The newest x86_64 ISO is always at
+        <a href="/latest/ashlaros.iso"><code>/latest/ashlaros.iso</code></a>,
+        and the newest Raspberry Pi 5 image at
+        <a href="/latest/ashlaros-rpi5.img.xz"
+          ><code>/latest/ashlaros-rpi5.img.xz</code></a
+        >. Verify a download against the <code>SHA256SUMS</code> beside it.
         <a class="link" href="/stats">Download stats</a>.</p>
 ${renderTour(tour)}
 ${renderShots(shots)}

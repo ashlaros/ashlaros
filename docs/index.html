@@ -123,8 +123,21 @@
           >ashlaros.iso</a
         >
         &nbsp;<span class="muted"
-          >— x86_64 only. The package stack is <code>x86_64_v3</code>, which
-          needs AVX2: machines older than 2013 cannot run it.</span
+          >— x86_64. The package stack is <code>x86_64_v3</code>, which needs
+          AVX2: machines older than 2013 cannot run it.</span
+        >
+      </p>
+      <p>
+        <a
+          class="link"
+          href="https://iso.ashlaros.download/latest/ashlaros-rpi5.img.xz"
+          >ashlaros-rpi5.img.xz</a
+        >
+        &nbsp;<span class="muted"
+          >— a prebuilt Raspberry Pi 5 disk image. Not the ISO for another
+          architecture: plain Arch Linux ARM with the board kernel, no
+          installer and no encryption. Write it to a card with
+          <code>xz -d</code> and <code>dd</code>.</span
         >
       </p>
       <p class="muted">
@@ -144,9 +157,8 @@
 
       <h2>The repository, on an existing Arch system</h2>
       <p>
-        The <code>ashlaros</code> repository is dual-arch. There is no ARM ISO —
-        CachyOS publishes no ARM repositories to build one from — but the
-        packages install on Arch Linux ARM just as well.
+        The <code>ashlaros</code> repository is dual-arch, and the packages
+        install on Arch Linux ARM just as well.
       </p>
       <pre>
 curl -fsSL https://packages.ashlaros.download/ashlaros.gpg -o /tmp/ashlaros.gpg
@@ -168,7 +180,10 @@ sudo pacman -Sy ashlaros-keyring ashlaros-mirrorlist ashlaros-settings</pre
           <code>mhwd</code>.
         </li>
         <li>Not for pre-Haswell CPUs, for the reason above.</li>
-        <li>Not an ARM ISO.</li>
+        <li>
+          Not an ARM <em>ISO</em>. CachyOS publishes no ARM repositories to
+          build one from — the Pi 5 image above is a different thing.
+        </li>
       </ul>
 
       <h2>Source</h2>
