@@ -90,6 +90,11 @@ nano
 git
 
 # system
+# mise-bin rather than mise: Arch's mise is x86_64 only and Arch Linux ARM
+# has neither, so this is the vendored one - which is the whole point of
+# carrying it (#10). DESKTOP_PACKAGES cannot serve here; that list is
+# x86_64 by construction.
+mise-bin
 ufw
 power-profiles-daemon
 kernel-modules-hook

@@ -48,6 +48,14 @@ packages:
   flashfocus:
     upstream: https://aur.archlinux.org/flashfocus.git
     arch: any
+  mise-bin:
+    upstream: https://aur.archlinux.org/mise-bin.git
+    # Arch ships `mise` in extra for x86_64 only, and Arch Linux ARM has
+    # neither mise nor mise-bin - so an ARM user of this repository gets
+    # no mise at all unless we carry it. Upstream publishes a linux-arm64
+    # build and this PKGBUILD already selects per arch, so vendoring is
+    # the whole fix rather than a patch.
+    arch: both
   nwg-wrapper:
     upstream: https://aur.archlinux.org/nwg-wrapper.git
     # pure python; the AUR's x86_64 is an oversight, widened here
