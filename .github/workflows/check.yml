@@ -62,6 +62,11 @@ jobs:
           cmake --build /tmp/rb -j"$(nproc)"
           sudo cmake --install /tmp/rb
       - name: build the client
+        # /usr/local/lib is not on Ubuntu's default link path, where Arch
+        # would have raylib in /usr/lib and need none of this
+        env:
+          LIBRARY_PATH: /usr/local/lib
+          RAYLIB_INCLUDE_PATH: /usr/local/include
         run: cargo build --release --manifest-path client/Cargo.toml
 
   shell:
