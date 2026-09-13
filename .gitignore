@@ -14,5 +14,6 @@ work/
 .env.*
 *.env
 .*.swp
-# generated from worker/src/game/logic.js; see docs/game/README.md
+# generated from worker/src/game/; see docs/game/README.md
 docs/game/logic.js
+docs/game/quarry.js

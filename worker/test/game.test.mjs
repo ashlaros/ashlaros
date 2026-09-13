@@ -73,7 +73,7 @@ test('no floating point reaches a score', () => {
   // scoring in it and require the result to be an exact integer
   const events = [];
   for (let i = 0; i < 40; i++) events.push([ACTIONS.HARD_DROP, i * 30]);
-  const { score, lines } = verify(4242, events);
+  const { score, lines } = verify('courses', 4242, events);
   assert.ok(Number.isInteger(score), `${score} is not an integer`);
   assert.ok(Number.isInteger(lines));
 });
@@ -86,8 +86,8 @@ test('replaying the same events twice gives the same score', () => {
     events.push([i % 2 ? ACTIONS.LEFT : ACTIONS.RIGHT, i * 10]);
     events.push([ACTIONS.HARD_DROP, i * 10 + 5]);
   }
-  const a = verify(31337, events);
-  const b = verify(31337, events);
+  const a = verify('courses', 31337, events);
+  const b = verify('courses', 31337, events);
   assert.deepEqual(a, b);
 });
 
@@ -95,11 +95,11 @@ test('the reported score is never read', () => {
   // R3.2: the replay is the submission. A client claiming a million is
   // scored on what its events actually did.
   const events = [[ACTIONS.HARD_DROP, 0]];
-  const honest = verify(5, events);
-  const lying = verify(5, events);
+  const honest = verify('courses', 5, events);
+  const lying = verify('courses', 5, events);
   assert.equal(honest.score, lying.score);
   // and nothing in the verify signature accepts a score at all
-  assert.equal(verify.length, 2);
+  assert.equal(verify.length, 3); // (game, seed, events) - no score parameter
 });
 
 test('a run ends rather than continuing forever', () => {
@@ -115,19 +115,19 @@ test('a log with impossible input density is refused', () => {
   // this a crafted log could pack a whole run into tick 0
   const events = [];
   for (let i = 0; i <= MAX_EVENTS_PER_TICK; i++) events.push([ACTIONS.LEFT, 0]);
-  assert.throws(() => verify(1, events), /too many events in one tick/);
+  assert.throws(() => verify('courses', 1, events), /too many events in one tick/);
 });
 
 test('ticks may not go backwards', () => {
-  assert.throws(() => verify(1, [[ACTIONS.LEFT, 50], [ACTIONS.LEFT, 10]]), /backwards/);
+  assert.throws(() => verify('courses', 1, [[ACTIONS.LEFT, 50], [ACTIONS.LEFT, 10]]), /backwards/);
 });
 
 test('a malformed log is refused rather than scored', () => {
   // half-accepting a log is worse than refusing it outright
-  assert.throws(() => verify(1, [[ACTIONS.LEFT]]), /\[action, tick\]/);
-  assert.throws(() => verify(1, [['left', 0]]), /integers/);
-  assert.throws(() => verify(1, [[99, 0]]), /unknown action/);
-  assert.throws(() => verify(1, 'not an array'), /array/);
+  assert.throws(() => verify('courses', 1, [[ACTIONS.LEFT]]), /\[action, tick\]/);
+  assert.throws(() => verify('courses', 1, [['left', 0]]), /integers/);
+  assert.throws(() => verify('courses', 1, [[99, 0]]), /unknown action/);
+  assert.throws(() => verify('courses', 1, 'not an array'), /array/);
 });
 
 test('a suspended tab owes the simulation nothing', () => {
@@ -135,7 +135,7 @@ test('a suspended tab owes the simulation nothing', () => {
   // the same however long the player took to produce them - which is the
   // bug that lost someone a duel for taking a phone call.
   const events = [[ACTIONS.LEFT, 10], [ACTIONS.HARD_DROP, 20]];
-  assert.deepEqual(verify(9, events), verify(9, events));
+  assert.deepEqual(verify('courses', 9, events), verify('courses', 9, events));
 });
 
 test('the daily seed is the same for everyone and changes per day', () => {

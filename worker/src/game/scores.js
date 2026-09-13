@@ -30,7 +30,14 @@
 // derives both when offline, and a second hand-written copy is exactly
 // the drift this design exists to prevent.
 export { dayOf, seedFor } from './logic.js';
-import { dayOf, replay, seedFor, MAX_EVENTS } from './logic.js';
+import { replay as replayQuarry, validateEvents as validateQuarryEvents } from './quarry.js';
+import {
+  dayOf,
+  replay as replayCourses,
+  seedFor,
+  validateEvents as validateCoursesEvents,
+  MAX_EVENTS,
+} from './logic.js';
 
 /**
  * The day a seed belongs to, in UTC.
@@ -140,9 +147,42 @@ export function claimedDay(body, now) {
 export function validateSubmission(body) {
   if (!body || typeof body !== 'object') return 'body must be an object';
   if (!initialsOf(body)) return 'initials must be three of A-Z or 0-9';
+  const game = gameOf(typeof body.game === 'string' ? body.game : DEFAULT_GAME);
+  if (!game) return 'unknown game';
   if (!Array.isArray(body.events)) return 'events must be an array';
   if (body.events.length > MAX_EVENTS) return 'too many events';
-  return null;
+  // each game knows what a crafted log looks like for its own rules, and
+  // says so here rather than inside the Durable Object - the point of
+  // these checks is to refuse one before waking it
+  return GAMES[game].validate(body.events);
+}
+
+/**
+ * The games, and how each one is replayed.
+ *
+ * Everything else about a submission - the day, the seed derivation, the
+ * initials, one attempt per seed - is shared, because those rules are
+ * about the board rather than about the game. Only the simulation
+ * differs.
+ */
+export const GAMES = {
+  courses: {
+    replay: replayCourses,
+    validate: validateCoursesEvents,
+    // what the board shows beside the score
+    detail: (state) => state.lines,
+  },
+  quarry: {
+    replay: replayQuarry,
+    validate: validateQuarryEvents,
+    detail: (state) => state.bricksBroken,
+  },
+};
+
+export const DEFAULT_GAME = 'courses';
+
+export function gameOf(name) {
+  return Object.prototype.hasOwnProperty.call(GAMES, name) ? name : null;
 }
 
 /**
@@ -150,9 +190,10 @@ export function validateSubmission(body) {
  *
  * The reported score is not an input. It is not even read.
  */
-export function verify(seed, events) {
-  const state = replay(seed, events);
-  return { score: state.score, lines: state.lines };
+export function verify(game, seed, events) {
+  const definition = GAMES[game] ?? GAMES[DEFAULT_GAME];
+  const state = definition.replay(seed, events);
+  return { score: state.score, lines: definition.detail(state) ?? 0 };
 }
 
 export async function board(db, game, day, limit = 20) {
@@ -246,7 +287,7 @@ export class Verifier {
 
     let result;
     try {
-      result = verify(seed, events);
+      result = verify(game, seed, events);
     } catch (error) {
       // a malformed log is a rejection, not a server error
       return Response.json({ error: String(error.message ?? error) }, { status: 400 });

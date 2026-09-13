@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Quarry — AshlarOS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <style>
+      /* the same palette as the rest of the site: the mark's stone, the
+         accent, and nothing else */
+      :root {
+        --background: #141a1b;
+        --surface: #282828;
+        --foreground: #eeeeee;
+        --accent: #8a8f98;
+        --highlight: #c9ccd1;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        background: var(--background);
+        color: var(--foreground);
+        font-family: monospace;
+        margin: 0;
+        padding: 2rem 1rem;
+      }
+      h1 {
+        font-size: 0.9rem;
+        font-weight: 500;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        margin: 0 0 1.5rem;
+      }
+      main {
+        display: flex;
+        gap: 2rem;
+        flex-wrap: wrap;
+        max-width: 60rem;
+        margin: 0 auto;
+      }
+      canvas {
+        background: #0d1112;
+        border: 1px solid #3a4043;
+        touch-action: none;
+      }
+      aside {
+        min-width: 16rem;
+        flex: 1;
+      }
+      h2 {
+        font-size: 0.7rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin: 1.2rem 0 0.4rem;
+      }
+      .score {
+        font-size: 2rem;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.85rem;
+      }
+      td {
+        padding: 0.15rem 0.4rem 0.15rem 0;
+      }
+      button,
+      input {
+        background: var(--surface);
+        border: 1px solid #3a4043;
+        color: var(--foreground);
+        font-family: monospace;
+        padding: 0.4rem 0.7rem;
+      }
+      button:hover {
+        color: var(--highlight);
+      }
+      .muted {
+        color: var(--accent);
+        font-size: 0.75rem;
+      }
+      .initials button {
+        font-size: 2rem;
+        padding: 0.2rem 0.6rem;
+        margin-right: 0.3rem;
+        border-color: #3a4043;
+      }
+      .initials button[aria-current='true'] {
+        color: var(--highlight);
+        border-color: var(--highlight);
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AshlarOS — Quarry</h1>
+    <main>
+      <canvas id="field" width="480" height="640"></canvas>
+      <aside>
+        <h2>Score</h2>
+        <div class="score" id="score">0</div>
+        <p id="status">Press any key to start.</p>
+
+        <h2>Lives</h2>
+        <p id="lives">3</p>
+
+        <h2>Keys</h2>
+        <p>
+          ← → move the paddle<br />
+          space launch, and release a caught ball
+        </p>
+
+        <h2>Today's board</h2>
+        <table id="board-table"></table>
+
+        <div id="entry" hidden>
+          <h2>You placed</h2>
+          <p class="initials" id="initials">
+            <button type="button" data-slot="0">A</button><button
+              type="button"
+              data-slot="1"
+            >A</button><button type="button" data-slot="2">A</button>
+          </p>
+          <p class="muted">
+            ← → pick a letter &nbsp; ↑ ↓ change it &nbsp; enter confirms
+          </p>
+          <p><button id="submit">Confirm</button></p>
+        </div>
+
+        <p class="muted" id="submit-note">
+          One run per seed. Everyone gets the same wall today, so the board
+          compares play rather than luck.
+        </p>
+        <p class="muted"><a href="./">Courses</a>, the other game.</p>
+      </aside>
+    </main>
+    <script type="module" src="./quarry-play.js"></script>
+  </body>
+</html>

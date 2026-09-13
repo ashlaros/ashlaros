@@ -147,10 +147,11 @@ update count. That is fine for publishing and fatal for diffing, so there is
 deliberately no "screenshots changed" check. These are pictures, not golden
 files.
 
-## The game
+## The games
 
-[`ashlaros.download/game/`](https://ashlaros.download/game/) is a
-falling-block game with a daily leaderboard. Everyone gets the same pieces
+[`ashlaros.download/game/`](https://ashlaros.download/game/) is **Courses**,
+a falling-block game, and [`/game/quarry`](https://ashlaros.download/game/quarry)
+is **Quarry**, a block breaker. Both have a daily leaderboard. Everyone gets the same pieces
 on the same day, so the board compares play rather than luck.
 
 **The worker issues a seed, the game runs locally, the worker verifies the
@@ -196,6 +197,36 @@ seed luck properly) can be added later without a backfill.
 seed derived by the same function the server uses — imported, not rewritten
 — so an offline run is on the same board as everyone else's that day. Only
 the leaderboard needs a connection.
+
+**Quarry** is the Arkanoid formula rather than 1976 Breakout: designed
+seeded walls, multi-hit and indestructible bricks, falling capsules and
+multi-ball. Two of its constants are measurements rather than taste, and
+`worker/test/quarry-balance.mjs` is what took them:
+
+- **The paddle is faster than the ball.** At `px(4)` every skill band lost
+  inside nine seconds — the ball crosses the field in 40 ticks where the
+  paddle needed 60, and no skill closes a gap the paddle cannot physically
+  close.
+- **The wall is sized to the measured clear rate.** A perfect tracker
+  breaks 0.46 bricks/second, so an eight-row wall needing 137 hits was
+  195 seconds of work inside a 120-second run — nobody ever cleared a
+  level and the level bonus was unreachable code. That is `slop-out`'s
+  finding reproduced almost exactly (they measured 0.56 against 0.93).
+
+The harness reports the score spread and how runs end for four scripted
+skill bands; run it before changing a constant, because none of the above
+is visible from reading the code:
+
+```sh
+cd worker && node test/quarry-balance.mjs 12
+```
+
+**The replay logs the paddle's target, never its position.** The paddle
+closes on the target at a fixed speed, so the server derives where it
+went rather than being told — and the speed cap is a verification
+requirement, not a difficulty choice: uncapped, every position at every
+tick is legal and the verifier has nothing to reject. Sampled targets are
+12 events/second against 60 for logging every tick.
 
 `worker/src/game/logic.js` is the single implementation: the page imports it
 to play and the verifier imports it to replay. `docs/game/logic.js` is

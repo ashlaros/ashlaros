@@ -9,8 +9,10 @@
 import { escapeHtml, html, humanSize, json, page } from './serve.js';
 import { collect, record } from './stats.js';
 import {
+  DEFAULT_GAME,
   allTime,
   board,
+  gameOf,
   claimedDay,
   dayOf,
   initialsOf,
@@ -178,7 +180,11 @@ export const site = {
     // download page lives and the game is a thing to do while an image
     // downloads - and because both already share this worker.
     'game/seed': async (request, bucket, env, url) => {
-      const game = url.searchParams.get('game') ?? 'courses';
+      // Checked against the registry, not taken as given: an unknown name
+      // would otherwise be handed a seed and a board of its own, which
+      // reads as a working game and is a typo.
+      const game = gameOf(url.searchParams.get('game') ?? DEFAULT_GAME);
+      if (!game) return json({ error: 'unknown game' }, 404);
       // the day is part of the answer: the client sends it back with the
       // run so the score lands on the board it was played for
       const day = dayOf(Date.now());
@@ -186,7 +192,8 @@ export const site = {
     },
 
     'game/board': async (request, bucket, env, url) => {
-      const game = url.searchParams.get('game') ?? 'courses';
+      const game = gameOf(url.searchParams.get('game') ?? DEFAULT_GAME);
+      if (!game) return json({ error: 'unknown game' }, 404);
       const day = url.searchParams.get('day') ?? dayOf(Date.now());
       if (!env.SCORES) return json({ game, day, scores: [], configured: false });
       return json({ game, day, scores: await board(env.SCORES, game, day) });
@@ -196,7 +203,8 @@ export const site = {
     // is the competition and resets, so a newcomer is never looking at a
     // wall of scores set months ago; these are the hall of fame.
     'game/all-time': async (request, bucket, env, url) => {
-      const game = url.searchParams.get('game') ?? 'courses';
+      const game = gameOf(url.searchParams.get('game') ?? DEFAULT_GAME);
+      if (!game) return json({ error: 'unknown game' }, 404);
       if (!env.SCORES) return json({ game, scores: [], configured: false });
       const window = url.searchParams.get('window');
       const scores =
@@ -226,7 +234,8 @@ export const site = {
       const problem = validateSubmission(body);
       if (problem) return json({ error: problem }, 400);
 
-      const game = typeof body.game === 'string' ? body.game : 'courses';
+      const game = gameOf(typeof body.game === 'string' ? body.game : DEFAULT_GAME);
+      if (!game) return json({ error: 'unknown game' }, 400);
       // the board is the day the seed was issued, not the moment this
       // arrived - a run started before midnight was played on yesterday's
       // pieces and must be scored against them
