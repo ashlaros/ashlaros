@@ -93,6 +93,12 @@ say "serial tail"
 tail -40 "$serial" | sed 's/^/  /'
 
 if [[ $booted -ne 1 ]]; then
+    # The useful lines are never in the tail when the root fails to mount:
+    # the kernel keeps probing devices long after it gave up waiting, so
+    # ask for the ones that say what it was looking for.
+    say "root device and mount attempts"
+    grep -iE "mmcblk|root=|VFS:|Kernel panic|Waiting for|sdhci|unknown-block|mmc[0-9]:" "$serial" |
+        tail -25 | sed 's/^/  /' || echo "  (nothing about the root device)"
     echo "no boot marker in ${timeout_s}s" >&2
     exit 1
 fi
