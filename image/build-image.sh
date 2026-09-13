@@ -210,9 +210,22 @@ EOF
 say "unmounting"
 rm -f "$mount_root/etc/resolv.conf"
 sync
-umount "$mount_root/boot"
-for d in dev/pts dev sys proc; do umount -l "$mount_root/$d"; done
-umount "$mount_root"
+
+# Same order as the cleanup trap, and for the same reason the last run
+# found: the api mounts are what hold the root busy, so /boot cannot go
+# first. The root itself needs a retry rather than -l, because a lazy
+# unmount detaches the tree and returns before the filesystem is
+# flushed - losetup would then pull the device out from under it and the
+# image would carry a dirty ext4.
+for d in dev/pts dev sys proc boot; do
+    mountpoint -q "$mount_root/$d" && umount -l "$mount_root/$d"
+done
+for attempt in 1 2 3 4 5; do
+    umount "$mount_root" && break
+    [[ $attempt -eq 5 ]] && { echo "root still busy after 5 tries"; fuser -vm "$mount_root" 2>&1 | head; exit 1; }
+    sleep 2
+done
+sync
 losetup -d "$loop"
 loop=""
 
