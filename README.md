@@ -245,6 +245,19 @@ looking. Each rung is its own file, never one repitched: resampling
 shortens a sound, so a four-line clear would answer *shorter* than a
 single.
 
+**The music is synthesised in the browser**, not shipped. A loop has to
+outlast the round or the player hears the seam — `slopduel` chose 156s
+against a 120s duel for exactly that — and three loops long enough to
+cover a run are **33 MiB of PCM** against **5 KiB** for the module that
+makes them. It also makes tempo a parameter rather than a resample:
+speeding a file up shortens it, so a sourced loop's guarantee would have
+to be computed at the fastest rate.
+
+Which track a run gets is **derived from the seed and keyed separately**
+(`${seed}:music`), so two players on the same daily seed hear the same
+thing — and adding a fourth track later cannot shift a single piece.
+Verified: 300 bags identical before and after consuming the selector.
+
 Audio never blocks the game. It degrades to silence when the files are
 missing, when a context cannot be created, and when autoplay policy
 refuses one; `m` mutes, and the preference persists.

@@ -241,6 +241,7 @@ function frame(now) {
 function start() {
   if (seed === null) return;
   audio.start();
+  audio.music(seed);
   lastLines = 0;
   lastLevel = 0;
   state = createState(seed);
@@ -296,6 +297,7 @@ function finish() {
   running = false;
   draw();
   statusEl.textContent = `Topped out at ${state.score.toLocaleString('en-US')}.`;
+  audio.stopMusic();
   audio.play('gameover');
   if (submittable && placed(state.score)) {
     // from the left every time: the cursor is not a leftover from

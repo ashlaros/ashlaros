@@ -233,6 +233,7 @@ function announce(before) {
 function start() {
   if (seed === null) return;
   audio.start();
+  audio.music(seed);
   state = createState(seed);
   events = [];
   lastTarget = state.target;
@@ -279,6 +280,7 @@ function finish() {
   running = false;
   draw();
   statusEl.textContent = `Out of lives at ${state.score.toLocaleString('en-US')}.`;
+  audio.stopMusic();
   audio.play('gameover');
   if (submittable && placed(state.score)) {
     slot = 0;

@@ -11,7 +11,15 @@
  * never decides anything.
  */
 
+import { renderTrack, trackFor } from './music.js';
+
 const MUTE_KEY = 'ashlaros:game:muted';
+// A floor rather than a target: a run is capped at 120 seconds, and a
+// loop that wrapped inside one would put a seam in the middle of it -
+// slopduel chose 156s against a 120s duel for the same reason. The
+// render runs whole bars, so the real length is the first bar boundary
+// past this.
+const LOOP_SECONDS = 130;
 
 const CUES = [
   'move',
@@ -41,6 +49,7 @@ export function createAudio() {
   let context = null;
   const buffers = new Map();
   let muted = false;
+  let music = null;
   try {
     muted = localStorage.getItem(MUTE_KEY) === '1';
   } catch {
@@ -80,6 +89,16 @@ export function createAudio() {
     }
   }
 
+  function stopMusic() {
+    if (!music) return;
+    try {
+      music.source.stop();
+    } catch {
+      // already stopped
+    }
+    music = null;
+  }
+
   return {
     /** Called from the first real gesture, which is when a context is allowed. */
     start() {
@@ -88,6 +107,41 @@ export function createAudio() {
       if (ctx.state === 'suspended') ctx.resume().catch(() => {});
       for (const name of CUES) load(name);
     },
+
+    /**
+     * Start the track this seed drew.
+     *
+     * Rendered here rather than fetched: three loops long enough to
+     * outlast a run are 33 MiB of PCM, against 6 KiB for the module that
+     * makes them. It also costs a few hundred milliseconds of main
+     * thread, so it happens once at the start of a run rather than per
+     * life.
+     */
+    music(seed) {
+      const ctx = ensure();
+      if (!ctx || muted || music) return;
+      try {
+        const name = trackFor(seed);
+        const samples = renderTrack(name, { rate: ctx.sampleRate, seconds: LOOP_SECONDS });
+        const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+        buffer.copyToChannel(samples, 0);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+        const volume = ctx.createGain();
+        // under the cues by a wide margin: the cues carry information and
+        // the track carries none, so it must never compete
+        volume.gain.value = 0.5;
+        source.connect(volume).connect(ctx.destination);
+        source.start();
+        music = { source, volume };
+      } catch {
+        // a track that cannot be built is silence, and the cues are
+        // unaffected
+      }
+    },
+
+    stopMusic,
 
     play(name, gain = 1) {
       if (muted || !context) return;
@@ -112,6 +166,9 @@ export function createAudio() {
 
     toggle() {
       muted = !muted;
+      // the track is the one thing that keeps making noise on its own, so
+      // muting has to stop it rather than wait for it to end
+      if (muted) stopMusic();
       try {
         localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
       } catch {
