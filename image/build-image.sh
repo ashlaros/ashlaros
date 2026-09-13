@@ -39,11 +39,13 @@ loop=""
 
 cleanup() {
     set +e
-    if mountpoint -q "$mount_root/boot" 2>/dev/null; then umount "$mount_root/boot"; fi
-    for d in dev/pts dev sys proc; do
+    # deepest first, and the api mounts before /boot: they are what hold
+    # the root busy, and unmounting out of order leaves a stale loop
+    # device and a work directory that cannot be removed
+    for d in dev/pts dev sys proc boot; do
         mountpoint -q "$mount_root/$d" 2>/dev/null && umount -l "$mount_root/$d"
     done
-    mountpoint -q "$mount_root" 2>/dev/null && umount "$mount_root"
+    mountpoint -q "$mount_root" 2>/dev/null && umount -l "$mount_root"
     [[ -n $loop ]] && losetup -d "$loop" 2>/dev/null
     rm -rf "$work"
 }
@@ -100,7 +102,13 @@ chroot "$mount_root" /bin/bash -euo pipefail <<'CHROOT'
 pacman-key --init
 pacman-key --populate archlinuxarm
 pacman-key --add /tmp/ashlaros.gpg
-pacman-key --lsign-key "$(gpg --show-keys --with-colons /tmp/ashlaros.gpg | awk -F: '/^fpr:/ {print $10; exit}')"
+# --homedir, because this runs as uid 0 under sudo where HOME is still the
+# invoking user's and gpg refuses with "can't create directory". pacman's
+# own keyring is the right home for a key we are about to sign into it.
+pacman-key --lsign-key "$(
+    gpg --homedir /etc/pacman.d/gnupg --show-keys --with-colons /tmp/ashlaros.gpg |
+        awk -F: '/^fpr:/ {print $10; exit}'
+)"
 rm -f /tmp/ashlaros.gpg
 pacman -Syu --noconfirm
 CHROOT
