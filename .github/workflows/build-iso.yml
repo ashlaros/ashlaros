@@ -100,9 +100,11 @@ jobs:
         with:
           name: boot-screenshots
           path: |
-            /tmp/ashlaros-vm/out/*.png
-            /tmp/ashlaros-vm/out/serial.log
-          if-no-files-found: ignore
+            /tmp/ashlaros-vm-boot/out/*.png
+            /tmp/ashlaros-vm-boot/out/serial.log
+          # error, not ignore: this is the evidence a failure is diagnosed
+          # from, and a silent "no files found" is how it went missing
+          if-no-files-found: error
 
   test-install:
     # Installing and then booting what was installed. The second half is
@@ -125,9 +127,9 @@ jobs:
         with:
           name: install-screenshots
           path: |
-            /tmp/ashlaros-vm/out/*.png
-            /tmp/ashlaros-vm/out/serial.log
-          if-no-files-found: ignore
+            /tmp/ashlaros-vm-install/out/*.png
+            /tmp/ashlaros-vm-install/out/serial.log
+          if-no-files-found: error
 
   publish:
     # Nothing is published until something has booted it. Before this, the
