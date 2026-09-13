@@ -459,6 +459,7 @@ export function validateEvents(events) {
       return 'action and tick must be integers';
     }
     if (value !== undefined && !Number.isInteger(value)) return 'value must be an integer';
+    if (action < 0 || action > ACTIONS.LAUNCH) return 'unknown action';
     if (tick < previous) return 'ticks must not go backwards';
     if (tick > MAX_TICKS) return 'tick beyond the end of a run';
     perTick = tick === previous ? perTick + 1 : 1;

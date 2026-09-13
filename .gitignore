@@ -14,6 +14,13 @@ work/
 .env.*
 *.env
 .*.swp
+# cargo build trees
+core/target/
+client/target/
+# built from core/ by `npm run core:build` - a binary that a compiler
+# emits does not belong in the tree
+worker/src/game/ashlaros_games.wasm
+docs/game/ashlaros_games.wasm
 # generated from worker/src/game/; see docs/game/README.md
 docs/game/logic.js
 docs/game/quarry.js

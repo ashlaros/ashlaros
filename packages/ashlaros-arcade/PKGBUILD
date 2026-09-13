@@ -1,0 +1,59 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+pkgname=ashlaros-arcade
+pkgver=20260913
+pkgrel=1
+pkgdesc="The AshlarOS games, natively: Courses and Quarry"
+arch=('x86_64' 'aarch64')
+url="https://github.com/ashlaros/ashlaros"
+license=('GPL-3.0-or-later')
+# raylib rather than a vendored copy: 6.0 is in extra on both
+# architectures, and a package that bundles its own would ship a second,
+# unpatched copy of a library the distribution already carries.
+#
+# libx11 is named here because Arch's raylib declares no dependencies at
+# all while linking libX11.so.6 - installing this package without it
+# yields a binary that cannot start. Depending on what we actually load
+# is right regardless of whether that is ever fixed upstream.
+depends=('raylib' 'libx11' 'glibc' 'gcc-libs')
+# clang, because raylib-sys generates its bindings with bindgen at build
+# time and bindgen loads libclang to parse raylib.h
+makedepends=('cargo' 'clang')
+options=('!lto')  # the crate sets its own in the release profile
+
+prepare() {
+    # The sources are the checkout, not a tarball: the simulation this
+    # links is the same crate the worker compiles to wasm, and pulling a
+    # released copy of it would let the two drift.
+    rm -rf "${srcdir}/build"
+    mkdir -p "${srcdir}/build"
+    cp -a "${startdir}/../../core" "${startdir}/../../client" "${srcdir}/build/"
+
+    cd "${srcdir}/build/client"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+    cd "${srcdir}/build/client"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --release
+}
+
+check() {
+    # The determinism tests, run where the package is built: a binary
+    # whose arithmetic disagrees with the server's would score its
+    # player's runs into rejection, and that is worth catching here
+    # rather than on a leaderboard.
+    cd "${srcdir}/build/core"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo test --release
+}
+
+package() {
+    cd "${srcdir}/build/client"
+    install -Dm0755 target/release/ashlaros-arcade "${pkgdir}/usr/bin/ashlaros-arcade"
+    install -Dm644 "${startdir}/ashlaros-arcade.desktop" \
+        "${pkgdir}/usr/share/applications/ashlaros-arcade.desktop"
+}

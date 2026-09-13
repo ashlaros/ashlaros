@@ -1,0 +1,23 @@
+[package]
+name = "ashlaros-games"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "The simulations both games run: one implementation, two targets"
+
+[lib]
+# cdylib for the wasm the worker imports; rlib so the native client and
+# the tests can link it directly.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+
+[profile.release]
+# panic = "abort" is set per-target in the build rather than here: the
+# test profile inherits from this one and the harness needs unwinding.
+# The wasm is uploaded to a worker and the native client ships in a
+# package: both want it small, and neither wants the build to differ from
+# what the determinism test checked.
+opt-level = "s"
+lto = true
+codegen-units = 1

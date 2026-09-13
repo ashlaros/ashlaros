@@ -30,6 +30,7 @@
 // derives both when offline, and a second hand-written copy is exactly
 // the drift this design exists to prevent.
 export { dayOf, seedFor } from './logic.js';
+import { replay as replayCore } from './core.js';
 import { replay as replayQuarry, validateEvents as validateQuarryEvents } from './quarry.js';
 import {
   dayOf,
@@ -191,9 +192,22 @@ export function gameOf(name) {
  * The reported score is not an input. It is not even read.
  */
 export function verify(game, seed, events) {
-  const definition = GAMES[game] ?? GAMES[DEFAULT_GAME];
-  const state = definition.replay(seed, events);
-  return { score: state.score, lines: definition.detail(state) ?? 0 };
+  const name = gameOf(game) ?? DEFAULT_GAME;
+
+  // Refused before it is replayed, not while. The JS replay used to
+  // throw on a malformed log as it walked it; the Rust core takes
+  // integers out of a buffer and has no shape to complain about, so the
+  // check that half-accepting a log is worse than refusing it outright
+  // has to live here - the one place every submission passes through.
+  const problem = GAMES[name].validate(events);
+  if (problem) throw new Error(problem);
+
+  // Scored by the Rust core, not the JS the page plays: the point of one
+  // implementation is that the verifier and the native client cannot
+  // drift apart, and the browser copy is the one that would have to be
+  // trusted otherwise.
+  const outcome = replayCore(name, seed, events);
+  return { score: outcome.score, lines: outcome.detail };
 }
 
 export async function board(db, game, day, limit = 20) {

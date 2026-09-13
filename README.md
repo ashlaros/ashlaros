@@ -262,8 +262,20 @@ Audio never blocks the game. It degrades to silence when the files are
 missing, when a context cannot be created, and when autoplay policy
 refuses one; `m` mutes, and the preference persists.
 
-`worker/src/game/logic.js` is the single implementation: the page imports it
-to play and the verifier imports it to replay. `docs/game/logic.js` is
+**`core/` is the single implementation**, in Rust, compiled twice: to
+`wasm32-unknown-unknown` for the verifier the worker runs, and natively
+for the `ashlaros-arcade` client, which links it as an rlib. Playing on
+the desktop and playing in a browser are the same run, scored the same
+way. `ci/cross-target.mjs` is what makes that a checked property rather
+than a claim: it replays a fixed corpus through both builds and diffs
+them, and CI fails if they part.
+
+Integers only, throughout - which matters more across two compilers than
+it did across two engines. With floats, LLVM may contract operations
+differently per target, so agreement would be a hope about optimisation
+rather than a property of the arithmetic.
+
+`worker/src/game/logic.js` is what the page plays. `docs/game/logic.js` is
 generated from it by `npm run game:sync`, which `npm test` and the deploy
 both run — a hand-maintained second copy of a simulation is exactly the
 drift that would reject every honest score.

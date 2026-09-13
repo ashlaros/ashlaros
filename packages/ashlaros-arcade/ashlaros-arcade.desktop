@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=AshlarOS Arcade
+GenericName=Games
+Comment=Courses and Quarry, on today's shared seed
+Exec=ashlaros-arcade
+Icon=ashlaros
+Terminal=false
+Categories=Game;
+Keywords=game;puzzle;arcade;

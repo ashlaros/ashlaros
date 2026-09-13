@@ -4,8 +4,10 @@
   "type": "module",
   "scripts": {
     "game:sync": "cp src/game/logic.js ../docs/game/logic.js && cp src/game/quarry.js ../docs/game/quarry.js && npm run audio",
-    "test": "npm run game:sync && node --test test/*.test.mjs",
-    "deploy": "npm run game:sync && wrangler deploy",
-    "audio": "node ../scripts/game-sfx.mjs ../docs/game/audio"
+    "test": "npm run core:build && npm run game:sync && node --import ./test/wasm-loader-register.mjs --test test/*.test.mjs",
+    "deploy": "npm run core:build && npm run game:sync && wrangler deploy",
+    "audio": "node ../scripts/game-sfx.mjs ../docs/game/audio",
+    "core:build": "cargo build --release --manifest-path ../core/Cargo.toml --target wasm32-unknown-unknown && cp ../core/target/wasm32-unknown-unknown/release/ashlaros_games.wasm src/game/",
+    "core:check": "cargo test --manifest-path ../core/Cargo.toml && node ../ci/cross-target.mjs"
   }
 }

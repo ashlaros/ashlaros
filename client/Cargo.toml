@@ -1,0 +1,23 @@
+[package]
+name = "ashlaros-arcade"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "The native client for the AshlarOS games"
+
+[dependencies]
+# The simulation is not reimplemented here - it is linked. That is the
+# whole point of the split: this crate owns pixels and keys, and nothing
+# it does can change a score.
+ashlaros-games = { path = "../core" }
+# 6.0 is in Arch extra and in ALARM aarch64, so the package depends on
+# the system library rather than vendoring one. `nobuild` is what makes
+# that true: the default build script compiles a bundled raylib with
+# cmake, which an Arch package must not do - it would ship a second copy
+# of a library the distribution already carries, unpatched and unupdated.
+raylib = { version = "6.0", default-features = false, features = ["nobuild"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

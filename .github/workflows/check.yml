@@ -17,9 +17,52 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+      - name: wasm target
+        # the tests import the compiled core, so it has to exist first
+        run: rustup target add wasm32-unknown-unknown
       - name: test
         working-directory: worker
         run: npm test
+
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - run: rustup target add wasm32-unknown-unknown
+      - name: build the wasm the worker imports
+        run: cargo build --release --manifest-path core/Cargo.toml --target wasm32-unknown-unknown
+      - name: the two targets must agree
+        # One implementation compiled twice is only true if it is checked.
+        # A native player whose run scores differently under the verifier
+        # is worse than no leaderboard: it refuses honest runs and cannot
+        # tell them from forged ones.
+        run: |
+          cargo test --manifest-path core/Cargo.toml
+          node ci/cross-target.mjs
+
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: raylib
+        # the client links the system library rather than vendoring one,
+        # so the build needs it present - as it is in Arch and ALARM
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libgl1-mesa-dev
+      - name: build raylib 6.0
+        run: |
+          curl -sSL https://github.com/raysan5/raylib/archive/refs/tags/6.0.tar.gz | tar xz
+          cmake -S raylib-6.0 -B /tmp/rb -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=/usr/local
+          cmake --build /tmp/rb -j"$(nproc)"
+          sudo cmake --install /tmp/rb
+      - name: build the client
+        run: cargo build --release --manifest-path client/Cargo.toml
 
   shell:
     runs-on: ubuntu-latest

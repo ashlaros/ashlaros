@@ -513,11 +513,18 @@ export function validateEvents(events) {
   let previous = -1;
   let perTick = 0;
   for (const event of events) {
-    if (!Array.isArray(event) || event.length < 2) return 'each event is [action, tick]';
+    // exactly two, not at-least-two: the other game's [action, tick,
+    // value] triple would otherwise be scored under these rules, which is
+    // precisely the confusion one verify() over two simulations invites
+    if (!Array.isArray(event) || event.length !== 2) return 'each event is [action, tick]';
     const [action, tick] = event;
     if (!Number.isInteger(action) || !Number.isInteger(tick)) {
       return 'action and tick must be integers';
     }
+    // The Rust core ignores an action it does not recognise, which would
+    // score a log naming one rather than refusing it. Refused here, where
+    // every submission passes, instead of trusted to the simulation.
+    if (action < 0 || action > ACTIONS.HOLD) return 'unknown action';
     if (tick < previous) return 'ticks must not go backwards';
     perTick = tick === previous ? perTick + 1 : 1;
     if (perTick > MAX_EVENTS_PER_TICK) return 'too many events in one tick';
