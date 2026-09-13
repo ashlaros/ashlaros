@@ -48,6 +48,12 @@ start() {
     ${TPM:+-e "TPM=$TPM"} ${CDROM:+-e "CDROM=$CDROM"} ${LID:+-e "LID=$LID"} \
     "$image" bash /vm/boot.sh "${SECONDS_TO_RUN:-10800}" >/dev/null
   echo "## $container started, workspace $workspace"
+  # boot.sh runs detached, so its own output goes to the container's log
+  # rather than here. Whether the run got KVM or fell back to emulation is
+  # the difference between five minutes and an hour: worth surfacing where
+  # someone reading a CI log will see it.
+  sleep 2
+  docker logs "$container" 2>&1 | grep -E '^## (KVM|no KVM)' || true
 }
 
 # The ISO takes several minutes to reach the installer under TCG, and a
