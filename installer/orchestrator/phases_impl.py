@@ -836,6 +836,14 @@ SNAPPER_ROOT_CONFIG = {
     "TIMELINE_CREATE": "no",
     "TIMELINE_CLEANUP": "yes",
     "NUMBER_CLEANUP": "yes",
+    # half an hour before a snapshot may be cleaned. Measured on a real
+    # install: twenty transactions in four minutes leave 82 snapshots and
+    # cleanup removes none of them, because every one is younger than this
+    # - the count only falls to the limit once they age past it. That is
+    # the intended behaviour (an update that breaks the machine must still
+    # have its snapshot half an hour later) but it means the bound is
+    # NUMBER_LIMIT plus whatever half an hour of transactions produces,
+    # not NUMBER_LIMIT.
     "NUMBER_MIN_AGE": "1800",
     "NUMBER_LIMIT": "12",
     "NUMBER_LIMIT_IMPORTANT": "6",
