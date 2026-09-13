@@ -35,7 +35,11 @@ for name in kernel_2712.img kernel8.img Image; do
 done
 [[ -n $kernel ]] || { echo "no kernel on the boot partition"; mdir -i "$target" ::; exit 1; }
 
-initrd=$(mdir -i "$target" :: 2>/dev/null | awk '/initramfs/ {print $1}' | head -n1)
+# -/b lists long names one per line. Plain `mdir | awk '{print $1}'`
+# gives the 8.3 short name - initramfs-linux.img comes back as
+# INITRA~1, which mcopy then cannot find.
+initrd=$(mdir -/b -i "$target" :: 2>/dev/null |
+    sed 's#^::/##' | grep -iE '^initramfs.*\.img$' | head -n1)
 [[ -n $initrd ]] || { echo "no initramfs on the boot partition"; mdir -i "$target" ::; exit 1; }
 
 # bcm2712 is the Pi 5; QEMU has no raspi5 machine yet, so the Pi 4 DTB is
@@ -47,7 +51,7 @@ done
 [[ -n $dtb ]] || { echo "no usable DTB"; mdir -i "$target" :: | grep -i dtb || true; exit 1; }
 
 mcopy -i "$target" -o "::$kernel" "$out_dir/Image"
-mcopy -i "$target" -o "::$initrd" "$out_dir/initramfs-linux.img"
+mcopy -i "$target" -o "::${initrd}" "$out_dir/initramfs-linux.img"
 mcopy -i "$target" -o "::$dtb" "$out_dir/$dtb"
 echo "$dtb" > "$out_dir/dtb-name"
 
