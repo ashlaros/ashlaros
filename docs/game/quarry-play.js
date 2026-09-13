@@ -33,8 +33,9 @@ import {
 } from './quarry.js';
 import { dayOf, seedFor } from './logic.js';
 import { createAudio } from './audio.js';
+import { createBoards } from './boards.js';
 
-const GAME = 'quarry';
+const GAME_NAME = 'quarry';
 const audio = createAudio();
 
 const COLOURS = {
@@ -54,6 +55,7 @@ const scoreEl = document.getElementById('score');
 const livesEl = document.getElementById('lives');
 const statusEl = document.getElementById('status');
 const tableEl = document.getElementById('board-table');
+const tabsEl = document.getElementById('board-tabs');
 const entryEl = document.getElementById('entry');
 const initialEls = [...document.querySelectorAll('#initials button')];
 const submitEl = document.getElementById('submit');
@@ -333,7 +335,7 @@ submitEl.addEventListener('click', async () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       // no score field: the server replays the events and would ignore it
-      body: JSON.stringify({ game: GAME, day, player: initials.join(''), events }),
+      body: JSON.stringify({ game: GAME_NAME, day, player: initials.join(''), events }),
     });
     const result = await response.json();
     submitEl.disabled = false;
@@ -350,25 +352,19 @@ submitEl.addEventListener('click', async () => {
   }
 });
 
-const escape = (text) => String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-async function loadBoard() {
-  try {
-    const response = await fetch(`/game/board?game=${GAME}`);
-    const data = await response.json();
-    lastBoard = data.scores ?? [];
-    tableEl.innerHTML = lastBoard
-      .map(
-        (row, i) =>
-          `<tr><td>${i + 1}</td><td>${escape(row.player)}</td>` +
-          `<td>${Number(row.score).toLocaleString('en-US')}</td></tr>`,
-      )
-      .join('');
-    if (!lastBoard.length) tableEl.innerHTML = '<tr><td>No runs yet today.</td></tr>';
-  } catch {
-    tableEl.innerHTML = '<tr><td>The board is unreachable.</td></tr>';
-  }
-}
+const boards = createBoards({
+  game: GAME_NAME,
+  tableEl,
+  tabsEl,
+  // "did this run place" is a question about today, so the daily rows are
+  // what the entry panel is decided on whichever tab is showing
+  onDaily: (rows) => {
+    lastBoard = rows;
+  },
+});
+
+const loadBoard = () => boards.refresh();
 
 /**
  * Offline is the default: without a seed from the server the game still
@@ -377,13 +373,13 @@ async function loadBoard() {
  */
 async function init() {
   try {
-    const response = await fetch(`/game/seed?game=${GAME}`);
+    const response = await fetch(`/game/seed?game=${GAME_NAME}`);
     const data = await response.json();
     seed = data.seed;
     day = data.day;
     submittable = true;
     statusEl.textContent = `Today's wall. Press any key to start.`;
-    await loadBoard();
+    await boards.load();
   } catch {
     day = dayOf(Date.now());
     seed = seedFor(GAME, day);

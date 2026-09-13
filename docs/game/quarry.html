@@ -77,6 +77,24 @@
       button:hover {
         color: var(--highlight);
       }
+      /* three windows, because scores from different seeds are not
+         comparable: a single table of best runs ranks the kindest seed
+         rather than the best play */
+      .tabs {
+        display: flex;
+        gap: 0.4rem;
+        margin: 0 0 0.6rem;
+      }
+      .tabs button {
+        font-size: 0.7rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 0.25rem 0.5rem;
+      }
+      .tabs button[aria-current='true'] {
+        color: var(--highlight);
+        border-color: var(--highlight);
+      }
       .muted {
         color: var(--accent);
         font-size: 0.75rem;
@@ -116,7 +134,8 @@
           m mute
         </p>
 
-        <h2>Today's board</h2>
+        <h2>Board</h2>
+        <p class="tabs" id="board-tabs"></p>
         <table id="board-table"></table>
 
         <div id="entry" hidden>

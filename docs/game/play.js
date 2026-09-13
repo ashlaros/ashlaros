@@ -27,7 +27,9 @@ import {
   stepTick,
 } from './logic.js';
 import { createAudio } from './audio.js';
+import { createBoards } from './boards.js';
 
+const GAME_NAME = 'courses';
 const audio = createAudio();
 
 const COLOURS = {
@@ -51,6 +53,7 @@ const nextCtx = nextCanvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 const statusEl = document.getElementById('status');
 const tableEl = document.getElementById('board-table');
+const tabsEl = document.getElementById('board-tabs');
 const entryEl = document.getElementById('entry');
 const initialEls = [...document.querySelectorAll('#initials button')];
 const submitEl = document.getElementById('submit');
@@ -335,25 +338,19 @@ submitEl.addEventListener('click', async () => {
   }
 });
 
-async function loadBoard() {
-  try {
-    const response = await fetch('/game/board?game=courses');
-    const data = await response.json();
-    lastBoard = data.scores ?? [];
-    tableEl.innerHTML = (data.scores ?? [])
-      .map(
-        (row, i) =>
-          `<tr><td>${i + 1}</td><td>${escape(row.player)}</td>` +
-          `<td>${Number(row.score).toLocaleString('en-US')}</td></tr>`,
-      )
-      .join('');
-    if (!data.scores?.length) tableEl.innerHTML = '<tr><td>No runs yet today.</td></tr>';
-  } catch {
-    tableEl.innerHTML = '<tr><td>The board is unreachable.</td></tr>';
-  }
-}
+const boards = createBoards({
+  game: GAME_NAME,
+  tableEl,
+  tabsEl,
+  // "did this run place" is a question about today, so the daily rows are
+  // what the entry panel is decided on whichever tab is showing
+  onDaily: (rows) => {
+    lastBoard = rows;
+  },
+});
 
-const escape = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const loadBoard = () => boards.refresh();
+
 
 /**
  * Offline is the default: without a seed from the server the game still
@@ -368,7 +365,7 @@ async function init() {
     day = data.day;
     submittable = true;
     statusEl.textContent = `Today's seed. Press any key to start.`;
-    await loadBoard();
+    await boards.load();
   } catch {
     // the same derivation the server uses, so an offline run is on the
     // same board as everyone else's that day - it simply cannot be
