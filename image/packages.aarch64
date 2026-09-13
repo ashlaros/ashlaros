@@ -1,0 +1,101 @@
+# The Raspberry Pi 5 image.
+#
+# This is not the ISO's package list with a different arch on it. The ISO
+# ships a live installer; this ships the installed system, because an ARM
+# board has no installer to run - the image IS the result.
+#
+# Four things the x86_64 image has cannot exist here, and their absence is
+# the reason this file is separate rather than generated:
+#
+#   - no linux-cachyos: CachyOS publishes no ARM repositories, so there is
+#     no v3 userland and no CachyOS kernel. This is plain Arch Linux ARM.
+#   - no systemd-boot: a Pi boots its own firmware off the FAT partition.
+#   - no TPM and no LUKS: there is no installer to enrol a keyslot, so
+#     tpm2-tools would ship a tool for hardware the image never uses.
+#   - no chwd: it comes from the cachyos repo and is x86_64 only.
+
+# base
+base
+# the board kernel, not linux-aarch64: the generic one does not boot a Pi
+linux-rpi
+linux-firmware
+raspberrypi-bootloader
+firmware-raspberrypi
+sudo
+which
+less
+
+# our own
+ashlaros-settings
+ashlaros-branding
+ashlaros-browser-settings
+ashlaros-keyring
+ashlaros-mirrorlist
+# ashlaros-release carries os-release and the hook that keeps it; the
+# snapshot wrapper is a binary inside ashlaros-settings, not a package
+ashlaros-release
+
+# desktop
+#
+# sway, waybar, foot, rofi, mako, grim and the rest are not listed: they
+# are depends= of ashlaros-settings above, and listing them again would
+# be a second place to keep in step. Only what the settings package does
+# NOT pull belongs here.
+#
+# rofi in particular is plain `rofi`, not `rofi-wayland` - that package
+# was folded upstream and exists in no repository today; rofi provides it
+# since 2.0, which is what the settings PKGBUILD already says.
+greetd
+greetd-tuigreet
+firefox
+
+# session plumbing
+networkmanager
+bluez
+bluez-utils
+pipewire
+pipewire-pulse
+wireplumber
+xorg-xwayland
+qt5-wayland
+qt6-wayland
+gnome-keyring
+polkit-gnome
+xdg-desktop-portal-gtk
+xdg-desktop-portal-wlr
+xdg-user-dirs
+
+# files, printing, discovery - the same set the installer picks, because
+# what a user sees is meant to be the same desktop
+pcmanfm-qt
+gvfs
+gvfs-mtp
+gvfs-smb
+gvfs-nfs
+cups
+cups-pk-helper
+system-config-printer
+libusb
+nss-mdns
+
+# cli
+ripgrep
+fd
+bat
+eza
+tldr
+plocate
+vim
+nano
+git
+
+# system
+ufw
+power-profiles-daemon
+kernel-modules-hook
+# growing the root partition on first boot needs both
+parted
+e2fsprogs
+# the image is written to a card; a user who wants to check it wants this
+rsync
+openssh

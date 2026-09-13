@@ -1,0 +1,77 @@
+name: build-image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - image/**
+      - .github/workflows/build-image.yml
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: >-
+          Upload the image to R2. Leave off unless the artefact has been
+          booted on a real Pi 5 - see the note in the publish step.
+        type: boolean
+        default: false
+
+concurrency:
+  group: build-image
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Native, not emulated. build-wave.yml already documents why: makepkg
+    # under qemu is slow enough to change what a build costs, and this
+    # does considerably more work than one package.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: tools
+        # parted, losetup, mkfs.vfat and bsdtar run on the runner rather
+        # than in a container: the build needs loop devices, and a
+        # container that can use them is a container with --privileged and
+        # /dev passed through, which is the host with extra steps.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            parted dosfstools e2fsprogs libarchive-tools arch-install-scripts \
+            xz-utils curl qemu-system-arm
+
+      - id: version
+        run: echo "value=$(date +%Y.%m.%d)" >> "$GITHUB_OUTPUT"
+
+      - name: build the image
+        run: sudo -E ./image/build-image.sh out "${{ steps.version.outputs.value }}"
+
+      - name: the image boots and reaches userspace
+        # -M virt with the generic kernel, because QEMU's raspi machines
+        # lag the Pi 5 badly. This proves the rootfs and the userland; it
+        # does NOT prove the image boots on a Pi, which is why publishing
+        # is a separate, manual decision below.
+        run: sudo ./image/test-image.sh out
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rpi5-image-${{ steps.version.outputs.value }}
+          path: out/*
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: upload to R2
+        # Deliberately opt-in. The issue this implements is explicit: a
+        # green CI run must not stand in for hardware, because -M virt
+        # does not boot linux-rpi and cannot tell you the firmware
+        # partition is right. Someone writes the artefact above to a card,
+        # boots a Pi 5, and only then reruns this with publish=true.
+        if: inputs.publish
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ashlaros-iso
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          sudo apt-get install -y --no-install-recommends python3-boto3
+          python3 scripts/upload_iso.py --iso-dir out --version "$VERSION"

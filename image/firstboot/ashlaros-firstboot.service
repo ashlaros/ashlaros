@@ -1,0 +1,26 @@
+[Unit]
+Description=AshlarOS first boot
+# Before greetd, because greetd would otherwise offer a login for an
+# account that does not exist yet. Before NetworkManager, because the
+# whole point is that the board is not reachable until it has a real
+# account - the script starts NetworkManager itself once it is done.
+Before=greetd.service NetworkManager.service systemd-user-sessions.service
+Wants=local-fs.target
+After=local-fs.target
+ConditionPathExists=!/var/lib/ashlaros/firstboot-done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/ashlaros-firstboot
+# It reads a password from the console, so it needs the console: without
+# these the prompt goes nowhere and the boot hangs on an invisible read.
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+
+[Install]
+WantedBy=multi-user.target

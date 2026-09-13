@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+#
+# What the installer does on x86_64, minus everything that needs a UEFI
+# machine. A prebuilt image has no configurator, so the three things that
+# cannot ship baked into it happen here, on the first boot, before anyone
+# can reach the machine:
+#
+#   1. the root filesystem grows to fill the card
+#   2. ssh host keys are generated for THIS machine
+#   3. a user account is created, interactively, on tty1
+#
+# Order matters. The account comes last and the network stays down until
+# it exists, because the failure this is guarding against is a board on a
+# network with credentials that are printed in a README.
+set -uo pipefail
+
+readonly STATE=/var/lib/ashlaros/firstboot-done
+readonly ROOT_DEV_PART=2
+
+say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
+warn() { printf '\033[33m%s\033[0m\n' "$*" >&2; }
+
+[[ -e $STATE ]] && exit 0
+
+grow_root() {
+    local src disk
+    src=$(findmnt -no SOURCE /) || return 1
+    # /dev/mmcblk0p2 -> /dev/mmcblk0, /dev/sda2 -> /dev/sda. lsblk answers
+    # this rather than a regex, because the naming differs between an SD
+    # card and an NVMe drive and the image supports both.
+    disk=/dev/$(lsblk -no PKNAME "$src")
+    [[ -b $disk ]] || return 1
+
+    say "Growing the root filesystem to fill $disk"
+    # growpart is not in the image; parted resizes in place and
+    # resize2fs follows. Both are idempotent, which matters because a
+    # power cut here must not leave a half-grown filesystem.
+    parted -s -f "$disk" resizepart "$ROOT_DEV_PART" 100% || return 1
+    resize2fs "$src" || return 1
+}
+
+regenerate_host_keys() {
+    say "Generating ssh host keys for this machine"
+    # An image that carried its own keys would give every machine written
+    # from it the same identity, and any one of them could impersonate
+    # the rest.
+    rm -f /etc/ssh/ssh_host_*
+    ssh-keygen -A
+}
+
+create_user() {
+    local name password confirm
+    say "AshlarOS"
+    cat <<'EOF'
+
+No account exists on this machine yet, and the network stays down until
+one does. Nothing is reachable before you finish here.
+
+EOF
+
+    while :; do
+        read -rp "Username: " name
+        if [[ ! $name =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+            warn "Letters, digits, - and _; starting with a letter."
+            continue
+        fi
+        break
+    done
+
+    while :; do
+        read -rsp "Password: " password; echo
+        read -rsp "Repeat: " confirm; echo
+        if [[ $password != "$confirm" ]]; then
+            warn "Those do not match."
+            continue
+        fi
+        if [[ ${#password} -lt 8 ]]; then
+            warn "At least 8 characters."
+            continue
+        fi
+        break
+    done
+
+    useradd -m -G wheel,video,audio,input -s /bin/zsh "$name"
+    printf '%s:%s\n' "$name" "$password" | chpasswd
+    # wheel gains sudo here rather than in the image, so an image that
+    # never finished firstboot has no path to root at all
+    install -Dm440 /dev/stdin /etc/sudoers.d/10-wheel <<'EOF'
+%wheel ALL=(ALL:ALL) ALL
+EOF
+    say "Created $name."
+}
+
+main() {
+    mkdir -p "$(dirname "$STATE")"
+
+    grow_root || warn "Could not grow the root filesystem; continuing."
+    regenerate_host_keys
+
+    # A card pulled from a dead board still boots; an account already
+    # created means there is nothing to ask.
+    if [[ -z $(awk -F: '$3 >= 1000 && $3 < 65534 {print $1}' /etc/passwd) ]]; then
+        create_user
+    fi
+
+    date -Iseconds > "$STATE"
+    say "Ready. Starting the desktop."
+    systemctl start NetworkManager.service
+}
+
+main "$@"

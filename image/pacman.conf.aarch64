@@ -1,0 +1,31 @@
+# The Pi image's repository stack.
+#
+# Unlike iso/pacman.conf there are no CachyOS sections and no v3 ordering
+# to get right: CachyOS publishes nothing for ARM, so this is Arch Linux
+# ARM's own repositories with ours layered on top. Ours comes first for
+# the same reason it does on x86_64 - pacman takes the first repository
+# carrying a package, not the highest version - so a package we ship is
+# ours rather than whichever tree happens to also have it.
+
+[options]
+HoldPkg     = pacman glibc
+Architecture = auto
+CheckSpace
+ParallelDownloads = 5
+SigLevel    = Required DatabaseOptional
+LocalFileSigLevel = Optional
+
+[ashlaros]
+Include = /etc/pacman.d/ashlaros-mirrorlist
+
+[core]
+Include = /etc/pacman.d/mirrorlist
+
+[extra]
+Include = /etc/pacman.d/mirrorlist
+
+[alarm]
+Include = /etc/pacman.d/mirrorlist
+
+[aur]
+Include = /etc/pacman.d/mirrorlist

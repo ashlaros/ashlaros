@@ -389,8 +389,44 @@ above can be replaced with `Include = /etc/pacman.d/ashlaros-mirrorlist`.
 - **Not for pre-Haswell CPUs.** The ISO's package stack is `x86_64_v3`, which
   requires AVX2. Machines older than 2013 cannot run it.
 - **Not an ARM ISO.** CachyOS publishes no ARM repositories, so there is no
-  ARM kernel or v3 userland to build one from. ARM users run Arch Linux ARM
-  and add this repository on top.
+  ARM kernel or v3 userland to build one from. There is a Raspberry Pi 5
+  *disk image* instead - a different thing, described below.
+
+## The Raspberry Pi 5 image
+
+`image/` builds a prebuilt disk image for the Pi 5. It is **not the ISO for
+another architecture** - four of the ISO's defining properties cannot exist
+on an ARM board, and pretending otherwise would mis-sell it:
+
+| | x86_64 ISO | Pi 5 image |
+| --- | --- | --- |
+| kernel | `linux-cachyos` | `linux-rpi` (the board kernel) |
+| userland | CachyOS `x86_64_v3` | plain Arch Linux ARM |
+| boot | systemd-boot, UEFI | Pi firmware off a FAT partition |
+| install | TUI installer, LUKS + TPM | written to a card, **unencrypted** |
+| hardware detection | `chwd` | none (`chwd` is x86_64 only) |
+
+What does carry over is what a user actually sees: sway, `ashlaros-settings`,
+the theming, the waybar config, the migrations mechanism.
+
+Because there is no installer to ask anything, the image does its setup on
+first boot (`image/firstboot/`): it grows the root filesystem to fill the
+card, generates ssh host keys for that machine, and creates an account on
+tty1 **before the network comes up**. Arch Linux ARM's `alarm`/`alarm` and
+`root`/`root` accounts are removed at build time and `sshd` stays off until
+there is an account to reach - a prebuilt image with published credentials
+on a network is the failure this is built to avoid.
+
+```sh
+sudo ./image/build-image.sh out            # needs loop devices; aarch64 host
+sudo ./image/test-image.sh out             # userland checks
+```
+
+**A green CI run is not a proof it boots.** `image/test-image.sh` checks the
+rootfs and the userland; QEMU's `raspi` machines lag the Pi 5, so the board
+firmware and `linux-rpi` are exactly what it cannot exercise. Publishing is
+a manual, opt-in input on `build-image.yml` and should follow someone
+booting the artefact on real hardware.
 
 ## Building
 

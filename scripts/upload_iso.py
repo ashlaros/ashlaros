@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Upload a built ISO and its checksum to the release bucket.
+"""Upload a built image and its checksum to the release bucket.
 
 Version-prefixed, so an older image stays fetchable while a newer one
 publishes, and `latest/` is repointed only once the versioned copy is
 complete - a download that starts mid-upload would otherwise get a truncated
 image that still checksums as whatever arrived.
+
+Two artefact types share this path: the x86_64 ISO and the Raspberry Pi
+disk image. They are different products - different arch, different boot
+mechanism, no installer on the Pi - so each has its own `latest/` alias
+and neither can overwrite the other's.
 """
 
 import argparse
@@ -41,24 +46,29 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     args = parser.parse_args()
 
-    isos = sorted(glob.glob(os.path.join(args.iso_dir, "*.iso")))
-    if not isos:
-        log("no ISO to upload")
+    # (glob, content type, the latest/ alias it repoints)
+    ARTEFACTS = (
+        ("*.iso", "application/x-iso9660-image", "latest/ashlaros.iso"),
+        ("*.img.xz", "application/x-xz", "latest/ashlaros-rpi5.img.xz"),
+    )
+
+    found = [
+        (path, content_type, alias)
+        for pattern, content_type, alias in ARTEFACTS
+        for path in sorted(glob.glob(os.path.join(args.iso_dir, pattern)))
+    ]
+    if not found:
+        log("nothing to upload")
         return 1
 
     bucket = os.environ["R2_BUCKET"]
     s3 = s3_client()
 
-    for iso in isos:
-        name = os.path.basename(iso)
+    for path, content_type, _ in found:
+        name = os.path.basename(path)
         key = f"{args.version}/{name}"
-        s3.upload_file(
-            iso,
-            bucket,
-            key,
-            ExtraArgs={"ContentType": "application/x-iso9660-image"},
-        )
-        log(f"uploaded {key} ({os.path.getsize(iso)} bytes)")
+        s3.upload_file(path, bucket, key, ExtraArgs={"ContentType": content_type})
+        log(f"uploaded {key} ({os.path.getsize(path)} bytes)")
 
     checksums = os.path.join(args.iso_dir, "SHA256SUMS")
     if os.path.exists(checksums):
@@ -73,23 +83,21 @@ def main() -> int:
     # last, and by server-side copy rather than a second upload of the same
     # bytes: until this points at the new image, latest/ still serves the
     # previous one whole
-    for iso in isos:
-        name = os.path.basename(iso)
+    for path, _, alias in found:
+        name = os.path.basename(path)
         source = f"{args.version}/{name}"
         s3.copy_object(
             Bucket=bucket,
-            Key="latest/ashlaros.iso",
+            Key=alias,
             CopySource={"Bucket": bucket, "Key": source},
         )
         # a copy that returned is not necessarily a copy that landed whole;
         # the size is the cheapest thing that would catch a truncated one
-        expected = os.path.getsize(iso)
-        actual = s3.head_object(Bucket=bucket, Key="latest/ashlaros.iso")["ContentLength"]
+        expected = os.path.getsize(path)
+        actual = s3.head_object(Bucket=bucket, Key=alias)["ContentLength"]
         if actual != expected:
-            raise SystemExit(
-                f"latest/ashlaros.iso is {actual} bytes, expected {expected}"
-            )
-        log(f"latest/ashlaros.iso now points at {source} ({actual} bytes)")
+            raise SystemExit(f"{alias} is {actual} bytes, expected {expected}")
+        log(f"{alias} now points at {source} ({actual} bytes)")
 
     return 0
 
