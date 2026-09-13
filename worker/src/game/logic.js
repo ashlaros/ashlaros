@@ -367,10 +367,17 @@ export function applyAction(state, action) {
       if (state.holdUsed) return state;
       const held = state.hold;
       state.hold = state.piece;
-      state.holdUsed = true;
       if (held === null) {
+        // spawn() clears holdUsed, because a NEW piece is allowed a hold.
+        // The piece arriving here is not new - it is the replacement for
+        // one just put away - so the flag is set after the spawn rather
+        // than before it. Set first, it was wiped and the next hold was
+        // accepted: S -> I -> S on the same piece, which is the
+        // indefinite stall the Guideline's one-swap rule exists to stop.
         spawn(state);
+        state.holdUsed = true;
       } else {
+        state.holdUsed = true;
         state.piece = held;
         state.rotation = 0;
         state.x = 3;

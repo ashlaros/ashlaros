@@ -7,6 +7,7 @@
  * all - one implementation is only worth anything if it gives one answer.
  */
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 
 import {
@@ -14,11 +15,13 @@ import {
   MAX_EVENTS_PER_TICK,
   MAX_PIECES,
   PIECE_NAMES,
+  applyAction,
   bagAt,
   createState,
   hash32,
   pieceAt,
   replay,
+  spawn,
   stepTick,
 } from '../src/game/logic.js';
 import { DAY_GRACE_MS, allTime, claimedDay, recent, dayOf, initialsOf, seedFor, validateSubmission, verify } from '../src/game/scores.js';
@@ -303,4 +306,84 @@ test('the rolling window only counts recent days', async () => {
   // an all-time table ossifies: after a year the top ten are fixed
   assert.equal(db.asked[0].args[1], '2026-08-14');
   assert.match(db.asked[0].sql, /day >= \?/);
+});
+
+test('hold swaps once per piece, including the very first hold', () => {
+  // The first hold is the special case and it was broken: with an empty
+  // hold slot the swap calls spawn(), and spawn() clears holdUsed because
+  // a genuinely new piece is allowed one. The flag was being set before
+  // that call and wiped by it, so the next hold went through - S -> I ->
+  // S on one piece, which is the indefinite stall the one-swap rule
+  // exists to prevent.
+  const state = createState(11);
+  spawn(state);
+  applyAction(state, ACTIONS.HOLD);
+  const afterFirst = state.piece;
+  applyAction(state, ACTIONS.HOLD);
+  assert.equal(state.piece, afterFirst, 'a second hold on the same piece was accepted');
+
+  // and the rule is once per PIECE, not once per run
+  applyAction(state, ACTIONS.HARD_DROP);
+  const fresh = state.piece;
+  applyAction(state, ACTIONS.HOLD);
+  assert.notEqual(state.piece, fresh, 'hold was refused on a new piece');
+});
+
+test('the seven-bag never deals the same piece three times running', () => {
+  // a player notices this immediately, and a generator that can do it is
+  // not a seven-bag however it is described
+  for (let seed = 0; seed < 200; seed++) {
+    const stream = [];
+    for (let n = 0; n < 8; n++) {
+      const bag = bagAt(seed, n);
+      assert.deepEqual([...bag].sort(), [...PIECE_NAMES].sort(), `bag ${n} of seed ${seed}`);
+      stream.push(...bag);
+    }
+    for (let i = 0; i + 2 < stream.length; i++) {
+      assert.ok(
+        !(stream[i] === stream[i + 1] && stream[i + 1] === stream[i + 2]),
+        `three ${stream[i]} running at ${i} of seed ${seed}`,
+      );
+    }
+  }
+});
+
+test('a hard drop locks the piece immediately', () => {
+  // it is the commitment: anything that let the piece move after it would
+  // make the drop a suggestion
+  const state = createState(11);
+  spawn(state);
+  const before = state.index;
+  applyAction(state, ACTIONS.HARD_DROP);
+  assert.equal(state.index, before + 1);
+});
+
+test('nothing the client is served carries the verifier', () => {
+  // The page plays with the same module the verifier replays with, so the
+  // risk is real rather than theoretical: one careless export and the
+  // rules a submission is checked against ship to the person submitting.
+  const forbidden = [
+    [/\bexport function verify\b/, 'the verifier'],
+    [/\bclass Verifier\b/, 'the Durable Object'],
+    [/CREATE TABLE/, 'the database schema'],
+    [/\benv\.SCORES\b/, 'the D1 binding'],
+    [/\benv\.VERIFIER\b/, 'the Durable Object binding'],
+  ];
+  const served = readdirSync('../docs/game').filter((name) => name.endsWith('.js'));
+  assert.ok(served.length >= 4, 'no client files found to check');
+  for (const name of served) {
+    const source = readFileSync(`../docs/game/${name}`, 'utf8');
+    for (const [pattern, what] of forbidden) {
+      assert.ok(!pattern.test(source), `${name} ships ${what}`);
+    }
+  }
+});
+
+test('the score path never touches the stats namespace', () => {
+  // STATS is last-write-wins with 60s propagation - the exact shape a
+  // leaderboard loses entries to, which is why the scores live in D1
+  for (const file of ['scores.js', 'logic.js', 'quarry.js']) {
+    const source = readFileSync(`src/game/${file}`, 'utf8');
+    assert.ok(!/\bSTATS\b/.test(source), `${file} references STATS`);
+  }
 });
