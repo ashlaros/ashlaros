@@ -65,7 +65,20 @@ code { font-family: monospace; color: #c9ccd1; }
 /* width and height are on the element too: the page ships no external css,
    so a late-loading image would otherwise reflow the downloads under it */
 .shots { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1rem 0; }
-.shot { width: 480px; height: 270px; object-fit: cover; border: 1px solid #3a4043; }
+/* max-width, the same thing .tour below already had: a fixed 480px on a
+   390px phone put the right edge of every shot 112px past the viewport
+   and scrolled the whole page sideways. aspect-ratio rather than a fixed
+   height, because once the width is allowed to shrink a fixed height
+   makes object-fit crop more of the picture the smaller the screen gets -
+   scaling it down is what a reader wants. */
+.shot {
+  width: 480px;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid #3a4043;
+}
 .tour { max-width: 100%; height: auto; border: 1px solid #3a4043; margin: 1rem 0; }
 `;
 
