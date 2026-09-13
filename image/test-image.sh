@@ -41,6 +41,13 @@ say "extracting the kernel from the boot partition"
 image="${compressed%.xz}"
 dtb=$(cat "$out_dir/dtb-name")
 
+# QEMU's SD model insists on a power-of-two size and says so plainly:
+#   Invalid SD card size: 6.84 GiB / has to be a power of 2
+# The published image stays 7000 MB - padding it to 8 GiB would cost every
+# downloader the difference - so the copy under test is grown instead.
+# Sparse, so this costs no real disk.
+qemu-img resize -f raw "$image" 8G >/dev/null
+
 serial="$work/serial.log"
 : > "$serial"
 
