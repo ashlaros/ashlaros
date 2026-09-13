@@ -42,6 +42,24 @@ jobs:
         run: |
           cargo test --manifest-path core/Cargo.toml
           node ci/cross-target.mjs
+          cp core/target/native-results.txt /tmp/x86_64-results.txt
+      - name: aarch64 must agree with x86_64
+        # The distribution is dual-arch, so "the same everywhere" has to
+        # include the other architecture a player might be running. The
+        # wasm check above says nothing about it: aarch64 is a third code
+        # generator, and the one shipped in the ARM package.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user-static
+          rustup target add aarch64-unknown-linux-gnu
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+            cargo test --release --manifest-path core/Cargo.toml \
+            --target aarch64-unknown-linux-gnu --no-run
+          binary=$(find core/target/aarch64-unknown-linux-gnu/release/deps \
+            -name 'cross_target-*' -type f -executable | head -1)
+          QEMU_LD_PREFIX=/usr/aarch64-linux-gnu qemu-aarch64-static "$binary"
+          diff /tmp/x86_64-results.txt core/target/native-results.txt \
+            && echo "aarch64 and x86_64 agree" 
 
   client:
     runs-on: ubuntu-latest
