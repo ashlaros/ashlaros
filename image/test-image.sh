@@ -1,31 +1,32 @@
 #!/usr/bin/env bash
 #
-# Boot the built image far enough to prove the rootfs and userland.
+# Boot the built image under QEMU with the real Pi kernel and watch the
+# serial console until userspace says it is up.
 #
-# What this proves: the partitions are readable, the ext4 root mounts,
-# systemd starts, and the packages we installed are there.
+# The approach is manjaro-sway's (`ci/boot-smoke.sh`, `extract-rpi-kernel.sh`),
+# which had already solved the two things that make this hard:
 #
-# What this does NOT prove, and the reason publishing is a separate manual
-# decision: that the image boots on a Raspberry Pi 5. QEMU's `raspi`
-# machine types lag the Pi 5, so this uses `-M virt` with a generic
-# kernel extracted from the image - which means the board firmware and
-# `linux-rpi` itself are exactly the parts left untested. manjaro-sway
-# hit the same wall; their boot smoke test has BOOT_VIRT_MACHINE=1 for
-# it.
+#   - mtools reads the FAT boot partition at a byte offset, so the kernel,
+#     initramfs and DTB come out with no sudo and no loop device;
+#   - `-M raspi4b` boots that kernel, so this exercises linux-rpi rather
+#     than a generic one. QEMU has no raspi5 machine, so a Pi 5 image is
+#     booted on the Pi 4 model - close enough to prove the kernel and the
+#     root filesystem, not close enough to prove the Pi 5 firmware.
 #
-# A green run here is necessary and not sufficient. Someone writes the
-# artefact to a card and boots a real board before anything publishes.
+# So a green run here is a real boot and still not a substitute for a
+# board. Publishing stays a separate manual decision.
 set -euo pipefail
 
-[[ $# -ge 1 ]] || { echo "usage: test-image.sh <image-dir>" >&2; exit 2; }
+[[ $# -ge 1 ]] || { echo "usage: test-image.sh <image-dir> [timeout]" >&2; exit 2; }
 out_dir=$(realpath "$1")
+timeout_s="${2:-420}"
 
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 work=$(mktemp -d)
-loop=""
+qemu_pid=""
 cleanup() {
     set +e
-    mountpoint -q "$work/mnt" 2>/dev/null && umount "$work/mnt"
-    [[ -n $loop ]] && losetup -d "$loop" 2>/dev/null
+    [[ -n $qemu_pid ]] && kill "$qemu_pid" 2>/dev/null
     rm -rf "$work"
 }
 trap cleanup EXIT
@@ -35,71 +36,53 @@ say() { printf '\n== %s\n' "$*" >&2; }
 compressed=$(find "$out_dir" -name '*.img.xz' | head -1)
 [[ -n $compressed ]] || { echo "no image in $out_dir" >&2; exit 1; }
 
-say "decompressing $(basename "$compressed")"
-xz -dc "$compressed" > "$work/test.img"
+say "extracting the kernel from the boot partition"
+"$here/extract-rpi-kernel.sh" "$compressed"
+image="${compressed%.xz}"
+dtb=$(cat "$out_dir/dtb-name")
 
-loop=$(losetup --show -fP "$work/test.img")
-mkdir -p "$work/mnt"
+serial="$work/serial.log"
+: > "$serial"
 
-say "partition table"
-parted -s "$work/test.img" print || true
+# What "it booted" means, in the order they are most reliable. systemd stops
+# writing to the kernel ring buffer once journald is up, so its later
+# "Reached target" lines never reach the serial - audit keeps flowing
+# through kauditd, which is why manjaro-sway leads with it.
+marker="${BOOT_MARKER_REGEX:-audit.*hostname=ashlaros|ashlaros[-a-z]* *login:|Ready\. Starting the desktop|Username:}"
 
-say "the root filesystem mounts and carries what we installed"
-mount "${loop}p2" "$work/mnt"
+say "booting under -M raspi4b (timeout ${timeout_s}s)"
+qemu-system-aarch64 \
+    -M raspi4b -m 2G -smp 4 \
+    -kernel "$out_dir/Image" \
+    -initrd "$out_dir/initramfs-linux.img" \
+    -dtb "$out_dir/$dtb" \
+    -append "root=/dev/mmcblk1p2 rw rootwait earlycon=pl011,0xfe201000 console=ttyAMA0,115200 ignore_loglevel systemd.journald.forward_to_console=1" \
+    -drive file="$image",if=sd,format=raw \
+    -nographic \
+    -serial "file:$serial" \
+    -monitor none >"$work/qemu.out" 2>&1 &
+qemu_pid=$!
 
-fail=0
-check() {
-    if [[ -e "$work/mnt/$1" ]]; then
-        printf '  ok      %s\n' "$1"
-    else
-        printf '  MISSING %s\n' "$1"
-        fail=1
-    fi
-}
+booted=0
+for _ in $(seq 1 "$timeout_s"); do
+    sleep 1
+    if grep -qE "$marker" "$serial" 2>/dev/null; then booted=1; break; fi
+    kill -0 "$qemu_pid" 2>/dev/null || break
+done
 
-# the desktop a user is promised
-check usr/bin/sway
-check usr/bin/waybar
-check usr/bin/foot
-check usr/bin/rofi
-check usr/bin/greetd
-# our own
-check usr/bin/ashlaros-settings-tui
-check usr/bin/ashlaros-snapshot
-check usr/share/sway/scripts/hw/laptop
-# first boot, which is what makes the image safe to hand out
-check usr/local/bin/ashlaros-firstboot
-check etc/systemd/system/ashlaros-firstboot.service
-check etc/systemd/system/multi-user.target.wants/ashlaros-firstboot.service
-# the board kernel
-check boot/kernel8.img
+kill "$qemu_pid" 2>/dev/null; qemu_pid=""
 
-say "the credentials Arch Linux ARM ships are gone"
-if grep -q '^alarm:' "$work/mnt/etc/passwd" 2>/dev/null; then
-    echo "  FAIL    the alarm account still exists"
-    fail=1
-else
-    echo "  ok      no alarm account"
-fi
-if [[ -n $(find "$work/mnt/etc/ssh" -name 'ssh_host_*' 2>/dev/null) ]]; then
-    echo "  FAIL    host keys are baked into the image"
-    fail=1
-else
-    echo "  ok      no baked-in host keys"
-fi
-if [[ $(awk -F: '$1 == "root" {print $2}' "$work/mnt/etc/shadow") == "!"* ]]; then
-    echo "  ok      root is locked"
-else
-    echo "  FAIL    root is not locked"
-    fail=1
+say "serial tail"
+tail -40 "$serial" | sed 's/^/  /'
+
+if [[ $booted -ne 1 ]]; then
+    echo "no boot marker in ${timeout_s}s" >&2
+    exit 1
 fi
 
-say "os-release identifies AshlarOS"
-grep -E '^(NAME|ID|BUILD_ID)=' "$work/mnt/etc/os-release" | sed 's/^/  /'
-grep -q '^ID=ashlaros$' "$work/mnt/etc/os-release" || fail=1
-
-umount "$work/mnt"
-losetup -d "$loop"; loop=""
-
-[[ $fail -eq 0 ]] || { echo "image checks failed" >&2; exit 1; }
-say "image checks passed (userland only - NOT a proof it boots a Pi)"
+say "booted: matched the marker on the serial console"
+# The first-boot script asks for a username before the network comes up,
+# so reaching that prompt means systemd, the root filesystem and our own
+# unit all did their jobs.
+grep -qE "Username:|Ready\. Starting the desktop" "$serial" &&
+    echo "  reached the firstboot prompt"

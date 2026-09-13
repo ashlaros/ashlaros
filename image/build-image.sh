@@ -91,9 +91,22 @@ mount -t sysfs sys "$mount_root/sys"
 mount -o bind /dev "$mount_root/dev"
 mount -t devpts devpts "$mount_root/dev/pts"
 
-# resolv.conf comes from the host for the build only; first boot replaces
-# it with NetworkManager's
-cp /etc/resolv.conf "$mount_root/etc/resolv.conf"
+# resolv.conf for the build only; first boot replaces it with
+# NetworkManager's. Not a copy of the host's: on an Ubuntu runner that is a
+# symlink to systemd-resolved's stub at 127.0.0.53, which resolves nothing
+# inside a chroot where resolved is not running - pacman then fails every
+# mirror with "Could not resolve host".
+rm -f "$mount_root/etc/resolv.conf"
+printf 'nameserver 1.1.1.1
+nameserver 8.8.8.8
+' > "$mount_root/etc/resolv.conf"
+
+# ALARM's shipped mirrorlist is geo-redirected through a single host; name
+# the mirror the databases were verified against instead of trusting
+# whatever the tarball happened to carry.
+printf 'Server = http://mirror.archlinuxarm.org/$arch/$repo
+' \
+    > "$mount_root/etc/pacman.d/mirrorlist"
 
 curl -fsSL "$KEY_URL" -o "$work/ashlaros.gpg"
 cp "$work/ashlaros.gpg" "$mount_root/tmp/ashlaros.gpg"

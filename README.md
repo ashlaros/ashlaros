@@ -422,11 +422,16 @@ sudo ./image/build-image.sh out            # needs loop devices; aarch64 host
 sudo ./image/test-image.sh out             # userland checks
 ```
 
-**A green CI run is not a proof it boots.** `image/test-image.sh` checks the
-rootfs and the userland; QEMU's `raspi` machines lag the Pi 5, so the board
-firmware and `linux-rpi` are exactly what it cannot exercise. Publishing is
-a manual, opt-in input on `build-image.yml` and should follow someone
-booting the artefact on real hardware.
+`image/test-image.sh` boots the image for real: `mtools` pulls `linux-rpi`
+and its DTB off the FAT partition with no loop device, and QEMU runs it
+under `-M raspi4b` until the serial console shows userspace. The approach
+is manjaro-sway's `ci/boot-smoke.sh`, which solved this first.
+
+**It is still not a proof it boots on a Pi 5.** QEMU has no `raspi5`
+machine, so the image is booted on the Pi 4 model: that exercises the
+kernel and the root filesystem, not the Pi 5 firmware. Publishing is a
+manual, opt-in input on `build-image.yml` and should follow someone
+writing the artefact to a card.
 
 ## Building
 

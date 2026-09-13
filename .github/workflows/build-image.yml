@@ -37,7 +37,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             parted dosfstools e2fsprogs libarchive-tools arch-install-scripts \
-            xz-utils curl qemu-system-arm
+            xz-utils curl qemu-system-arm mtools fdisk
 
       - id: version
         run: echo "value=$(date +%Y.%m.%d)" >> "$GITHUB_OUTPUT"
@@ -45,12 +45,13 @@ jobs:
       - name: build the image
         run: sudo -E ./image/build-image.sh out "${{ steps.version.outputs.value }}"
 
-      - name: the image boots and reaches userspace
-        # -M virt with the generic kernel, because QEMU's raspi machines
-        # lag the Pi 5 badly. This proves the rootfs and the userland; it
-        # does NOT prove the image boots on a Pi, which is why publishing
-        # is a separate, manual decision below.
-        run: sudo ./image/test-image.sh out
+      - name: the image boots
+        # A real boot of linux-rpi under -M raspi4b, the way manjaro-sway
+        # does it: mtools pulls the kernel off the FAT partition with no
+        # loop device, and QEMU boots it. QEMU has no raspi5 machine, so
+        # this proves the kernel and the root filesystem and not the Pi 5
+        # firmware - which is why publishing is still manual below.
+        run: ./image/test-image.sh out
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
