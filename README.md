@@ -228,6 +228,27 @@ requirement, not a difficulty choice: uncapped, every position at every
 tick is legal and the verifier has nothing to reject. Sampled targets are
 12 events/second against 60 for logging every tick.
 
+**The sound is generated, not sourced.** `scripts/game-sfx.mjs` writes all
+21 cues as WAV — 340 KiB, deterministic, byte-identical across runs, with
+no third-party rights to check and nothing sampled or transcribed from any
+other work. It runs as part of `npm run game:sync`, so the files are built
+rather than committed.
+
+A cue carries information, not decoration, and two rules follow:
+**frequency is the information channel, loudness is the priority channel.**
+What happens every second is quiet and dull (`move` peaks at 0.02 of full
+scale); what happens rarely is loud and bright (`gameover` at 0.40). The
+line clears and the brick tiers each walk up a major triad plus the
+octave — measured off the rendered audio at 440, 554, 659 and 880 Hz — so
+breaking upward through a wall lets you hear how deep you are without
+looking. Each rung is its own file, never one repitched: resampling
+shortens a sound, so a four-line clear would answer *shorter* than a
+single.
+
+Audio never blocks the game. It degrades to silence when the files are
+missing, when a context cannot be created, and when autoplay policy
+refuses one; `m` mutes, and the preference persists.
+
 `worker/src/game/logic.js` is the single implementation: the page imports it
 to play and the verifier imports it to replay. `docs/game/logic.js` is
 generated from it by `npm run game:sync`, which `npm test` and the deploy

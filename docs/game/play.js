@@ -20,11 +20,15 @@ import {
   createState,
   applyAction,
   dayOf,
+  levelFor,
   seedFor,
   pieceAt,
   spawn,
   stepTick,
 } from './logic.js';
+import { createAudio } from './audio.js';
+
+const audio = createAudio();
 
 const COLOURS = {
   // The mark's stone, not seven arcade colours: the favicon is three
@@ -126,8 +130,37 @@ function drawNext() {
 function press(action) {
   if (!state || state.over) return;
   events.push([action, state.tick]);
+  const heldBefore = state.hold;
+  const lockedBefore = state.index;
   applyAction(state, action);
+  // the input cues, from what the action actually did rather than from
+  // the key that was pressed - a rotation the wall refused makes no sound
+  if (action === ACTIONS.HARD_DROP) audio.play('drop');
+  else if (action === ACTIONS.HOLD && state.hold !== heldBefore) audio.play('hold');
+  else if (action === ACTIONS.LEFT || action === ACTIONS.RIGHT) audio.play('move');
+  else if (action === ACTIONS.ROTATE_CW || action === ACTIONS.ROTATE_CCW) audio.play('rotate');
+  if (state.index !== lockedBefore) announceLock(lockedBefore);
   draw();
+}
+
+let lastLines = 0;
+let lastLevel = 0;
+
+/** A piece locked: the clear ladder, or the dull tick of a plain placement. */
+function announceLock() {
+  const cleared = state.lines - lastLines;
+  lastLines = state.lines;
+  if (cleared > 0) {
+    // one file per rung, never one repitched: resampling shortens a
+    // sound, so a four-line clear would answer shorter than a single
+    audio.play(`clear-${Math.min(4, cleared)}`);
+  } else {
+    audio.play('lock');
+  }
+  if (levelFor(state.index) > lastLevel) {
+    lastLevel = levelFor(state.index);
+    audio.play('levelup');
+  }
 }
 
 const KEYS = {
@@ -158,6 +191,10 @@ window.addEventListener('keydown', (event) => {
     }
     return;
   }
+  if (event.key === 'm' || event.key === 'M') {
+    statusEl.textContent = audio.toggle() ? 'Muted.' : 'Playing.';
+    return;
+  }
   if (!running) {
     start();
     return;
@@ -185,7 +222,10 @@ function frame(now) {
   const step = 1000 / TICKS_PER_SECOND;
   while (accumulator >= step) {
     accumulator -= step;
+    const lockedBefore = state.index;
     stepTick(state);
+    // gravity locks pieces too, not just a hard drop
+    if (state.index !== lockedBefore) announceLock();
     if (state.over) {
       finish();
       return;
@@ -197,6 +237,9 @@ function frame(now) {
 
 function start() {
   if (seed === null) return;
+  audio.start();
+  lastLines = 0;
+  lastLevel = 0;
   state = createState(seed);
   spawn(state);
   events = [];
@@ -250,6 +293,7 @@ function finish() {
   running = false;
   draw();
   statusEl.textContent = `Topped out at ${state.score.toLocaleString('en-US')}.`;
+  audio.play('gameover');
   if (submittable && placed(state.score)) {
     // from the left every time: the cursor is not a leftover from
     // whichever key the run happened to end on

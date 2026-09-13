@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "game:sync": "cp src/game/logic.js ../docs/game/logic.js && cp src/game/quarry.js ../docs/game/quarry.js",
+    "game:sync": "cp src/game/logic.js ../docs/game/logic.js && cp src/game/quarry.js ../docs/game/quarry.js && npm run audio",
     "test": "npm run game:sync && node --test test/*.test.mjs",
-    "deploy": "npm run game:sync && wrangler deploy"
+    "deploy": "npm run game:sync && wrangler deploy",
+    "audio": "node ../scripts/game-sfx.mjs ../docs/game/audio"
   }
 }

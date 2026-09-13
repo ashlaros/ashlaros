@@ -32,8 +32,10 @@ import {
   stepTick,
 } from './quarry.js';
 import { dayOf, seedFor } from './logic.js';
+import { createAudio } from './audio.js';
 
 const GAME = 'quarry';
+const audio = createAudio();
 
 const COLOURS = {
   // the mark's stone, as in Courses: two tones plus the accent
@@ -170,7 +172,21 @@ function frame(now) {
   while (accumulator >= step) {
     accumulator -= step;
     steer();
+    // Cues are read from what the tick changed, rather than the
+    // simulation being asked to announce things. That keeps audio out of
+    // the shared module entirely - the verifier must not carry a sound
+    // system to replay a run.
+    const before = {
+      score: state.score,
+      bricks: state.bricksBroken,
+      lives: state.lives,
+      level: state.level,
+      balls: state.balls.length,
+      capsules: state.capsules.length,
+      paddleY: state.balls.map((b) => b.vy > 0),
+    };
     stepTick(state);
+    announce(before);
     if (state.over) {
       finish();
       return;
@@ -180,8 +196,41 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+/**
+ * What the tick did, as sound.
+ *
+ * A brick that took a hit is the ladder; everything that happens
+ * constantly sits below it, or a cue that competes with the bricks buries
+ * the one piece of information the ladder carries.
+ */
+function announce(before) {
+  if (state.level > before.level) {
+    audio.play('levelclear');
+    return;
+  }
+  if (state.lives < before.lives) {
+    audio.play('lost');
+    return;
+  }
+  if (state.bricksBroken > before.bricks) {
+    // the tier is gone by now, so the score tells us which rung it was
+    const gained = state.score - before.score;
+    const rung = gained >= 200 ? 3 : gained >= 100 ? 2 : 1;
+    audio.play(`brick-${rung}`);
+  } else if (state.score > before.score) {
+    // scored without breaking anything: a partial hit on a multi-hit
+    // brick, or a capsule caught
+    audio.play(state.capsules.length < before.capsules ? 'catch' : 'brick-1');
+  }
+  if (state.capsules.length > before.capsules) audio.play('capsule');
+  // a ball that reversed direction against the paddle
+  const bounced = state.balls.some((ball, i) => before.paddleY[i] && ball.vy < 0);
+  if (bounced) audio.play('paddle');
+}
+
 function start() {
   if (seed === null) return;
+  audio.start();
   state = createState(seed);
   events = [];
   lastTarget = state.target;
@@ -228,6 +277,7 @@ function finish() {
   running = false;
   draw();
   statusEl.textContent = `Out of lives at ${state.score.toLocaleString('en-US')}.`;
+  audio.play('gameover');
   if (submittable && placed(state.score)) {
     slot = 0;
     entryEl.hidden = false;
@@ -256,6 +306,10 @@ window.addEventListener('keydown', (event) => {
   }
   if (!running) {
     start();
+    return;
+  }
+  if (event.key === 'm' || event.key === 'M') {
+    statusEl.textContent = audio.toggle() ? 'Muted.' : 'Playing.';
     return;
   }
   if (event.key === 'ArrowLeft') heldKeys.left = true;
