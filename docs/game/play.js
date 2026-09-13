@@ -19,6 +19,8 @@ import {
   WIDTH,
   createState,
   applyAction,
+  dayOf,
+  seedFor,
   pieceAt,
   spawn,
   stepTick,
@@ -45,7 +47,8 @@ const nextCtx = nextCanvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 const statusEl = document.getElementById('status');
 const tableEl = document.getElementById('board-table');
-const playerEl = document.getElementById('player');
+const entryEl = document.getElementById('entry');
+const initialEls = [...document.querySelectorAll('#initials button')];
 const submitEl = document.getElementById('submit');
 const noteEl = document.getElementById('submit-note');
 
@@ -54,6 +57,10 @@ let events = [];
 let seed = null;
 let day = null;
 let running = false;
+let submittable = false;
+let lastBoard = [];
+// the board shows twenty, so placing means beating the twentieth
+const BOARD_SIZE = 20;
 let accumulator = 0;
 let lastFrame = 0;
 
@@ -135,6 +142,22 @@ const KEYS = {
 };
 
 window.addEventListener('keydown', (event) => {
+  // entry owns the keyboard while it is open: otherwise cycling a letter
+  // would be read as "press any key to start" and throw the run away
+  if (!entryEl.hidden) {
+    const handled = {
+      ArrowLeft: () => { slot = (slot + 2) % 3; drawInitials(); },
+      ArrowRight: () => { slot = (slot + 1) % 3; drawInitials(); },
+      ArrowUp: () => cycle(1),
+      ArrowDown: () => cycle(-1),
+      Enter: () => submitEl.click(),
+    }[event.key];
+    if (handled) {
+      event.preventDefault();
+      handled();
+    }
+    return;
+  }
   if (!running) {
     start();
     return;
@@ -181,32 +204,84 @@ function start() {
   accumulator = 0;
   lastFrame = performance.now();
   statusEl.textContent = 'Playing.';
-  submitEl.disabled = true;
+  entryEl.hidden = true;
+  noteEl.textContent = '';
   requestAnimationFrame(frame);
+}
+
+/**
+ * Initials entry, the arcade way.
+ *
+ * Shown after the run and only if the score placed, exactly as the
+ * original does - it is a reward for the run, not a form to fill in
+ * before earning one.
+ */
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+let slot = 0;
+let initials = ['A', 'A', 'A'];
+
+function drawInitials() {
+  initialEls.forEach((el, i) => {
+    el.textContent = initials[i];
+    el.setAttribute('aria-current', String(i === slot));
+  });
+}
+
+function cycle(step) {
+  const at = ALPHABET.indexOf(initials[slot]);
+  initials[slot] = ALPHABET[(at + step + ALPHABET.length) % ALPHABET.length];
+  drawInitials();
+}
+
+initialEls.forEach((el, i) => {
+  el.addEventListener('click', () => {
+    slot = i;
+    cycle(1);
+  });
+});
+
+function placed(score) {
+  // an empty board places everyone, which is the point of a new day
+  if (!lastBoard.length || lastBoard.length < BOARD_SIZE) return true;
+  return score > lastBoard[lastBoard.length - 1].score;
 }
 
 function finish() {
   running = false;
   draw();
   statusEl.textContent = `Topped out at ${state.score.toLocaleString('en-US')}.`;
-  submitEl.disabled = false;
+  if (submittable && placed(state.score)) {
+    // from the left every time: the cursor is not a leftover from
+    // whichever key the run happened to end on
+    slot = 0;
+    entryEl.hidden = false;
+    drawInitials();
+  } else {
+    noteEl.textContent = submittable
+      ? 'That did not place. Try again tomorrow - one run per seed.'
+      : 'Offline: this run cannot be submitted.';
+  }
 }
 
 submitEl.addEventListener('click', async () => {
   submitEl.disabled = true;
+  entryEl.hidden = true;
   noteEl.textContent = 'Verifying…';
   try {
     const response = await fetch('/game/score', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       // no score field: the server replays the events and would ignore it
-      body: JSON.stringify({ game: 'courses', player: playerEl.value, events }),
+      // day travels with the run: the board it belongs to is the day its
+      // seed was issued, not the moment this request arrives
+      body: JSON.stringify({ game: 'courses', day, player: initials.join(''), events }),
     });
     const result = await response.json();
     if (!response.ok) {
       noteEl.textContent = result.error ?? 'The run was not accepted.';
       return;
     }
+    submitEl.disabled = false;
     noteEl.textContent = result.recorded
       ? `Recorded ${result.score.toLocaleString('en-US')}.`
       : (result.reason ?? 'Already submitted a run for this seed.');
@@ -220,6 +295,7 @@ async function loadBoard() {
   try {
     const response = await fetch('/game/board?game=courses');
     const data = await response.json();
+    lastBoard = data.scores ?? [];
     tableEl.innerHTML = (data.scores ?? [])
       .map(
         (row, i) =>
@@ -246,26 +322,22 @@ async function init() {
     const data = await response.json();
     seed = data.seed;
     day = data.day;
+    submittable = true;
     statusEl.textContent = `Today's seed. Press any key to start.`;
     await loadBoard();
   } catch {
     // the same derivation the server uses, so an offline run is on the
     // same board as everyone else's that day - it simply cannot be
     // submitted until the network is back
-    const today = new Date().toISOString().slice(0, 10);
-    seed = localSeed(`courses:${today}`);
-    day = today;
+    // the same derivation the server uses, imported rather than rewritten,
+    // so an offline run really is on the same board as everyone else's
+    // that day - it simply cannot be submitted until the network is back
+    day = dayOf(Date.now());
+    seed = seedFor('courses', day);
     statusEl.textContent = 'Offline. Press any key to start.';
     tableEl.innerHTML = '<tr><td>The board is unreachable.</td></tr>';
-    submitEl.disabled = true;
   }
   draw();
-}
-
-function localSeed(text) {
-  let h = 2166136261 >>> 0;
-  for (const ch of text) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
-  return h >>> 0;
 }
 
 init();

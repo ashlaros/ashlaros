@@ -170,8 +170,32 @@ failure modes were all found the expensive way there:
 - **One attempt per seed, enforced server-side** by a unique index. The
   board is a pure function of the seed, so a player who restarts gets the
   same board now known — measured upstream at +34.7% for best-of-five.
+- **A run belongs to the day its seed was issued**, not the moment it was
+  submitted: a run started at 23:59 and submitted at 00:01 was played on
+  yesterday's pieces, and scoring it against today's seed would reject an
+  honest player for starting late.
 - **Integers only.** Two engines agreeing on integer arithmetic is a
   property of the arithmetic; agreeing on floats is a hope.
+
+**Identity is three characters, the way Atari did it.** A leaderboard needs
+a stable name, there are no accounts, and `geo.js` commits this project to
+storing nothing identifying. `[A-Z0-9]`×3 is 46,656 possibilities — enough
+to feel personal, far too short to be a moderation queue — and entering
+them after a run that placed is the arcade ritual rather than a form.
+Collisions are fine; the arcade never cared either.
+
+**Two boards.** The daily one is the competition and resets, so a newcomer
+is never looking at a wall of scores set months ago. All-time is one row
+per player rather than the best runs — scores from different seeds are not
+comparable, so a table of runs would rank the kindest seed — with a rolling
+30-day window beside it, because an all-time table ossifies. Every run is
+kept and the boards are queries over them, so a rating (which would remove
+seed luck properly) can be added later without a backfill.
+
+**Offline is the default.** Without the network the game still plays, on a
+seed derived by the same function the server uses — imported, not rewritten
+— so an offline run is on the same board as everyone else's that day. Only
+the leaderboard needs a connection.
 
 `worker/src/game/logic.js` is the single implementation: the page imports it
 to play and the verifier imports it to replay. `docs/game/logic.js` is

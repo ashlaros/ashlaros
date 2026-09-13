@@ -8,7 +8,16 @@
 
 import { escapeHtml, html, humanSize, json, page } from './serve.js';
 import { collect, record } from './stats.js';
-import { board, dayOf, seedFor, validateSubmission } from './game/scores.js';
+import {
+  allTime,
+  board,
+  claimedDay,
+  dayOf,
+  initialsOf,
+  recent,
+  seedFor,
+  validateSubmission,
+} from './game/scores.js';
 
 const TITLE = 'AshlarOS';
 
@@ -170,6 +179,8 @@ export const site = {
     // downloads - and because both already share this worker.
     'game/seed': async (request, bucket, env, url) => {
       const game = url.searchParams.get('game') ?? 'courses';
+      // the day is part of the answer: the client sends it back with the
+      // run so the score lands on the board it was played for
       const day = dayOf(Date.now());
       return json({ game, day, seed: seedFor(game, day) });
     },
@@ -179,6 +190,20 @@ export const site = {
       const day = url.searchParams.get('day') ?? dayOf(Date.now());
       if (!env.SCORES) return json({ game, day, scores: [], configured: false });
       return json({ game, day, scores: await board(env.SCORES, game, day) });
+    },
+
+    // Two boards, because they answer different questions: the daily one
+    // is the competition and resets, so a newcomer is never looking at a
+    // wall of scores set months ago; these are the hall of fame.
+    'game/all-time': async (request, bucket, env, url) => {
+      const game = url.searchParams.get('game') ?? 'courses';
+      if (!env.SCORES) return json({ game, scores: [], configured: false });
+      const window = url.searchParams.get('window');
+      const scores =
+        window === 'all'
+          ? await allTime(env.SCORES, game)
+          : await recent(env.SCORES, game, Date.now());
+      return json({ game, window: window === 'all' ? 'all' : '30d', scores });
     },
 
     'game/score': async (request, bucket, env) => {
@@ -202,8 +227,14 @@ export const site = {
       if (problem) return json({ error: problem }, 400);
 
       const game = typeof body.game === 'string' ? body.game : 'courses';
-      const day = dayOf(Date.now());
-      // R3.2: the seed is the server's, not the submission's
+      // the board is the day the seed was issued, not the moment this
+      // arrived - a run started before midnight was played on yesterday's
+      // pieces and must be scored against them
+      const now = Date.now();
+      const day = claimedDay(body, now);
+      if (!day) return json({ error: 'that seed is no longer open' }, 400);
+      // R3.2: the seed is still the server's, derived from the day rather
+      // than taken from the submission
       const seed = seedFor(game, day);
 
       const id = env.VERIFIER.idFromName(`${game}:${day}`);
@@ -214,9 +245,9 @@ export const site = {
             game,
             day,
             seed,
-            player: body.player,
+            player: initialsOf(body),
             events: body.events,
-            now: Date.now(),
+            now,
           }),
         }),
       );

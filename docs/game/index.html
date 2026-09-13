@@ -90,6 +90,19 @@
         color: var(--accent);
         font-size: 0.75rem;
       }
+      /* Three characters the player cycles, not a text field: entering
+         initials is the arcade ritual and it is the moment the score
+         becomes theirs. */
+      .initials button {
+        font-size: 2rem;
+        padding: 0.2rem 0.6rem;
+        margin-right: 0.3rem;
+        border-color: #3a4043;
+      }
+      .initials button[aria-current='true'] {
+        color: var(--highlight);
+        border-color: var(--highlight);
+      }
     </style>
   </head>
   <body>
@@ -112,10 +125,19 @@
 
         <h2>Today's board</h2>
         <table id="board-table"></table>
-        <p>
-          <input id="player" maxlength="24" placeholder="your name" />
-          <button id="submit" disabled>Submit run</button>
-        </p>
+        <div id="entry" hidden>
+          <h2>You placed</h2>
+          <p class="initials" id="initials">
+            <button type="button" data-slot="0">A</button><button
+              type="button"
+              data-slot="1"
+            >A</button><button type="button" data-slot="2">A</button>
+          </p>
+          <p class="muted">
+            ← → pick a letter &nbsp; ↑ ↓ change it &nbsp; enter confirms
+          </p>
+          <p><button id="submit">Confirm</button></p>
+        </div>
         <p class="muted" id="submit-note">
           One run per seed. Everyone gets the same pieces today, so the
           board compares play rather than luck.

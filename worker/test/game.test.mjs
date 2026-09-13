@@ -21,7 +21,7 @@ import {
   replay,
   stepTick,
 } from '../src/game/logic.js';
-import { dayOf, seedFor, validateSubmission, verify } from '../src/game/scores.js';
+import { DAY_GRACE_MS, allTime, claimedDay, recent, dayOf, initialsOf, seedFor, validateSubmission, verify } from '../src/game/scores.js';
 import worker from '../src/index.js';
 import { bucketOf, get } from './helpers.mjs';
 
@@ -153,14 +153,23 @@ test('the day is UTC, not the visitor unit', () => {
 });
 
 test('a submission is checked before a Durable Object is woken', () => {
-  assert.match(validateSubmission({}), /player/);
-  assert.match(validateSubmission({ player: 'a', events: 'no' }), /events/);
-  assert.match(validateSubmission({ player: '', events: [] }), /player/);
-  assert.match(
-    validateSubmission({ player: 'x'.repeat(40), events: [] }),
-    /player/,
-  );
-  assert.equal(validateSubmission({ player: 'ashlar', events: [] }), null);
+  // rejected or not is the contract; the wording is not
+  assert.ok(validateSubmission({}));
+  assert.ok(validateSubmission({ player: 'ABC', events: 'not an array' }));
+  assert.equal(validateSubmission({ player: 'ABC', events: [] }), null);
+});
+
+test('initials are three characters, folded once, and offensive ones refused', () => {
+  assert.equal(initialsOf({ player: 'abc' }), 'ABC');
+  assert.equal(initialsOf({ player: 'A1Z' }), 'A1Z');
+  // stored as typed, abc and ABC would be two rows and the one-attempt
+  // index would be bypassed by holding shift
+  assert.equal(initialsOf({ player: 'abc' }), initialsOf({ player: 'ABC' }));
+  assert.equal(initialsOf({ player: 'ashlar' }), null);
+  assert.equal(initialsOf({ player: 'AB' }), null);
+  assert.equal(initialsOf({ player: 'A-B' }), null);
+  assert.equal(initialsOf({ player: 'ass' }), null);
+  assert.equal(initialsOf({}), null);
 });
 
 test('gravity alone locks pieces and fills the board', () => {
@@ -231,4 +240,67 @@ test('the apex still serves its own assets', async () => {
   const env = { ISO: bucketOf([]), DOCS: { fetch: async () => new Response('the landing page') } };
   const res = await worker.fetch(new Request('https://ashlaros.download/'), env, {});
   assert.equal(await res.text(), 'the landing page');
+});
+
+test('a run is scored against the day its seed was issued', () => {
+  // a run started at 23:59 and submitted at 00:01 was played on
+  // yesterday's pieces; scoring it against today's seed would reject an
+  // honest player for starting late
+  const justAfterMidnight = Date.UTC(2026, 8, 13, 0, 1);
+  assert.equal(claimedDay({ day: '2026-09-12' }, justAfterMidnight), '2026-09-12');
+  assert.equal(claimedDay({ day: '2026-09-13' }, justAfterMidnight), '2026-09-13');
+
+  // but yesterday's seed does not stay open forever, or a player could
+  // shop the archive for the kindest seed
+  const later = Date.UTC(2026, 8, 13) + DAY_GRACE_MS + 1;
+  assert.equal(claimedDay({ day: '2026-09-12' }, later), null);
+  assert.equal(claimedDay({ day: '2026-01-01' }, justAfterMidnight), null);
+  assert.equal(claimedDay({}, justAfterMidnight), null);
+});
+
+test('the page and the server derive the same seed', async () => {
+  // the page derives its own seed when it is offline; if the two
+  // derivations ever disagreed, an offline run would be scored against a
+  // board it never played
+  const pageLogic = await import('../../docs/game/logic.js');
+  assert.equal(pageLogic.seedFor('courses', '2026-09-12'), seedFor('courses', '2026-09-12'));
+  assert.equal(pageLogic.dayOf(Date.UTC(2026, 8, 12, 23, 59)), dayOf(Date.UTC(2026, 8, 12, 23, 59)));
+});
+
+/** A D1 stand-in that records what it was asked and answers with rows. */
+function dbOf(rows = []) {
+  const asked = [];
+  return {
+    asked,
+    prepare(sql) {
+      const q = { sql, args: [] };
+      asked.push(q);
+      return {
+        bind(...args) {
+          q.args = args;
+          return this;
+        },
+        run: async () => ({ results: rows }),
+        all: async () => ({ results: rows }),
+      };
+    },
+  };
+}
+
+test('the all-time board is one row per player, not the best runs', async () => {
+  // scores from different seeds are not comparable, so a table of best
+  // runs ranks the kindest seed rather than the best play
+  const db = dbOf([{ player: 'ABC', score: 9000, lines: 12, runs: 4 }]);
+  const rows = await allTime(db, 'courses');
+  assert.equal(rows[0].player, 'ABC');
+  assert.match(db.asked[0].sql, /GROUP BY player/);
+  assert.match(db.asked[0].sql, /MAX\(score\)/);
+});
+
+test('the rolling window only counts recent days', async () => {
+  const db = dbOf([]);
+  await recent(db, 'courses', Date.UTC(2026, 8, 13), 30);
+  // an all-time table ossifies: after a year the top ten are fixed
+  assert.equal(db.asked[0].args[1], '2026-08-14');
+  assert.match(db.asked[0].sql, /day >= \?/);
 });

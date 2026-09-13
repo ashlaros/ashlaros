@@ -461,3 +461,33 @@ export function replay(seed, events) {
 
   return state;
 }
+
+/**
+ * The UTC day a board belongs to.
+ *
+ * Here rather than beside the leaderboard because the page derives it too
+ * when it is offline, and a second hand-written copy of a derivation is
+ * the drift this whole design exists to prevent - the same reason the
+ * simulation is not reimplemented per side.
+ *
+ * UTC rather than the player's zone: a board that rolls over at a
+ * different moment per player is not one board.
+ */
+export function dayOf(now) {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+/**
+ * The seed for a game on a day.
+ *
+ * Derived rather than stored: every player gets the same board on the same
+ * day without a write, and the verifier recomputes it from the run's own
+ * day rather than trusting the submission.
+ */
+export function seedFor(game, day) {
+  let h = 2166136261 >>> 0;
+  for (const ch of `${game}:${day}`) {
+    h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
