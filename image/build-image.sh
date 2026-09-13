@@ -39,6 +39,9 @@ loop=""
 
 cleanup() {
     set +e
+    # the keyring's gpg-agent outlives pacman-key and holds the mount
+    chroot "$mount_root" gpgconf --homedir /etc/pacman.d/gnupg --kill all 2>/dev/null
+    fuser -k "$mount_root" 2>/dev/null
     # deepest first, and the api mounts before /boot: they are what hold
     # the root busy, and unmounting out of order leaves a stale loop
     # device and a work directory that cannot be removed
@@ -209,6 +212,15 @@ EOF
 
 say "unmounting"
 rm -f "$mount_root/etc/resolv.conf"
+
+# pacman-key --init starts a gpg-agent inside the chroot and nothing ever
+# stops it, so it sits there with its cwd in the root and holds the mount
+# busy - which is what `fuser -vm` reported the last run. Ask it to quit
+# rather than killing blind: it owns the keyring it was writing.
+chroot "$mount_root" gpgconf --homedir /etc/pacman.d/gnupg --kill all 2>/dev/null || true
+# anything else still inside, and only then
+fuser -k "$mount_root" 2>/dev/null || true
+sleep 1
 sync
 
 # Same order as the cleanup trap, and for the same reason the last run
