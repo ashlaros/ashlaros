@@ -83,6 +83,29 @@ sys.exit(0 if bytes([0xaa,0xaa,0xaa]) * 16 in raw else 1)
   return 1
 }
 
+# Follow the driver's log until it stops, for a caller with no screen to
+# watch. install.py runs detached so the interactive user keeps control;
+# this is how the non-interactive one learns anything before the end.
+follow_install() {
+  local deadline=$((SECONDS + ${1:-5400}))
+  local seen=0 lines
+  while ((SECONDS < deadline)); do
+    sleep 30
+    lines=$(docker exec "$container" sh -c 'wc -l < /vm/out/install.log' 2>/dev/null || echo 0)
+    if ((lines > seen)); then
+      docker exec "$container" sh -c "tail -n +$((seen + 1)) /vm/out/install.log" 2>/dev/null |
+        sed 's/^/   /'
+      seen=$lines
+    fi
+    if docker exec "$container" grep -qE '^(rebooting|install did not finish)' \
+      /vm/out/install.log 2>/dev/null; then
+      return 0
+    fi
+  done
+  echo "## the driver never reported finishing" >&2
+  return 1
+}
+
 # The installed system with autologin - the default - lands in sway, whose
 # wallpaper fills the screen with one colour no text console ever shows:
 # the framebuffer stops being mostly black. greetd's tuigreet, a kernel
@@ -159,7 +182,12 @@ install)
     "$workspace/qmp.sock" "$workspace"/out/*.ppm "$workspace"/out/*.png
   start
   wait_for_installer 900
-  docker exec -d "$container" python3 /vm/install.py
+  # detached, so the interactive caller gets control back to take
+  # screenshots while it runs - but tee'd to a file, or the driver's own
+  # account of what it is doing goes nowhere and a slow install cannot be
+  # told from a stuck one
+  docker exec -d "$container" \
+    bash -c 'python3 -u /vm/install.py 2>&1 | tee /vm/out/install.log'
   echo "## driving the installer"
   ;;
 # Everything `install` does except the driving: boot the ISO and wait for
@@ -176,6 +204,9 @@ install-start)
 # the disk. Waiting for the desktop rather than for the installer's own
 # "done": an install that finishes and leaves an unbootable system is
 # exactly the failure a completion message cannot report.
+follow-install)
+  follow_install "${2:-5400}"
+  ;;
 wait-installed)
   wait_for_desktop "${2:-3600}"
   ;;

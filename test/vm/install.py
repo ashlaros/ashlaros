@@ -78,16 +78,22 @@ def main():
     q.key("ret")
 
     # then the dashboard runs. Sample it until the prompt appears; under
-    # TCG the install takes roughly 35 minutes.
+    # TCG the install takes roughly 35 minutes, with KVM about five.
+    #
+    # Each sample is announced. Without it a slow run and a stuck one look
+    # identical from outside - a CI step that has printed nothing for forty
+    # minutes says only that it has printed nothing - and the sampling is
+    # the one place that knows the install is still being watched.
     for i in range(120):
         time.sleep(45)
         path = q.shot(f"install-{i:02d}")
+        print(f"sample {i:02d} at {(i + 1) * 45}s", flush=True)
         if finished(path):
             time.sleep(5)
             q.key("ret")
-            print("rebooting")
+            print("rebooting", flush=True)
             return
-    print("install did not finish within the sampling window")
+    print("install did not finish within the sampling window", flush=True)
 
 
 if __name__ == "__main__":

@@ -49,6 +49,9 @@ boot)
   ;;
 install)
   SECONDS_TO_RUN=7200 "$here/run.sh" install
+  # the driver runs detached; follow its log so the step reports progress
+  # rather than going silent for however long the install takes
+  "$here/run.sh" follow-install 5400
   # install.py takes the offered reboot, so the same VM comes back up on
   # the disk it just wrote. Waiting for it here rather than trusting the
   # installer's own "done" is the point: an install that completes and
