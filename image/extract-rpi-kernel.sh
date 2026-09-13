@@ -42,10 +42,14 @@ initrd=$(mdir -/b -i "$target" :: 2>/dev/null |
     sed 's#^::/##' | grep -iE '^initramfs.*\.img$' | head -n1)
 [[ -n $initrd ]] || { echo "no initramfs on the boot partition"; mdir -i "$target" ::; exit 1; }
 
-# bcm2712 is the Pi 5; QEMU has no raspi5 machine yet, so the Pi 4 DTB is
-# what -M raspi4b wants and what the boot test uses.
+# The Pi 4 DTB first, deliberately. bcm2712 is the Pi 5 and is what a real
+# board loads, but qemu-system-aarch64 -M help lists raspi0 through
+# raspi4b and no raspi5 - and raspi4b is a bcm2711 machine, so a bcm2712
+# device tree describes hardware it does not have and the guest exits at
+# once. linux-rpi ships both; the kernel under test is the same either
+# way, which is what makes taking the Pi 4 tree honest here.
 dtb=""
-for name in bcm2712-rpi-5-b.dtb bcm2711-rpi-4-b.dtb; do
+for name in bcm2711-rpi-4-b.dtb bcm2712-rpi-5-b.dtb; do
     if mdir -i "$target" "::$name" >/dev/null 2>&1; then dtb="$name"; break; fi
 done
 [[ -n $dtb ]] || { echo "no usable DTB"; mdir -i "$target" :: | grep -i dtb || true; exit 1; }
