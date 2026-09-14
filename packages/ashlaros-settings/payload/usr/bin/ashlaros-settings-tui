@@ -223,7 +223,55 @@ packages_entry() {
   xdg-terminal-exec pacseek
 }
 
-# 5. TIME AND DATE
+# 5. CHAT
+#
+# None of these is preinstalled and none should be: a chat client is a
+# personal choice, three of these are 50-420 MB each, and pacseek already
+# installs anything. What was missing is knowing they are there at all -
+# so this is discoverability, which is what #42 concluded the real gap
+# was.
+#
+# All four come from Arch's own extra rather than being vendored here:
+# they are better maintained there than we would manage, and vendoring a
+# proprietary binary raises a redistribution question we have no reason to
+# take on. Slack is deliberately not listed for exactly that reason - its
+# licence is its own EULA, and `yay -S slack-desktop` is one command away.
+chat_entry() {
+  screen "Chat"
+  say "None of these is installed by default. Each is from Arch's own"
+  say "repositories, and pacseek installs anything else."
+  echo
+
+  local -a options=()
+  local pkg label
+  # installed size, so a 419 MB choice is made knowingly
+  for pkg in signal-desktop:Signal:419 telegram-desktop:Telegram:140 \
+    element-desktop:Element:48 discord:Discord:7; do
+    local name=${pkg%%:*} rest=${pkg#*:}
+    label=${rest%%:*}
+    local size=${rest#*:}
+    if pacman -Qq "$name" >/dev/null 2>&1; then
+      options+=("$label ($name) - installed")
+    else
+      options+=("$label ($name) - ${size} MB")
+    fi
+  done
+  options+=("Back")
+
+  local choice
+  choice=$(gum choose --header "Chat clients" "${options[@]}") || return 0
+  [[ $choice == "Back" ]] && return 0
+  [[ $choice == *"- installed" ]] && { say "Already installed."; pause; return 0; }
+
+  # the package name is the parenthesised half, so the label can change
+  # without breaking the install
+  local target=${choice#*(}
+  target=${target%%)*}
+  root_run pacman -S --noconfirm --needed "$target" && say "Installed $target."
+  pause
+}
+
+# 6. TIME AND DATE
 time_menu() {
   local choice
   while true; do
@@ -268,7 +316,7 @@ time_menu() {
   done
 }
 
-# 6. HARDWARE
+# 7. HARDWARE
 #
 # The installer runs chwd for graphics only, and deliberately takes the
 # free driver. Non-free is the reason to come here.
@@ -300,7 +348,7 @@ hardware_menu() {
   done
 }
 
-# 7. MAIL
+# 8. MAIL
 #
 # aerc is an optdepend and this configures one account. IMAP/SMTP with a
 # password only: the OAuth half needs an OAuth client registration this
@@ -397,7 +445,7 @@ mail_entry() {
   pause
 }
 
-# 8. CALENDAR
+# 9. CALENDAR
 #
 # calcurse is a hard dependency with a keybind, an autostarted daemon and
 # a place in our screenshots, and we shipped no configuration for it at
@@ -581,7 +629,7 @@ calendar_entry() {
   pause
 }
 
-# 9. BACKGROUND
+# 10. BACKGROUND
 #
 # The wallpaper is generated, not chosen: generate-bg.sh recolours the
 # ashlar mark from the active palette into ~/.config/sway/
@@ -679,7 +727,7 @@ background_entry() {
   pause
 }
 
-# 10. WEB APPS
+# 11. WEB APPS
 #
 # The desktop ships no office suite, no viewer, not even a PDF reader, so
 # a .docx that arrives has nothing to open it. LibreOffice is 147 MB and
@@ -707,7 +755,7 @@ webapps_entry() {
   pause
 }
 
-# 11. MODEL
+# 12. MODEL
 #
 # The Ask key (Print, then a) is the one capture action that leaves the
 # machine, and aichat owns its own provider/model/key configuration. This
@@ -735,7 +783,7 @@ model_entry() {
   ${EDITOR:-vim} "$config"
 }
 
-# 12. ORPHANS
+# 13. ORPHANS
 #
 # The hook (95-ashlaros-orphans.hook) reports after every transaction and
 # deliberately suggests nothing destructive. This is where the destructive
@@ -803,7 +851,7 @@ orphans_entry() {
   done
 }
 
-# 13. FINGERPRINT
+# 14. FINGERPRINT
 #
 # Installed everywhere, enabled nowhere. A fresh machine behaves exactly
 # as it did before; fingerprint auth turns on only when someone has
@@ -943,7 +991,7 @@ fingerprint_entry() {
   done
 }
 
-# 14. NETWORK
+# 15. NETWORK
 #
 # Only the QR code lives here: nmtui does everything else and is one
 # click away on the bar. Rendering a live passphrase to the screen is an
@@ -953,7 +1001,7 @@ network_entry() {
   /usr/share/sway/scripts/wifi-qr.sh
 }
 
-# 15. ADAPTIVE BRIGHTNESS
+# 16. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -1076,6 +1124,7 @@ main() {
     command -v ashlaros-displays >/dev/null && entries+=("Displays")
     entries+=("Kernels")
     command -v pacseek >/dev/null && entries+=("Install packages")
+    entries+=("Chat")
     entries+=("Time and date")
     command -v chwd >/dev/null && entries+=("Hardware profiles")
     command -v qrencode >/dev/null && command -v nmcli >/dev/null &&
@@ -1112,6 +1161,7 @@ main() {
       "Displays") displays_entry ;;
       "Kernels") kernel_menu ;;
       "Install packages") packages_entry ;;
+      "Chat") chat_entry ;;
       "Time and date") time_menu ;;
       "Hardware profiles") hardware_menu ;;
       "Adaptive brightness") wluma_entry ;;
