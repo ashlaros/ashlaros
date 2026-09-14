@@ -8,12 +8,32 @@ set -eu
 
 backup="$HOME/.config-backup-$(date +%Y.%m.%d-%H.%M.%S)"
 
-cat <<EOF
-This overwrites your configuration in $HOME with the shipped defaults from
-/etc/skel. Your current ~/.config is copied to
-  $backup
-first, so nothing is lost - but files you have edited will be replaced.
-EOF
+# Derived from /etc/skel rather than listed here: the copy below takes
+# everything in it, so anything a future payload adds is backed up without
+# anyone remembering to update a second list. A hardcoded list is how this
+# came to promise "nothing is lost" while overwriting .profile, .zshenv
+# and .icons - the backup covered .config alone.
+targets=()
+for entry in /etc/skel/.[!.]* /etc/skel/*; do
+  [ -e "$entry" ] || continue
+  name=${entry##*/}
+  [ -e "$HOME/$name" ] && targets+=("$name")
+done
+
+echo "This overwrites your configuration in $HOME with the shipped defaults"
+echo "from /etc/skel."
+if [ ${#targets[@]} -gt 0 ]; then
+  echo
+  echo "These will be replaced, and each is copied to"
+  echo "  $backup"
+  echo "first:"
+  printf '  ~/%s\n' "${targets[@]}"
+else
+  # a fresh home has nothing of ours to lose, so there is nothing to
+  # promise about and no empty backup directory to leave behind
+  echo "Nothing of yours is in the way; there is nothing to back up."
+fi
+echo
 
 read -r -p "Continue? [y/N] " response
 case "$response" in
@@ -24,9 +44,15 @@ case "$response" in
   ;;
 esac
 
-if [ -d "$HOME/.config" ]; then
-  cp -a "$HOME/.config" "$backup"
-  echo "backed up ~/.config to $backup"
+# Nothing is announced until it has happened: under `set -e` a failing cp
+# aborts the run, and a message printed in advance would have claimed a
+# backup that does not exist.
+if [ ${#targets[@]} -gt 0 ]; then
+  mkdir -p "$backup"
+  for name in "${targets[@]}"; do
+    cp -a "$HOME/$name" "$backup/"
+  done
+  echo "backed up ${#targets[@]} path(s) to $backup"
 fi
 
 cp -r /etc/skel/. "$HOME"
