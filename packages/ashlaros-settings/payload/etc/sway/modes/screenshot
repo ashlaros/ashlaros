@@ -3,6 +3,7 @@ set $mode_screenshot "<span foreground='$color10'>󰄄</span>  \
 <span foreground='$color5'><b>Output</b></span> <span foreground='$color10'>(<b>o</b>)</span> \
 <span foreground='$color5'><b>Text</b></span> <span foreground='$color10'>(<b>t</b>)</span> \
 <span foreground='$color5'><b>QR</b></span> <span foreground='$color10'>(<b>q</b>)</span> \
+<span foreground='$color5'><b>Ask</b></span> <span foreground='$color10'>(<b>a</b>)</span> \
 <span foreground='$color7'>+ <span foreground='$color10'><b>Shift</b></span> for </span>"
 
 mode --pango_markup $mode_screenshot {
@@ -22,6 +23,11 @@ mode --pango_markup $mode_screenshot {
     # decode a QR in the region. The value goes to the clipboard and
     # nowhere else; it is routinely a secret.
     $bindsym q mode "default", exec $capture_qr
+
+    # ask a model about the region. Unlike t and q this leaves the
+    # machine - deliberately its own key, and nothing happens at all
+    # unless the user configured a provider.
+    $bindsym a mode "default", exec $capture_ask
 
     # Return to default mode.
     $bindsym Escape mode "default"

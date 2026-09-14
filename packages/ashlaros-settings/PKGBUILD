@@ -112,6 +112,11 @@ optdepends=(
     'yay: AUR helper, required by ashlaros-theme for the catppuccin themes'
     'pcmanfm-qt: file manager'
     'python-requests: the waybar weather module'
+    # never a hard dependency: the Ask key sends a picture of your screen
+    # to whichever provider you configure, and an LLM tool on every
+    # desktop by default is a statement this distribution should not make
+    # on the user's behalf
+    'aichat: ask a model about a screen region (Print, then a)'
 )
 # generated_background.svg is rewritten on every theme apply, and the
 # per-user theme.conf is the file the theme switcher edits

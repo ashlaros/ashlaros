@@ -280,7 +280,35 @@ hardware_menu() {
   done
 }
 
-# 6. ORPHANS
+# 7. MODEL
+#
+# The Ask key (Print, then a) is the one capture action that leaves the
+# machine, and aichat owns its own provider/model/key configuration. This
+# does not build a second layer over that: it opens theirs and says where
+# the keys go. Only shown when aichat is installed - it is an optdepend
+# precisely because an LLM tool on every desktop is not a default this
+# distribution should choose for anyone.
+model_entry() {
+  screen "Model"
+  local config="${AICHAT_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}/config.yaml"
+
+  if [[ -f $config ]]; then
+    echo "  Configured: $(aichat --info 2>/dev/null | sed -n 's/^model *//p' | head -1)"
+  else
+    echo "  No provider configured. Print then a does nothing until there is one."
+  fi
+  echo
+  echo "  Config: $config"
+  echo "  A local Ollama keeps screen regions on this machine;"
+  echo "  a hosted provider sends them to that company."
+  echo
+
+  gum confirm --affirmative "Edit" --negative "Back" "Open the config?" || return 0
+  mkdir -p "$(dirname "$config")"
+  ${EDITOR:-vim} "$config"
+}
+
+# 8. ORPHANS
 #
 # The hook (95-ashlaros-orphans.hook) reports after every transaction and
 # deliberately suggests nothing destructive. This is where the destructive
@@ -348,7 +376,7 @@ orphans_entry() {
   done
 }
 
-# 7. FINGERPRINT
+# 9. FINGERPRINT
 #
 # Installed everywhere, enabled nowhere. A fresh machine behaves exactly
 # as it did before; fingerprint auth turns on only when someone has
@@ -488,7 +516,7 @@ fingerprint_entry() {
   done
 }
 
-# 8. NETWORK
+# 10. NETWORK
 #
 # Only the QR code lives here: nmtui does everything else and is one
 # click away on the bar. Rendering a live passphrase to the screen is an
@@ -498,7 +526,7 @@ network_entry() {
   /usr/share/sway/scripts/wifi-qr.sh
 }
 
-# 9. ADAPTIVE BRIGHTNESS
+# 11. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -641,6 +669,7 @@ main() {
     # only when there is something to say - an entry that always reports
     # "nothing to do" is an entry people stop reading
     [[ -n $(pacman -Qtdq 2>/dev/null) ]] && entries+=("Unneeded packages")
+    command -v aichat >/dev/null && entries+=("Model")
     entries+=("Quit")
 
     local choice
@@ -658,6 +687,7 @@ main() {
       "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
       "Unneeded packages") orphans_entry ;;
+      "Model") model_entry ;;
       "Quit") exit 0 ;;
     esac
   done

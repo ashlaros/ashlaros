@@ -148,6 +148,13 @@ set $screenshot_selection_upload $pipe_selection | $upload_pipe
 set $capture_text $script_path/capture-text.sh
 set $capture_qr $script_path/capture-qr.sh
 
+# ...and one that does not stay local: this sends a picture of the region
+# to whichever model aichat is configured for, which is why it is a
+# separate key you press deliberately, aichat is an optdepend, and an
+# unconfigured machine sends nothing. The QR path above must never reach
+# it - those payloads are secrets.
+set $capture_ask $script_path/capture-ask.sh
+
 # Update manager
 set $update_manager '$script_path/checkupdates.sh upgrade'
 

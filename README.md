@@ -345,6 +345,53 @@ preset named for the pkgbase exists; without one the machine gains an entry
 that silently does not boot. It reports rather than repairs: writing a
 preset for a kernel we did not package is guesswork.
 
+## Reading the screen: text, QR codes, and asking a model
+
+`Print` opens screenshot mode. Beside `p` and `o`, which photograph:
+
+| key | does | leaves the machine |
+| --- | --- | --- |
+| `t` | OCR the selected region onto the clipboard | no |
+| `q` | decode a QR in the region onto the clipboard | no |
+| `a` | ask a configured model about the region | **yes** |
+
+`t` and `q` are local: `tesseract` and `zbar` run here. `ASHLAROS_OCR_LANGS`
+selects OCR languages once you install the data for them
+(`tesseract-data-deu` and friends); `eng` ships.
+
+The QR decode is deliberately restricted to QR symbologies, because dense
+screen content otherwise false-positives as a barcode, and its result is
+copied with `wl-copy --sensitive` and never printed or shown — QR codes
+routinely carry secrets, `otpauth://` 2FA URIs above all, and we ship
+`cliphist` and `wl-clip-persist`, so an unmarked entry would be kept.
+
+**`a` is the one that sends your screen somewhere.** It captures the
+selected region and hands the picture to [`aichat`](https://github.com/sigoden/aichat),
+which is an `optdepends` and is not installed by default. Nothing is sent
+unless you press that key, and nothing is sent at all until you configure
+a provider yourself — there is no default provider and no bundled key. The
+notification names the model before the request goes out.
+
+**Point it at a local model if you want this to cost no privacy.**
+`aichat` speaks to Ollama and any OpenAI-compatible endpoint as readily as
+to a SaaS, so the same keybind works entirely on-machine:
+
+```yaml
+# ~/.config/aichat/config.yaml
+model: ollama:llama3
+clients:
+  - type: openai-compatible
+    name: ollama
+    api_base: http://localhost:11434/v1
+    models:
+      - name: llama3
+```
+
+Configure a hosted provider instead and a picture of part of your screen
+goes to that company. That region may hold a password manager, a private
+message, or someone else's data — which is the whole reason this is a
+separate key, an optional package, and unconfigured by default.
+
 ## AppImages
 
 They run. `fuse2` and `fuse3` are installed, which is the whole
