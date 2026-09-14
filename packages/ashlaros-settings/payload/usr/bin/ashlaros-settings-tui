@@ -280,7 +280,147 @@ hardware_menu() {
   done
 }
 
-# 7. BACKGROUND
+# 7. CALENDAR
+#
+# calcurse is a hard dependency with a keybind, an autostarted daemon and
+# a place in our screenshots, and we shipped no configuration for it at
+# all: it opened onto an empty local calendar. This writes
+# calcurse-caldav's config, which works today against Nextcloud,
+# Fastmail, Radicale, Baikal and any other CalDAV server.
+#
+# Google is deliberately not offered as a preset. calcurse-caldav's OAuth
+# path needs python-oauth2client, which Google archived years ago and
+# which predates PKCE being standard; claiming support we have not proven
+# would be worse than saying where the limit is.
+CALDAV_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/calcurse/caldav/config"
+
+calendar_entry() {
+  screen "Calendar"
+
+  if [[ -f $CALDAV_CONFIG ]]; then
+    say "Configured: $(sed -n 's/^Hostname *= *//p' "$CALDAV_CONFIG" | head -1)"
+    echo
+    local existing
+    existing=$(gum choose --header "calcurse CalDAV" \
+      "Sync now (dry run)" "Sync now" "Reconfigure" "Back") || return 0
+    case $existing in
+      "Sync now (dry run)")
+        # calcurse-caldav has no --dry-run flag: DryRun is a config key,
+        # so a trial run means a temporary config with it turned back on
+        local trial
+        trial=$(mktemp)
+        sed 's/^DryRun = No/DryRun = Yes/' "$CALDAV_CONFIG" > "$trial"
+        calcurse-caldav --config "$trial" 2>&1 | sed 's/^/  /' | head -40
+        rm -f "$trial"
+        pause; return 0 ;;
+      "Sync now")
+        calcurse-caldav 2>&1 | sed 's/^/  /' | head -40
+        pause; return 0 ;;
+      "Reconfigure") ;;
+      *) return 0 ;;
+    esac
+  fi
+
+  # python-oauth2client is left out: it exists only for the Google path
+  # this entry does not offer
+  local -a missing=()
+  local pkg
+  for pkg in python python-httplib2 python-pyparsing; do
+    pacman -Qq "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    say "calcurse-caldav needs: ${missing[*]}"
+    gum confirm --affirmative "Install" --negative "Back" "Install them?" || return 0
+    root_run pacman -S --noconfirm --needed "${missing[@]}" || { pause; return 1; }
+  fi
+
+  local host path user
+  host=$(gum input --prompt "Server (e.g. nextcloud.example.com): ") || return 0
+  [[ -n $host ]] || return 0
+  path=$(gum input --prompt "Calendar path: " \
+    --value "/remote.php/dav/calendars/USERNAME/personal/") || return 0
+  user=$(gum input --prompt "Username: ") || return 0
+
+  # PasswordCommand before Password: with gnome-keyring unlocked at login
+  # (it is, since f0b5cc7) secret-tool needs no extra package and keeps
+  # the password out of a plaintext config
+  local secret_cmd="" password=""
+  if command -v secret-tool >/dev/null &&
+    gum confirm --affirmative "Keyring" --negative "Config file" \
+      "Store the password in the login keyring?"; then
+    password=$(gum input --password --prompt "Password: ") || return 0
+    printf '%s' "$password" |
+      secret-tool store --label="calcurse CalDAV" service calcurse-caldav username "$user" ||
+      { oops "Could not store the password."; pause; return 1; }
+    secret_cmd="secret-tool lookup service calcurse-caldav username $user"
+    password=""
+  else
+    password=$(gum input --password --prompt "Password: ") || return 0
+  fi
+
+  mkdir -p "$(dirname "$CALDAV_CONFIG")"
+  {
+    echo "# written by ashlaros-settings-tui"
+    echo "[General]"
+    echo "Binary = calcurse"
+    echo "Hostname = $host"
+    echo "Path = $path"
+    echo "HTTPS = Yes"
+    echo "AuthMethod = basic"
+    # calcurse ships DryRun = Yes and its own README calls the script
+    # alpha software that wants backups. It stays on until a dry run has
+    # been read and the user turns it off below.
+    echo "DryRun = Yes"
+    echo "SyncFilter = cal,todo"
+    echo
+    echo "[Auth]"
+    echo "Username = $user"
+    if [[ -n $secret_cmd ]]; then
+      echo "PasswordCommand = $secret_cmd"
+    else
+      echo "Password = $password"
+    fi
+  } > "$CALDAV_CONFIG"
+  chmod 600 "$CALDAV_CONFIG"
+
+  screen "Calendar"
+  say "Written to $CALDAV_CONFIG"
+  echo
+  say "First sync, as a dry run - nothing is written anywhere:"
+  echo
+
+  # --init is required on a first sync, and the three modes differ by what
+  # they DELETE. Named by consequence, never by name alone.
+  local mode init
+  mode=$(gum choose --header "This calendar has never synced. What should happen?" \
+    "Copy both ways, delete nothing" \
+    "Take the server's copy, DELETE local calcurse items" \
+    "Take the local copy, DELETE everything on the server") || return 0
+  case $mode in
+    "Copy both ways"*) init=two-way ;;
+    "Take the server's"*) init=keep-remote ;;
+    *) init=keep-local ;;
+  esac
+
+  # the config still carries DryRun = Yes at this point, which is what
+  # makes this a trial rather than the flag calcurse-caldav does not have
+  calcurse-caldav --init=$init 2>&1 | sed 's/^/  /' | head -40
+  echo
+  say "That was a dry run. Nothing changed."
+  echo
+
+  if gum confirm --affirmative "Sync for real" --negative "Leave it in dry-run mode" \
+    "Does that look right?"; then
+    sed -i 's/^DryRun = Yes/DryRun = No/' "$CALDAV_CONFIG"
+    calcurse-caldav --init=$init 2>&1 | sed 's/^/  /' | head -40
+    say "Synced. Later syncs are this entry's \"Sync now\"."
+  else
+    say "Left as DryRun = Yes. Nothing will be written until you change it."
+  fi
+  pause
+}
+
+# 8. BACKGROUND
 #
 # The wallpaper is generated, not chosen: generate-bg.sh recolours the
 # ashlar mark from the active palette into ~/.config/sway/
@@ -378,7 +518,7 @@ background_entry() {
   pause
 }
 
-# 8. WEB APPS
+# 9. WEB APPS
 #
 # The desktop ships no office suite, no viewer, not even a PDF reader, so
 # a .docx that arrives has nothing to open it. LibreOffice is 147 MB and
@@ -406,7 +546,7 @@ webapps_entry() {
   pause
 }
 
-# 9. MODEL
+# 10. MODEL
 #
 # The Ask key (Print, then a) is the one capture action that leaves the
 # machine, and aichat owns its own provider/model/key configuration. This
@@ -434,7 +574,7 @@ model_entry() {
   ${EDITOR:-vim} "$config"
 }
 
-# 10. ORPHANS
+# 11. ORPHANS
 #
 # The hook (95-ashlaros-orphans.hook) reports after every transaction and
 # deliberately suggests nothing destructive. This is where the destructive
@@ -502,7 +642,7 @@ orphans_entry() {
   done
 }
 
-# 11. FINGERPRINT
+# 12. FINGERPRINT
 #
 # Installed everywhere, enabled nowhere. A fresh machine behaves exactly
 # as it did before; fingerprint auth turns on only when someone has
@@ -642,7 +782,7 @@ fingerprint_entry() {
   done
 }
 
-# 12. NETWORK
+# 13. NETWORK
 #
 # Only the QR code lives here: nmtui does everything else and is one
 # click away on the bar. Rendering a live passphrase to the screen is an
@@ -652,7 +792,7 @@ network_entry() {
   /usr/share/sway/scripts/wifi-qr.sh
 }
 
-# 13. ADAPTIVE BRIGHTNESS
+# 14. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -795,6 +935,7 @@ main() {
     # only when there is something to say - an entry that always reports
     # "nothing to do" is an entry people stop reading
     [[ -n $(pacman -Qtdq 2>/dev/null) ]] && entries+=("Unneeded packages")
+    command -v calcurse-caldav >/dev/null && entries+=("Calendar")
     entries+=("Background")
     command -v firefoxpwa >/dev/null && entries+=("Web apps")
     command -v aichat >/dev/null && entries+=("Model")
@@ -815,6 +956,7 @@ main() {
       "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
       "Unneeded packages") orphans_entry ;;
+      "Calendar") calendar_entry ;;
       "Background") background_entry ;;
       "Web apps") webapps_entry ;;
       "Model") model_entry ;;
