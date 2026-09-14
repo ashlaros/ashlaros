@@ -252,10 +252,22 @@ chat_entry() {
     local size=${rest#*:}
     if pacman -Qq "$name" >/dev/null 2>&1; then
       options+=("$label ($name) - installed")
-    else
-      options+=("$label ($name) - ${size} MB")
+      continue
     fi
+    # Only what this machine can actually install: element-desktop and
+    # discord are in Arch's extra but not in Arch Linux ARM, so on the Pi
+    # image offering them would end in an opaque "target not found" after
+    # the user chose one. Asking the repositories is also how a package
+    # that is dropped or renamed stops being offered without an edit here.
+    pacman -Si "$name" >/dev/null 2>&1 || continue
+    options+=("$label ($name) - ${size} MB")
   done
+
+  if ((${#options[@]} == 0)); then
+    say "None of them are available for this machine's architecture."
+    pause
+    return 0
+  fi
   options+=("Back")
 
   local choice
