@@ -348,7 +348,79 @@ hardware_menu() {
   done
 }
 
-# 8. MAIL
+# 8. NOTES
+#
+# zk keeps plain Markdown files in a directory and an index beside them,
+# so there is no format of ours to persist - `git init` in the notebook is
+# the whole of "my notes are backed up".
+#
+# No notebook is created at install time and none ships in skel: an empty
+# one in $HOME is clutter for everyone who never opens it. This is the
+# door instead.
+notes_entry() {
+  screen "Notes"
+
+  # xdg-user-dir rather than ~/Documents: the directory is localised
+  local documents
+  documents=$(xdg-user-dir DOCUMENTS 2>/dev/null || echo "$HOME/Documents")
+  local notebook="${ZK_NOTEBOOK_DIR:-$documents/notes}"
+
+  if [[ -d $notebook/.zk ]]; then
+    say "Notebook: $notebook"
+    say "$(zk list --format '{{title}}' --quiet "$notebook" 2>/dev/null | wc -l) note(s)"
+    echo
+    if [[ -d $notebook/.git ]]; then
+      say "It is a git repository. Nothing is committed for you - that is"
+      say "deliberate; a tool that commits notes by itself is one that can"
+      say "push a private notebook somewhere you did not choose."
+      echo
+      say "$(git -C "$notebook" status --porcelain | wc -l) uncommitted change(s)"
+    else
+      gum confirm --affirmative "git init" --negative "Back" \
+        "Make it a git repository?" || return 0
+      git -C "$notebook" init -q
+      write_zk_gitignore "$notebook"
+      say "Initialised. Commit when you want to: git -C '$notebook' commit -a"
+    fi
+    pause
+    return 0
+  fi
+
+  say "No notebook yet. One will be created at:"
+  say "  $notebook"
+  echo
+  gum confirm --affirmative "Create" --negative "Back" "Create it?" || return 0
+
+  mkdir -p "$notebook"
+  zk init --no-input "$notebook" 2>&1 | sed 's/^/  /'
+
+  if gum confirm --affirmative "Yes" --negative "No" \
+    "Make it a git repository as well?"; then
+    git -C "$notebook" init -q
+    write_zk_gitignore "$notebook"
+    say "Initialised, and nothing is committed automatically."
+  fi
+  echo
+  say "Write one with: zk new '$notebook'"
+  pause
+}
+
+# zk rebuilds its index from the notes themselves, so committing it is
+# committing derived state - and it is a binary file that changes on
+# every command, which makes each commit a conflict. Measured: without
+# this, git add -A stages .zk/notebook.db.
+write_zk_gitignore() {
+  local notebook=$1
+  [[ -f $notebook/.gitignore ]] && return 0
+  cat > "$notebook/.gitignore" <<'EOF'
+# zk rebuilds this from the notes with `zk index`, so it is derived state
+# - and a binary that changes on every command makes every commit a
+# conflict. The notes and .zk/config.toml are the things worth keeping.
+.zk/notebook.db
+EOF
+}
+
+# 9. MAIL
 #
 # aerc is an optdepend and this configures one account. IMAP/SMTP with a
 # password only: the OAuth half needs an OAuth client registration this
@@ -445,7 +517,7 @@ mail_entry() {
   pause
 }
 
-# 9. CALENDAR
+# 10. CALENDAR
 #
 # calcurse is a hard dependency with a keybind, an autostarted daemon and
 # a place in our screenshots, and we shipped no configuration for it at
@@ -629,7 +701,7 @@ calendar_entry() {
   pause
 }
 
-# 10. BACKGROUND
+# 11. BACKGROUND
 #
 # The wallpaper is generated, not chosen: generate-bg.sh recolours the
 # ashlar mark from the active palette into ~/.config/sway/
@@ -727,7 +799,7 @@ background_entry() {
   pause
 }
 
-# 11. WEB APPS
+# 12. WEB APPS
 #
 # The desktop ships no office suite, no viewer, not even a PDF reader, so
 # a .docx that arrives has nothing to open it. LibreOffice is 147 MB and
@@ -755,7 +827,7 @@ webapps_entry() {
   pause
 }
 
-# 12. MODEL
+# 13. MODEL
 #
 # The Ask key (Print, then a) is the one capture action that leaves the
 # machine, and aichat owns its own provider/model/key configuration. This
@@ -783,7 +855,7 @@ model_entry() {
   ${EDITOR:-vim} "$config"
 }
 
-# 13. ORPHANS
+# 14. ORPHANS
 #
 # The hook (95-ashlaros-orphans.hook) reports after every transaction and
 # deliberately suggests nothing destructive. This is where the destructive
@@ -851,7 +923,7 @@ orphans_entry() {
   done
 }
 
-# 14. FINGERPRINT
+# 15. FINGERPRINT
 #
 # Installed everywhere, enabled nowhere. A fresh machine behaves exactly
 # as it did before; fingerprint auth turns on only when someone has
@@ -991,7 +1063,7 @@ fingerprint_entry() {
   done
 }
 
-# 15. NETWORK
+# 16. NETWORK
 #
 # Only the QR code lives here: nmtui does everything else and is one
 # click away on the bar. Rendering a live passphrase to the screen is an
@@ -1001,7 +1073,7 @@ network_entry() {
   /usr/share/sway/scripts/wifi-qr.sh
 }
 
-# 16. ADAPTIVE BRIGHTNESS
+# 17. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -1145,6 +1217,7 @@ main() {
     # only when there is something to say - an entry that always reports
     # "nothing to do" is an entry people stop reading
     [[ -n $(pacman -Qtdq 2>/dev/null) ]] && entries+=("Unneeded packages")
+    command -v zk >/dev/null && entries+=("Notes")
     command -v aerc >/dev/null && entries+=("Mail")
     command -v calcurse-caldav >/dev/null && entries+=("Calendar")
     entries+=("Background")
@@ -1168,6 +1241,7 @@ main() {
       "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
       "Unneeded packages") orphans_entry ;;
+      "Notes") notes_entry ;;
       "Mail") mail_entry ;;
       "Calendar") calendar_entry ;;
       "Background") background_entry ;;

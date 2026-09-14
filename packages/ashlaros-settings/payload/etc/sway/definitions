@@ -120,6 +120,12 @@ set $help $script_path/help.sh --toggle
 # Calendar application
 set $calendar $script_path/once.sh $term_float calcurse
 
+# Notes. Defined beside the calendar and, like it, not bound to a chord:
+# both are launcher entries. The keybind space is dense enough that a
+# third application chord would cost more than it buys, and $calendar has
+# never had one either.
+set $notes $script_path/once.sh $term_float zk edit --interactive
+
 # Workspace names
 set $ws1 number 1
 set $ws2 number 2

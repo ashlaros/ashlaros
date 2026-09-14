@@ -345,6 +345,29 @@ preset named for the pkgbase exists; without one the machine gains an entry
 that silently does not boot. It reports rather than repairs: writing a
 preset for a kernel we did not package is guesswork.
 
+## Notes
+
+`zk` is installed. Settings → **Notes** creates a notebook — in the
+localised documents directory, so `~/Documents/notes` on an English
+system — and offers to make it a git repository.
+
+The notes are plain Markdown files in a directory, which is the whole
+reason for choosing it: there is no format of ours to export and nothing
+to sync, so "my notes are backed up" is `git init` and nothing more. A
+note is readable, and editable, with or without `zk`.
+
+**Nothing is ever committed for you.** A tool that commits notes by itself
+is one that can push a private notebook somewhere you did not choose. The
+repository is offered; the commits are yours.
+
+The `.gitignore` excludes `.zk/notebook.db`: `zk` rebuilds that index from
+the notes with `zk index`, so it is derived state, and it is a binary that
+changes on every command — committing it would make every commit a
+conflict.
+
+`zk` ships an LSP server, so `[[wikilink]]` completion works in `helix`
+without a plugin.
+
 ## Mail and calendar
 
 Neither is preinstalled and neither does anything until you configure it:

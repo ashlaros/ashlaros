@@ -59,6 +59,9 @@ depends=(
     'inotify-tools'           # file watchers
     'lm_sensors'              # sensor readings for the bar
     'calcurse'                # tui calendar application
+    # notes, as plain Markdown in a directory: nothing to export and
+    # nothing to sync, so git persistence is `git init` and no more
+    'zk'                      # plain-text notes with an index and an LSP
     'btop'                    # system monitor
     'bluetuith'               # bluetooth management tool
     'noto-fonts-emoji'        # emoji font, e.g. weather icons
