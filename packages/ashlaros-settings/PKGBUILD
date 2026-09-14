@@ -123,6 +123,11 @@ optdepends=(
     # mail is personal and aerc does nothing until it has an account, so
     # an unconfigured client in the launcher would be worse than none
     'aerc: terminal mail client, configured from the settings TUI'
+    # never a hard dependency: pacman resolves 182 packages for it -
+    # opencv is 112.81 MiB and qt6-base 66.53 MiB, measured - for an
+    # infrared camera most machines do not have. And it is weaker than a
+    # password: a similar face or a photo may work.
+    'howdy-next: infrared face unlock for sudo, from the settings TUI'
     # the desktop otherwise cannot open a .docx at all: this installs
     # Docs and Microsoft 365 as their own windows, from the settings TUI
     'firefoxpwa: Google Docs and Microsoft 365 as web apps'

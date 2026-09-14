@@ -345,6 +345,34 @@ preset named for the pkgbase exists; without one the machine gains an entry
 that silently does not boot. It reports rather than repairs: writing a
 preset for a kernel we did not package is guesswork.
 
+## Face unlock
+
+Not installed, and off even when it is. `howdy-next` is an `optdepends`;
+with it installed on a machine that has a camera, Settings → **Face
+unlock** enrols a face, tests it, and can turn it on for `sudo`.
+
+**It is weaker than a password**, and upstream says so first: a similar
+face or a photo may work. Infrared makes that harder, not impossible. This
+is 2D infrared matching, not Windows Hello — Hello's anti-spoofing comes
+from a dot projector building a depth map, and Howdy reads a flat frame.
+
+The PAM rules are the same as the fingerprint entry's, for the same
+reason: `sufficient` before the password line, `sudo` only, never the lock
+screen or the greeter, and never enabled until a recognition test has
+actually passed. A face that fails — a dark room, a covered emitter, a lid
+at an angle — falls through to the password that always worked. Verified
+with `pam_howdy.so` absent entirely, which is the worst case: `sudo` still
+accepts a password. Disabling restores `/etc/pam.d/sudo` byte-identically
+to the file pacman ships, so no `.pacnew` appears.
+
+It costs 182 packages to install — `opencv` alone is 112.81 MiB — which is
+why nobody who does not want it pays for it. The disk passphrase at boot
+is untouched: LUKS happens long before PAM exists.
+
+`linux-enable-ir-emitter`, which turns on the emitters many laptops leave
+dark, is **not** packaged: its current release builds against `opencv4`
+and Arch now ships `opencv` 5, so it does not compile.
+
 ## Notes
 
 `zk` is installed. Settings → **Notes** creates a notebook — in the

@@ -923,7 +923,148 @@ orphans_entry() {
   done
 }
 
-# 15. FINGERPRINT
+# 15. FACE
+#
+# Everything #39 settled about PAM applies here for a weaker factor, so
+# this follows the fingerprint entry exactly: sufficient before the
+# password line, sudo only, refused until a test has passed, and never on
+# by default.
+#
+# What is different is worth saying rather than discovering. From
+# howdy-next's own README: "Howdy is weaker than a password. Similar faces
+# or photos may fool it." This is 2D infrared matching, not Windows Hello -
+# Hello's anti-spoofing comes from a dot projector building a depth map,
+# and Howdy reads a flat IR frame. IR defeats a phone screen and a printed
+# photo; it does not make this what the hardware does under Windows.
+#
+# howdy-next is an optdepend and this entry is built only when it is
+# installed: pacman resolves 182 packages for it, opencv 112.81 MiB and
+# qt6-base 66.53 MiB, for hardware most machines do not have.
+readonly FACE_LINE="auth       sufficient   pam_howdy.so"
+readonly FACE_SUDO=/etc/pam.d/sudo
+
+face_enabled() {
+  grep -q "^auth .*pam_howdy.so" "$FACE_SUDO" 2>/dev/null
+}
+
+# A model belongs to a user and howdy stores it per user; `list` exits
+# non-zero when there is none, which is the question being asked.
+face_models() {
+  howdy --plain -U "$USER" list 2>/dev/null | grep -cE "^[0-9]" || true
+}
+
+face_entry() {
+  local choice
+  while true; do
+    screen "Face unlock"
+
+    local models
+    models=$(face_models)
+    if ((models > 0)); then
+      say "✓ $models face model(s) for $USER"
+    else
+      warn "! no face model yet"
+    fi
+
+    if face_enabled; then
+      say "✓ sudo accepts a face (password still works)"
+    else
+      say "  sudo is password only"
+    fi
+
+    echo
+    # Stated every time the menu is drawn, not once behind a confirm: it
+    # is the thing that decides whether anyone should turn this on.
+    say "A face is weaker than a password. A similar face, or a photo,"
+    say "may work. Infrared makes that harder, not impossible."
+    say "This does not affect the disk passphrase at boot."
+    echo
+
+    local entries=()
+    ((models == 0)) && entries+=("Add a face model")
+    ((models > 0)) && entries+=("Test the camera" "Add another face model" "Remove every face model")
+    if ((models > 0)) && ! face_enabled; then
+      entries+=("Use it for sudo")
+    fi
+    face_enabled && entries+=("Stop using it for sudo")
+    entries+=("Camera settings" "Back")
+
+    choice=$(gum choose --header "Face unlock" "${entries[@]}") || return 0
+    case $choice in
+      "Add a face model" | "Add another face model")
+        screen "Face unlock"
+        # The models are an ONNX download howdy does not ship; running add
+        # without them fails in a way that reads like a camera fault.
+        say "Fetching the recognition models if they are missing…"
+        root_run howdy download-models || { pause; continue; }
+        echo
+        say "Look at the camera."
+        echo
+        root_run howdy -U "$USER" add
+        pause
+        ;;
+      "Test the camera")
+        screen "Face unlock"
+        root_run howdy -U "$USER" test
+        pause
+        ;;
+      "Remove every face model")
+        gum confirm --affirmative "Remove" --negative "Cancel" \
+          "Remove every face model for $USER?" || continue
+        root_run howdy -U "$USER" clear
+        # PAM asking for a face that no longer exists is a delay before
+        # every password and nothing else.
+        face_enabled && root_run sed -i "/pam_howdy.so/d" "$FACE_SUDO"
+        pause
+        ;;
+      "Use it for sudo")
+        screen "Face unlock"
+        # Refused until a test has passed. Enabling against a camera that
+        # has never recognised anyone - a dark IR emitter is the usual
+        # reason - adds a wait before every password and nothing more.
+        say "Testing recognition first. Look at the camera."
+        echo
+        if ! root_run howdy -U "$USER" test; then
+          echo
+          oops "Recognition did not succeed, so this stays off."
+          say "A dark infrared emitter is the usual cause: many laptops"
+          say "leave it off until something turns it on."
+          pause
+          continue
+        fi
+        echo
+        gum confirm --affirmative "Enable for sudo" --negative "Cancel" \
+          "A photo of you may unlock sudo. Enable it anyway?" || continue
+
+        # Same placement and idempotence as the fingerprint entry: PAM
+        # takes the first sufficient match, so this goes before the line
+        # that asks for a password, and any existing line is removed first
+        # so enabling twice cannot stack two.
+        root_run sed -i -e "/pam_howdy.so/d" \
+          -e "0,/^auth/s//$FACE_LINE\nauth/" "$FACE_SUDO" || continue
+        echo
+        say "Enabled. Check it now, while this menu is still open:"
+        say "  open another terminal and run: sudo -k true"
+        say "A password must still work there. If it does not, choose Stop."
+        pause
+        ;;
+      "Stop using it for sudo")
+        root_run sed -i "/pam_howdy.so/d" "$FACE_SUDO" || continue
+        say "Disabled. sudo is back to password only."
+        pause
+        ;;
+      "Camera settings")
+        screen "Face unlock"
+        say "howdy config opens its own configuration file."
+        pause
+        root_run howdy config
+        ;;
+      "Back") return 0 ;;
+    esac
+  done
+}
+
+# 16. FINGERPRINT
 #
 # Installed everywhere, enabled nowhere. A fresh machine behaves exactly
 # as it did before; fingerprint auth turns on only when someone has
@@ -1063,7 +1204,7 @@ fingerprint_entry() {
   done
 }
 
-# 16. NETWORK
+# 17. NETWORK
 #
 # Only the QR code lives here: nmtui does everything else and is one
 # click away on the bar. Rendering a live passphrase to the screen is an
@@ -1073,7 +1214,7 @@ network_entry() {
   /usr/share/sway/scripts/wifi-qr.sh
 }
 
-# 17. ADAPTIVE BRIGHTNESS
+# 18. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -1207,6 +1348,14 @@ main() {
       fprintd-list "$USER" >/dev/null 2>&1; then
       entries+=("Fingerprint")
     fi
+    # howdy-next is an optdepend, so the binary existing is already a
+    # choice someone made - but a machine with no camera at all should
+    # still not be offered face unlock. /dev/video0 is the weakest honest
+    # test: whether the camera sees infrared is what the entry's own
+    # recognition test decides, and it refuses to enable until it passes.
+    if command -v howdy >/dev/null && compgen -G "/dev/video*" >/dev/null; then
+      entries+=("Face unlock")
+    fi
     # only where there is a backlight to adapt - the same predicate the
     # waybar toggle uses, so the bar and the menu agree about whether this
     # machine has the hardware at all
@@ -1240,6 +1389,7 @@ main() {
       "Adaptive brightness") wluma_entry ;;
       "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
+      "Face unlock") face_entry ;;
       "Unneeded packages") orphans_entry ;;
       "Notes") notes_entry ;;
       "Mail") mail_entry ;;

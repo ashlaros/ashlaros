@@ -65,6 +65,18 @@ packages:
   flashfocus:
     upstream: https://aur.archlinux.org/flashfocus.git
     arch: any
+  howdy-next:
+    upstream: https://aur.archlinux.org/howdy-next.git
+    # x86_64 only, and not by choice: libinih is not in Arch Linux ARM, so
+    # the aarch64 leg has nothing to build against. build-wave.yml reads
+    # the PKGBUILD's own arch= line and skips that leg rather than
+    # producing a tolerated-failure warning for a package that was never
+    # meant to build there (61ad8b6).
+    #
+    # Never a hard dependency: pacman resolves 182 packages for it, of
+    # which opencv is 112.81 MiB and qt6-base 66.53 MiB - measured, not
+    # estimated - for hardware most machines do not have.
+    arch: x86_64
   kvantum-theme-catppuccin:
     upstream: https://aur.archlinux.org/kvantum-theme-catppuccin-git.git
     # rewritten rather than copied: upstream's is a -git package whose
