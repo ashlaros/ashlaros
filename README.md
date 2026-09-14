@@ -321,14 +321,19 @@ counted. Until it is, the page says so rather than answering 500.
 `ashlaros-settings-tui` (`Super+,`) is one entry point for the settings
 that are otherwise commands you have to know: locale and keyboard layout,
 time and timezone, kernel variants from the cachyos repository, chwd's
-hardware profiles, fingerprint enrolment, adaptive brightness, sharing the
-current Wi-Fi as a QR code, and packages nothing needs any more. Displays
-and package installation dispatch to `ashlaros-displays` and `pacseek`.
+hardware profiles, fingerprint enrolment, face unlock, adaptive
+brightness, sharing the current Wi-Fi as a QR code, the wallpaper,
+packages nothing needs any more, and a door to the things that need
+setting up before they do anything — mail, a calendar, notes, chat
+clients, web apps and a model. Displays and package installation dispatch to
+`ashlaros-displays` and `pacseek`.
 
 **A launcher, not a control panel.** Every entry either runs an existing
 tool or collects input and runs one command; the menu owns no settings
 logic. An entry whose binary is not installed is absent rather than
-present and broken.
+present and broken — and so is one whose hardware is missing, or whose
+packages this architecture cannot install, since an entry that cannot
+finish is worse than one that is not there.
 
 Root is taken per action rather than by running the whole thing under
 `sudo` — a long-running root TUI on a desktop is a bigger blast radius
