@@ -280,7 +280,17 @@ hardware_menu() {
   done
 }
 
-# 6. ADAPTIVE BRIGHTNESS
+# 6. NETWORK
+#
+# Only the QR code lives here: nmtui does everything else and is one
+# click away on the bar. Rendering a live passphrase to the screen is an
+# explicit action rather than something on display.
+network_entry() {
+  screen "Share this network"
+  /usr/share/sway/scripts/wifi-qr.sh
+}
+
+# 7. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -405,6 +415,8 @@ main() {
     command -v pacseek >/dev/null && entries+=("Install packages")
     entries+=("Time and date")
     command -v chwd >/dev/null && entries+=("Hardware profiles")
+    command -v qrencode >/dev/null && command -v nmcli >/dev/null &&
+      entries+=("Share this network")
     # only where there is a backlight to adapt - the same predicate the
     # waybar toggle uses, so the bar and the menu agree about whether this
     # machine has the hardware at all
@@ -426,6 +438,7 @@ main() {
       "Time and date") time_menu ;;
       "Hardware profiles") hardware_menu ;;
       "Adaptive brightness") wluma_entry ;;
+      "Share this network") network_entry ;;
       "Quit") exit 0 ;;
     esac
   done

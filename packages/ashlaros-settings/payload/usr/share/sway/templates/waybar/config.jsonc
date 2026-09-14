@@ -121,7 +121,10 @@
         "tooltip-format-wifi": "{icon} {ifname} ({essid}): {ipaddr}",
         "tooltip-format-disconnected": "{icon} disconnected",
         "tooltip-format-disabled": "{icon} disabled",
-        "on-click": "swaymsg exec \\$once \\$term_float nmtui connect"
+        "on-click": "swaymsg exec \\$once \\$term_float nmtui connect",
+        // right-click, because it puts a live credential on screen: an
+        // explicit action, never something the bar renders on its own
+        "on-click-right": "swaymsg exec \\$once \\$term_float /usr/share/sway/scripts/wifi-qr.sh"
     },
     "sway/mode": {
         "format": "<span style=\"italic\">{}</span>",

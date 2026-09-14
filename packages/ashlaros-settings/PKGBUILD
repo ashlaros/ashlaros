@@ -45,6 +45,9 @@ depends=(
                               # ashlaros-displays are built from; without
                               # it both exit with "gum is not installed"
                               # the first time a user opens settings
+    'qrencode'                # renders the current wifi as a QR code a
+                              # phone can scan, instead of reading a
+                              # passphrase off a sticky note
     'jq'                      # json parsing, used across the scripts
     'bc'                      # arithmetic for the bar scripts
     'inotify-tools'           # file watchers
