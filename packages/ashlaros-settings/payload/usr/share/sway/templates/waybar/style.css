@@ -202,6 +202,15 @@ window#waybar {
     color: @warning_color;
 }
 
+/* The count could not be refreshed - no mirror reachable - so it is
+ * whatever was last true, or nothing at all. Dimmed rather than coloured
+ * like an alert: the number is not wrong, it is old, and the tooltip says
+ * so. A badge that silently stops moving is the failure this marks. */
+#custom-pacman.stale {
+    color: @theme_fg_color;
+    opacity: 0.5;
+}
+
 #bluetooth.disabled {
     color: @warning_color;
 }
