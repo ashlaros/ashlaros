@@ -19,6 +19,7 @@ database referencing packages it never uploaded.
 
 import argparse
 import glob
+import hashlib
 import os
 import subprocess
 import sys
@@ -113,6 +114,62 @@ def prune_superseded(s3, bucket: str, prefix: str, published: list[str]) -> None
                 log(f"pruned superseded {name}")
 
 
+def refuse_overwrite(s3, bucket: str, key: str, local: str) -> None:
+    """Stop before replacing a published package with different bytes.
+
+    The worker serves a .pkg.tar.zst as `immutable, max-age=31536000`, and
+    pacman fetches the package and its .sig as two objects against one
+    database entry. So replacing the bytes behind a key that is already
+    published is not a harmless re-upload: a reader mid-publish gets a
+    package from one build and a signature from another, which surfaces as
+    "signature is invalid" or "Maximum file size exceeded" and looks like a
+    compromised key rather than a race. Both were seen on build-iso (#57).
+
+    Identical bytes are fine - that is a re-run publishing what is already
+    there, and uploading them changes nothing a reader can observe.
+
+    This does not make a publish atomic. It refuses the one case that
+    silently corrupts what readers hold, and it fails the build that would
+    have done it, so a version that did not move is a loud error rather
+    than a leaderboard of confusing symptoms elsewhere.
+    """
+    try:
+        head = s3.head_object(Bucket=bucket, Key=key)
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] in ("NoSuchKey", "404", "NotFound"):
+            return
+        raise
+
+    def refuse(detail: str) -> None:
+        raise SystemExit(
+            f"{key} is already published with different content ({detail}).\n"
+            "Publishing would replace an object readers cache as immutable, "
+            "so a client fetching during the upload can get this package and "
+            "another build's signature.\n"
+            "Bump pkgrel so the new build gets a name of its own."
+        )
+
+    size = os.path.getsize(local)
+    if head["ContentLength"] != size:
+        refuse(f"{head['ContentLength']} bytes published, {size} built")
+
+    # Same size is not the same bytes. For a single-part upload - which is
+    # what upload_file does at these sizes - the ETag is the MD5 of the
+    # object, so the comparison is exact. A multipart ETag carries a "-N"
+    # suffix and is not an MD5 of the whole object; there is nothing to
+    # compare then, and the size check above is all this can say.
+    etag = head.get("ETag", "").strip('"')
+    if "-" in etag or not etag:
+        return
+
+    digest = hashlib.md5(usedforsecurity=False)
+    with open(local, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != etag:
+        refuse(f"md5 {etag} published, {digest.hexdigest()} built")
+
+
 def publish(s3, bucket: str, arch: str, pkg_dir: str, packages: list[str], key: str | None) -> None:
     prefix = f"{arch}/"
     db_file = os.path.join(pkg_dir, f"{DB_NAME}.db.tar.gz")
@@ -131,6 +188,7 @@ def publish(s3, bucket: str, arch: str, pkg_dir: str, packages: list[str], key: 
 
     for package in packages:
         name = os.path.basename(package)
+        refuse_overwrite(s3, bucket, prefix + name, package)
         s3.upload_file(package, bucket, prefix + name)
         log(f"{arch}: uploaded {name}")
         signature = package + ".sig"
