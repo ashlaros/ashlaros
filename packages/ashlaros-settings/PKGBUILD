@@ -76,6 +76,10 @@ depends=(
     'qt6ct'                   # provides qt6ct-style, used by the portal dialog
     'kvantum'                 # theme engine for qt
     'kvantum-qt5'             # theme engine for qt5
+    'gtk-nocsd'               # the skel .profile preloads it to disable
+                              # client-side decorations; without it the
+                              # GTK_CSD=0 beside it is a no-op and GTK
+                              # apps draw headerbars inside sway's border
     'adw-gtk-theme'           # default gtk theme
     'gnome-themes-extra'      # ships Adwaita/Adwaita-dark for gtk3
     'papirus-icon-theme'      # default icon theme
