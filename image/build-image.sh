@@ -171,6 +171,23 @@ systemctl enable cups.service
 systemctl enable avahi-daemon.service
 systemctl enable ufw.service
 
+# Unlock the login keyring with the password firstboot's account already
+# asks for. Appended, not replaced: /etc/pam.d/greetd belongs to greetd
+# and /etc/pam.d/passwd to shadow, so overwriting either produces a
+# .pacnew on the next upgrade of a package we do not control.
+#
+# `optional` on every line is load-bearing - a keyring failure must never
+# be able to deny a login. The passwd line is the one that gets forgotten:
+# without it `passwd` changes the account password, the keyring keeps the
+# old one, and unlocking silently stops working weeks later.
+grep -q pam_gnome_keyring /etc/pam.d/greetd || cat >> /etc/pam.d/greetd <<'PAM'
+auth       optional     pam_gnome_keyring.so
+session    optional     pam_gnome_keyring.so auto_start
+PAM
+grep -q pam_gnome_keyring /etc/pam.d/passwd || cat >> /etc/pam.d/passwd <<'PAM'
+password   optional     pam_gnome_keyring.so
+PAM
+
 # ALARM ships alarm/alarm and root/root with sshd enabled - a machine on
 # the network with published credentials. Both accounts go, sshd stays off
 # until firstboot has made an account to reach.

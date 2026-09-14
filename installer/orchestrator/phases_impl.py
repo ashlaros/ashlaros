@@ -793,6 +793,68 @@ def configure_login(ctx: InstallContext) -> None:
 
     (greetd_dir / "config.toml").write_text("\n".join(config) + "\n")
     run_command(["arch-chroot", str(ctx.target), "systemctl", "enable", "greetd.service"])
+    _unlock_keyring_at_login(ctx)
+
+
+def _append_pam_lines(path: Path, lines: list[str]) -> None:
+    """Add PAM lines to a stock file, once.
+
+    Appended rather than replaced because both files are package-owned -
+    /etc/pam.d/greetd by greetd and /etc/pam.d/passwd by shadow - so
+    shipping either as package payload would be a file conflict, and
+    overwriting one here would produce a .pacnew on the next upgrade of a
+    package we do not control.
+    """
+    if not path.exists():
+        return
+    existing = path.read_text()
+    new = [line for line in lines if line not in existing]
+    if not new:
+        return
+    path.write_text(existing.rstrip("\n") + "\n" + "\n".join(new) + "\n")
+
+
+def _unlock_keyring_at_login(ctx: InstallContext) -> None:
+    """Unlock the login keyring with the password already being typed.
+
+    gnome-keyring is installed on every machine and its daemon starts, but
+    without PAM the keyring is never unlocked - so the first thing wanting
+    a secret (a saved browser password, a Wi-Fi PSK, an ssh key) prompts
+    for a keyring password the user may never have set deliberately.
+
+    `optional` on both lines is deliberate and load-bearing: a keyring
+    failure must never be able to deny a session. Authentication is
+    decided by the system-local-login stack these files include; this only
+    hands that password on to the keyring afterwards.
+    """
+    pam_dir = ctx.target / "etc/pam.d"
+
+    # greetd: unlock at login. auto_start creates the keyring on first
+    # login for a user who has none yet.
+    _append_pam_lines(
+        pam_dir / "greetd",
+        [
+            "auth       optional     pam_gnome_keyring.so",
+            "session    optional     pam_gnome_keyring.so auto_start",
+        ],
+    )
+
+    # passwd: keep the keyring password in step with the account password.
+    # The one that gets forgotten, and whose absence fails weeks later -
+    # `passwd` changes the account password, the keyring keeps the old
+    # one, and unlocking silently stops working with no obvious cause.
+    _append_pam_lines(
+        pam_dir / "passwd",
+        ["password   optional     pam_gnome_keyring.so"],
+    )
+
+    # Autologin means no password is typed, so PAM has nothing to unlock
+    # with and the keyring still prompts on first use. The alternative is
+    # a blank keyring password, which stores its contents unencrypted -
+    # not something to do silently on a user's behalf, even with the disk
+    # encrypted. Said out loud rather than left to be discovered.
+    if ctx.autologin:
+        info("› keyring: autologin types no password, so it prompts on first use")
 
 
 # fwupd.service is deliberately absent: it is Type=dbus with a D-Bus
