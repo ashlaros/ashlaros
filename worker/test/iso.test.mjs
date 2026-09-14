@@ -76,6 +76,49 @@ test('versionOf reads the prefix, and rejects a bare key', () => {
   assert.equal(versionOf('stray.iso'), null);
 });
 
+test('a version offers the PC and Pi images as separate things', () => {
+  // an x86_64 ISO on a Pi is not a slower download, it is the wrong file,
+  // and one undifferentiated list is how someone takes it (#29)
+  const byVersion = new Map([
+    [
+      '2026.09.13',
+      [
+        { key: '2026.09.13/ashlaros-2026.09.13-x86_64.iso', size: 1 },
+        { key: '2026.09.13/SHA256SUMS', size: 1 },
+        { key: '2026.09.13/ashlaros-2026.09.13-aarch64-rpi5.img.xz', size: 1 },
+        { key: '2026.09.13/SHA256SUMS.ashlaros-2026.09.13-aarch64-rpi5.img.xz', size: 1 },
+      ],
+    ],
+  ]);
+  // from the version heading down: the intro paragraph above names both
+  // machines too, and asserting over the whole page would pass on that
+  const listing = renderIndex(byVersion).split('<h2>').pop();
+
+  assert.match(listing, /PC \(x86_64\)/);
+  assert.match(listing, /Raspberry Pi 5/);
+  // the PC heading comes first, and each image sits under its own
+  assert.ok(listing.indexOf('PC (x86_64)') < listing.indexOf('Raspberry Pi 5'));
+  assert.ok(
+    listing.indexOf('x86_64.iso') < listing.indexOf('Raspberry Pi 5'),
+    'the ISO belongs above the Pi heading',
+  );
+  // a checksum belongs with what it checksums, not in a list of its own
+  assert.ok(
+    listing.indexOf('SHA256SUMS.ashlaros-2026.09.13-aarch64') >
+      listing.indexOf('Raspberry Pi 5'),
+    "the image's checksum belongs under the Pi heading",
+  );
+});
+
+test('a version with only an ISO shows no Raspberry Pi heading', () => {
+  const listing = renderIndex(
+    new Map([['2026.08.01', [{ key: '2026.08.01/ashlaros-2026.08.01-x86_64.iso', size: 1 }]]]),
+  )
+    .split('<h2>')
+    .pop();
+  assert.doesNotMatch(listing, /Raspberry Pi/);
+});
+
 test('an empty bucket renders a page rather than failing', () => {
   assert.match(renderIndex(new Map()), /No images published yet/);
 });

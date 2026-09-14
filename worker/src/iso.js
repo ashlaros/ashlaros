@@ -71,21 +71,54 @@ function renderShots(shots) {
   return `<div class="shots">\n${images}\n</div>`;
 }
 
+/**
+ * Which machine an object is for.
+ *
+ * The ISO and the Pi image are different hardware, not two files in one
+ * list: an x86_64 ISO on a Pi is not a slower download, it is the wrong
+ * thing entirely (#29). A checksum belongs with whatever it checksums,
+ * and upload_iso.py names the image's one SHA256SUMS.<image> because a
+ * bare name would collide with the ISO's.
+ */
+export function targetOf(name) {
+  if (/rpi5|aarch64/.test(name)) return 'Raspberry Pi 5';
+  if (/x86_64/.test(name)) return 'PC (x86_64)';
+  // a bare SHA256SUMS is the ISO's, since the image's carries its name
+  return 'PC (x86_64)';
+}
+
 export function renderIndex(byVersion, shots = [], tour = null) {
   // version prefixes sort chronologically, so the newest is last
   const versions = [...byVersion.keys()].sort().reverse();
   const sections = versions
     .map((version) => {
-      const rows = byVersion
-        .get(version)
-        .map(
-          (o) =>
-            `<a class="row" href="/${escapeHtml(o.key)}"><span>${escapeHtml(
-              o.key.slice(version.length + 1),
-            )}</span><span>${humanSize(o.size)}</span></a>`,
-        )
+      const groups = new Map();
+      for (const object of byVersion.get(version)) {
+        const name = object.key.slice(version.length + 1);
+        const target = targetOf(name);
+        if (!groups.has(target)) groups.set(target, []);
+        groups.get(target).push({ name, key: object.key, size: object.size });
+      }
+
+      // the PC image first, because it is what most visitors came for,
+      // and stable regardless of which files a version happens to carry
+      const order = ['PC (x86_64)', 'Raspberry Pi 5'];
+      const blocks = [...groups.keys()]
+        .sort((a, b) => order.indexOf(a) - order.indexOf(b))
+        .map((target) => {
+          const rows = groups
+            .get(target)
+            .map(
+              (o) =>
+                `<a class="row" href="/${escapeHtml(o.key)}"><span>${escapeHtml(
+                  o.name,
+                )}</span><span>${humanSize(o.size)}</span></a>`,
+            )
+            .join('\n');
+          return `<h3>${escapeHtml(target)}</h3>\n${rows}`;
+        })
         .join('\n');
-      return `<h2>${escapeHtml(version)}</h2>\n${rows}`;
+      return `<h2>${escapeHtml(version)}</h2>\n${blocks}`;
     })
     .join('\n');
 

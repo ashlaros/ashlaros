@@ -49,6 +49,15 @@ h2 {
   font-weight: 500;
   margin: 1.6rem 0 0.3rem;
 }
+/* the machine a download is for, under the version it belongs to: dimmer
+   than the version and closer to the rows it labels, so the grouping reads
+   as a subdivision rather than a second list */
+h3 {
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin: 0.7rem 0 0.2rem;
+}
 table { border-collapse: collapse; font-family: monospace; }
 td { padding: 2px 20px 2px 0; white-space: nowrap; }
 td:not(:first-child) { color: #8a8f98; }
