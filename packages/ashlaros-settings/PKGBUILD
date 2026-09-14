@@ -29,6 +29,12 @@ depends=(
     'slurp'                   # region select, helper for grim
     'grimshot'                # screenshot helper built on grim/slurp
     'swappy'                  # screenshot editing tool
+    'tesseract'               # OCR engine behind capture-text.sh
+    # language data is per-language and separate: this is the default, and
+    # ASHLAROS_OCR_LANGS selects others once tesseract-data-deu and friends
+    # are installed
+    'tesseract-data-eng'
+    'zbar'                    # QR decode; qrencode below writes them, this reads
     'wf-recorder'             # screen recording util
     'wl-clipboard'            # copy/paste utilities for wayland
     'wl-clip-persist'         # persists clipboard content between clients

@@ -142,6 +142,12 @@ set $screenshot_screen_upload $pipe_output | $upload_pipe
 set $screenshot_selection $pipe_selection | $swappy
 set $screenshot_selection_upload $pipe_selection | $upload_pipe
 
+# select a region and get its text, or a QR's contents, on the clipboard.
+# Local: tesseract and zbar run here, nothing is uploaded - which is why
+# neither has a Shift+upload variant beside the screenshots above.
+set $capture_text $script_path/capture-text.sh
+set $capture_qr $script_path/capture-qr.sh
+
 # Update manager
 set $update_manager '$script_path/checkupdates.sh upgrade'
 

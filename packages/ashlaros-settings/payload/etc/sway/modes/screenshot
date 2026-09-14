@@ -1,6 +1,8 @@
 set $mode_screenshot "<span foreground='$color10'>󰄄</span>  \
 <span foreground='$color5'><b>Pick</b></span> <span foreground='$color10'>(<b>p</b>)</span> \
 <span foreground='$color5'><b>Output</b></span> <span foreground='$color10'>(<b>o</b>)</span> \
+<span foreground='$color5'><b>Text</b></span> <span foreground='$color10'>(<b>t</b>)</span> \
+<span foreground='$color5'><b>QR</b></span> <span foreground='$color10'>(<b>q</b>)</span> \
 <span foreground='$color7'>+ <span foreground='$color10'><b>Shift</b></span> for </span>"
 
 mode --pango_markup $mode_screenshot {
@@ -11,6 +13,15 @@ mode --pango_markup $mode_screenshot {
     # pick the region to screenshot
     $bindsym p mode "default", exec $screenshot_selection
     $bindsym Shift+p mode "default", exec $screenshot_selection_upload
+
+    # the useful half of Circle to Search: the region's text, on the
+    # clipboard, decoded locally. No Shift variant - there is no upload
+    # here and deliberately so, see the scripts.
+    $bindsym t mode "default", exec $capture_text
+
+    # decode a QR in the region. The value goes to the clipboard and
+    # nowhere else; it is routinely a secret.
+    $bindsym q mode "default", exec $capture_qr
 
     # Return to default mode.
     $bindsym Escape mode "default"
