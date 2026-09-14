@@ -1,14 +1,13 @@
 #!/usr/bin/env sh
 
+# brightnessctl's -d takes a glob and addresses every device that matches,
+# so the loop this used to carry was not only iterating over a $DEVICES
+# that is set nowhere - and therefore never running - it was never needed.
 case $1'' in
     'on')
-        for device in $DEVICES; do
-            brightnessctl -r -d "*kbd_backlight"
-        done
+        brightnessctl -r -d "*kbd_backlight"
         ;;
     'off')
-        for device in $DEVICES; do
-            brightnessctl -s -d "*kbd_backlight" && brightnessctl -d "*kbd_backlight" set 0
-        done
+        brightnessctl -s -d "*kbd_backlight" && brightnessctl -d "*kbd_backlight" set 0
         ;;
 esac

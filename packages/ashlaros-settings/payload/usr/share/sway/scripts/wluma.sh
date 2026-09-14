@@ -11,7 +11,7 @@ case $1'' in
     waybar-signal adaptive_brightness
     ;;
 'check')
-    [ -x "$(command -v wluma)" ] && [ $(ls -A /sys/class/backlight/ | wc -l) -gt 0 ]
+    [ -x "$(command -v wluma)" ] && [ "$(find /sys/class/backlight/ -mindepth 1 | wc -l)" -gt 0 ]
     exit $?
     ;;
 esac

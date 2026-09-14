@@ -4,6 +4,7 @@ config="$HOME/.config/wlsunset/config"
 
 #Startup function
 start() {
+    # shellcheck source=/dev/null  # a user config that need not exist
     [ -f "$config" ] && . "$config"
     temp_low=${temp_low:-"4000"}
     temp_high=${temp_high:-"6500"}

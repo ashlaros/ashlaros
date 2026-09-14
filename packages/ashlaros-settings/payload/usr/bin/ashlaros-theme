@@ -5,13 +5,17 @@ set -u
 THEME_DIR="/usr/share/sway/themes"
 
 prompt() {
-    read -p "->${1:+" ${1}."} Press enter to continue..."
+    read -r -p "-> Press enter to continue..."
 }
 
 install() {
     [ -f "$1/packages" ] || return
     local missing_pkgs
-    missing_pkgs=$(pacman -T $(cat "$1/packages") 2>/dev/null)
+    # the file is one package per line and pacman -T takes them as
+    # separate arguments, so the split is the point
+    local -a wanted
+    mapfile -t wanted < "$1/packages"
+    missing_pkgs=$(pacman -T "${wanted[@]}" 2>/dev/null)
     if [ -n "$missing_pkgs" ]; then
         # The installer ships yay, but a user can remove it, and the four
         # catppuccin themes name AUR-only packages - so say what is missing
@@ -22,7 +26,16 @@ install() {
             # the first, which is what an unquoted echo would do
             echo "$missing_pkgs" | sed 's/^/    /'
             echo "> They are in the AUR, and yay is not installed."
-            echo "> Install it with 'sudo pacman -S yay', then pick the theme again."
+            # yay has no aarch64 build - not in Arch Linux ARM and not in
+            # ours - so "install yay" is advice that cannot be taken here.
+            # Saying it anyway would send someone looking for a package
+            # that does not exist (#56).
+            if [ "$(uname -m)" = "x86_64" ]; then
+                echo "> Install it with 'sudo pacman -S yay', then pick the theme again."
+            else
+                echo "> yay is x86_64-only, so this theme cannot install them on $(uname -m)."
+                echo "> The sway and terminal colours below still apply; GTK and Qt will not match."
+            fi
             prompt
             return 1
         fi
