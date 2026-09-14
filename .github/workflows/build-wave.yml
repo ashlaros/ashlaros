@@ -118,15 +118,34 @@ jobs:
           # for everything, which would publish every authored package at
           # pkgrel=1 forever and strand every later update
           fetch-depth: 0
+      # A PKGBUILD that does not name this architecture is not a failure to
+      # tolerate - it is a package that was never meant to build here, and
+      # letting it reach makepkg produces the same "tolerated aarch64
+      # failure" warning as a real breakage. Two kinds of message in one
+      # channel is how the real one stops being read.
+      - name: does this package build for this architecture?
+        id: applicable
+        run: |
+          if grep -qE "^arch=\(.*(${{ matrix.arch }}|any).*\)" \
+            "packages/${{ matrix.package }}/PKGBUILD"; then
+            echo "build=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=no" >> "$GITHUB_OUTPUT"
+            echo "## ${{ matrix.package }} declares no ${{ matrix.arch }} support; skipping" \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: prepare the build container
+        if: steps.applicable.outputs.build == 'yes'
         run: .github/scripts/prepare-container.sh
       - name: import the signing key
+        if: steps.applicable.outputs.build == 'yes'
         env:
           GPG_SECRET_BASE64: ${{ secrets.GPG_SECRET_BASE64 }}
           GPG_KEYID: ${{ vars.GPG_KEYID }}
         run: .github/scripts/import-key.sh
       - name: build
         id: build
+        if: steps.applicable.outputs.build == 'yes'
         # An aarch64 failure is not a build failure: the package is simply
         # absent from that database, and an ALARM user loses one package
         # rather than the repository. On x86_64 it is fatal - that is the
@@ -141,7 +160,7 @@ jobs:
       # right - one absent package beats a blocked repository - but it has
       # to say so.
       - name: report a tolerated aarch64 failure
-        if: steps.build.outcome == 'failure'
+        if: steps.build.outcome == 'failure' && steps.applicable.outputs.build == 'yes'
         run: |
           echo "::warning title=aarch64 build failed::${{ matrix.package }}           did not build for aarch64 and will be absent from that database.           The repository is still published; ARM users lose this package."
           {
@@ -151,7 +170,7 @@ jobs:
             echo "not ignored: fix it or drop the package's aarch64 support."
           } >> "$GITHUB_STEP_SUMMARY"
       - name: collect the packages
-        if: steps.build.outcome == 'success'
+        if: steps.build.outcome == 'success' && steps.applicable.outputs.build == 'yes'
         working-directory: packages/${{ matrix.package }}
         # .zst or .xz: makepkg's PKGEXT follows the distribution, and Arch
         # Linux ARM still compresses with xz. Hardcoding .zst silently
@@ -162,7 +181,10 @@ jobs:
           test -s files.txt
           tar cf artifact.tar -T files.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: steps.build.outcome == 'success'
+        # a skipped leg produced no artifact.tar, and if-no-files-found:
+        # error below would turn that into the failure this gate exists to
+        # avoid
+        if: steps.build.outcome == 'success' && steps.applicable.outputs.build == 'yes'
         with:
           name: pkg-${{ matrix.arch }}-${{ matrix.package }}
           path: packages/${{ matrix.package }}/artifact.tar
