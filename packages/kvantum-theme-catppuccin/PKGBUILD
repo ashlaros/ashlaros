@@ -1,0 +1,32 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+# Contributor: Catppuccin <releases@catppuccin.com>
+
+pkgname=kvantum-theme-catppuccin
+pkgver=20251227
+pkgrel=1
+pkgdesc="Soothing pastel theme for Kvantum"
+arch=('any')
+url="https://github.com/catppuccin/Kvantum"
+license=('MIT')
+depends=('kvantum')
+# the AUR package everyone else uses; ours is the same content from a
+# pinned commit, so the two must not be installed together
+provides=('kvantum-theme-catppuccin-git' 'catppuccin-kvantum-theme')
+conflicts=('kvantum-theme-catppuccin-git')
+
+# A commit, not a branch. The AUR package is a -git one whose pkgver()
+# counts commits on live HEAD, so the declared version and the built
+# version disagree and every rebuild overwrites the published object with
+# a byte-different one - the lesson gtk-nocsd's PKGBUILD records. Upstream
+# publishes no tags, so a commit is the closest thing to one.
+_commit=71105d224fef95dd023691303477ce3eea487457
+source=("$pkgname-$_commit.tar.gz::$url/archive/$_commit.tar.gz")
+sha256sums=('f2bd573f8d7500c65fd69e1629b3bcf3eba3468124b81f1d12d54b2f5dda1a0c')
+
+package() {
+    install -dm755 "$pkgdir/usr/share/Kvantum"
+    cp -r "$srcdir/kvantum-$_commit/themes/"catppuccin-* "$pkgdir/usr/share/Kvantum/"
+
+    install -Dm644 "$srcdir/kvantum-$_commit/LICENSE" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

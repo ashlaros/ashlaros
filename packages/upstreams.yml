@@ -45,8 +45,33 @@ packages:
   bluetuith:
     upstream: https://aur.archlinux.org/bluetuith.git
     arch: both
+  # The four GTK themes and the Kvantum one the catppuccin sway themes
+  # name. Vendored because they were AUR-only: on ARM, where yay has no
+  # build, picking a catppuccin theme could apply the sway colours and
+  # nothing else (#56). All are arch=any - prebuilt zips and theme files -
+  # so carrying them costs a rebuild, not a port.
+  catppuccin-gtk-theme-frappe:
+    upstream: https://aur.archlinux.org/catppuccin-gtk-theme-frappe.git
+    arch: any
+  catppuccin-gtk-theme-latte:
+    upstream: https://aur.archlinux.org/catppuccin-gtk-theme-latte.git
+    arch: any
+  catppuccin-gtk-theme-macchiato:
+    upstream: https://aur.archlinux.org/catppuccin-gtk-theme-macchiato.git
+    arch: any
+  catppuccin-gtk-theme-mocha:
+    upstream: https://aur.archlinux.org/catppuccin-gtk-theme-mocha.git
+    arch: any
   flashfocus:
     upstream: https://aur.archlinux.org/flashfocus.git
+    arch: any
+  kvantum-theme-catppuccin:
+    upstream: https://aur.archlinux.org/kvantum-theme-catppuccin-git.git
+    # rewritten rather than copied: upstream's is a -git package whose
+    # pkgver() counts commits on live HEAD, so every rebuild published a
+    # byte-different object under the same version. Ours pins a commit,
+    # the way gtk-nocsd pins a tag and for the same reason - so the
+    # three-way merge base here is the AUR file this was derived from.
     arch: any
   mise-bin:
     upstream: https://aur.archlinux.org/mise-bin.git
