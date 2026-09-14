@@ -55,3 +55,14 @@ awk '
 cat "$tmp" > "$profile" || { rm -f "$tmp"; exit 1; }
 rm -f "$tmp"
 echo "  added the LD_PRELOAD beside GTK_CSD in ~/.profile"
+
+# Said rather than silently true. Migrations run from sway's autostart
+# (config.d/99-autostart-applications.conf), which is long after greetd
+# has already run `sh -lc sway` and read .profile - and after
+# $import_environment has handed that environment to the systemd user
+# manager. So nothing in this session sees the new variable.
+#
+# The #18 migration could regenerate the file it changed and make its
+# effect immediate; a login shell cannot be re-sourced into a session that
+# is already running, so this one reports instead of pretending.
+echo "  GTK apps keep their headerbars until the next login."
