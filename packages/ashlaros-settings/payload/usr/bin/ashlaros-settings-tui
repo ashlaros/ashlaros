@@ -585,6 +585,118 @@ mail_entry() {
 # would be worse than saying where the limit is.
 CALDAV_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/calcurse/caldav/config"
 
+# Google is the one provider that cannot be a row in the table above: it
+# wants OAuth2 rather than a password, and the credentials are the user's
+# own. We do not ship a client ID. vdirsyncer - a mature project that has
+# read the same terms - makes every user register their own Cloud project
+# because Google's ToS, section "Confidential Matters", is read as
+# forbidding hardcoded credentials in open-source software (#55). Until
+# that reading is settled with Google rather than guessed at, asking the
+# user for their own is the only version of this that is certainly
+# allowed, and it is also exactly the config a shipped client ID would
+# later fill in.
+#
+# calcurse-caldav has a complete OAuth2 path of its own, so this stays on
+# one sync engine. python-oauth2client is unmaintained upstream but is in
+# Arch's repositories and the flow works; the alternative was vdirsyncer
+# plus a manual import step, because calcurse can only import iCal
+# one-way and would not see a vdir at all.
+google_calendar() {
+  screen "Google calendar"
+
+  if ! pacman -Qq python-oauth2client >/dev/null 2>&1; then
+    say "Google needs python-oauth2client for the OAuth2 flow."
+    gum confirm --affirmative "Install" --negative "Back" "Install it?" || return 1
+    root_run pacman -S --noconfirm --needed python-oauth2client || { pause; return 1; }
+  fi
+
+  screen "Google calendar"
+  say "Google does not let us ship credentials for this, so the first step"
+  say "is creating your own - once, free, about five minutes:"
+  echo
+  say "  1. console.cloud.google.com -> create a project"
+  # The trap vdirsyncer documents: the Calendar API is a different API and
+  # syncing silently gets nowhere with it enabled instead.
+  say "  2. APIs & Services -> Library -> enable CalDAV API"
+  say "     (the CalDAV API, not the Calendar API - they are different)"
+  say "  3. Credentials -> Create credentials -> OAuth client ID"
+  say "  4. Application type: Desktop app"
+  echo
+  gum confirm --affirmative "I have them" --negative "Back" \
+    "Ready to paste the client ID and secret?" || return 1
+
+  local client_id client_secret email
+  client_id=$(gum input --prompt "Client ID: ") || return 1
+  [[ -n $client_id ]] || return 1
+  client_secret=$(gum input --password --prompt "Client secret: ") || return 1
+  email=$(gum input --prompt "Google account (email): ") || return 1
+  [[ -n $email ]] || return 1
+
+  mkdir -p "$(dirname "$CALDAV_CONFIG")"
+  {
+    echo "# written by ashlaros-settings-tui"
+    echo "[General]"
+    echo "Binary = calcurse"
+    echo "Hostname = apidata.googleusercontent.com"
+    # the account's own CalDAV collection, percent-encoded: the @ would
+    # otherwise end the path segment
+    echo "Path = /caldav/v2/$(url_escape "$email")/events/"
+    echo "HTTPS = Yes"
+    echo "AuthMethod = oauth2"
+    echo "DryRun = Yes"
+    echo "SyncFilter = cal,todo"
+    echo
+    echo "[OAuth2]"
+    echo "ClientID = $client_id"
+    echo "ClientSecret = $client_secret"
+    echo "Scope = https://www.googleapis.com/auth/calendar"
+    # loopback, so nothing of ours is in the exchange; the code comes back
+    # in the browser's address bar and the user pastes it
+    echo "RedirectURI = http://127.0.0.1"
+  } > "$CALDAV_CONFIG"
+  chmod 600 "$CALDAV_CONFIG"
+
+  screen "Google calendar"
+  say "Written to $CALDAV_CONFIG"
+  echo
+  say "A browser will open for you to authorize this. Google then shows a"
+  say "URL containing code=... - copy what follows code= and paste it here."
+  echo
+  pause
+
+  # First run opens the browser and exits without a code by design, so its
+  # failure is expected rather than an error worth showing.
+  calcurse-caldav --init=two-way >/dev/null 2>&1
+
+  local authcode
+  authcode=$(gum input --prompt "Auth code: ") || return 1
+  if [[ -z $authcode ]]; then
+    warn "No code, so nothing was authorized. The config is written; this"
+    warn "entry's \"Reconfigure\" picks it up again."
+    pause
+    return 1
+  fi
+
+  screen "Google calendar"
+  say "Trial run - DryRun is still on, so nothing is written anywhere:"
+  echo
+  # still DryRun = Yes here, same as the password path
+  calcurse-caldav --init=two-way --authcode "$authcode" 2>&1 |
+    sed 's/^/  /' | head -40
+  echo
+
+  if gum confirm --affirmative "Sync for real" --negative "Leave it in dry-run mode" \
+    "Does that look right?"; then
+    sed -i 's/^DryRun = Yes/DryRun = No/' "$CALDAV_CONFIG"
+    # the token is stored now, so no code is needed again
+    calcurse-caldav 2>&1 | sed 's/^/  /' | head -40
+    say "Synced. Later syncs are this entry's \"Sync now\"."
+  else
+    say "Left as DryRun = Yes. Nothing will be written until you change it."
+  fi
+  pause
+}
+
 calendar_entry() {
   screen "Calendar"
 
@@ -612,8 +724,6 @@ calendar_entry() {
     esac
   fi
 
-  # python-oauth2client is left out: it exists only for the Google path
-  # this entry does not offer
   local -a missing=()
   local pkg
   for pkg in python python-httplib2 python-pyparsing; do
@@ -636,6 +746,7 @@ calendar_entry() {
   local provider
   provider=$(gum choose --header "Where is the calendar?" \
     "Nextcloud (self-hosted)" \
+    "Google" \
     "Fastmail" \
     "iCloud" \
     "mailbox.org" \
@@ -661,6 +772,11 @@ calendar_entry() {
     "Nextcloud (self-hosted)")
       path=/remote.php/dav/calendars/USERNAME/personal/ ;;
   esac
+
+  if [[ $provider == Google ]]; then
+    google_calendar || return 0
+    return 0
+  fi
 
   local user
   host=$(gum input --prompt "Server: " --value "$host") || return 0
