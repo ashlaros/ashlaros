@@ -449,15 +449,57 @@ mail_entry() {
   email=$(gum input --prompt "Email address: ") || return 0
   [[ -n $email ]] || return 0
 
-  # A guess from the address rather than a provider table: unlike CalDAV
-  # paths, IMAP hostnames follow the mail.<domain> convention often enough
-  # to be a useful default, and every field stays editable.
+  # The same providers the calendar entry offers, because someone with a
+  # Fastmail calendar usually has Fastmail mail (#55). Every host and port
+  # below answered with a protocol banner when probed - not copied from a
+  # support page - and every field stays editable.
+  #
+  # Google and Microsoft are absent: both want OAuth for IMAP, aerc speaks
+  # it (imaps+oauthbearer) but we have no OAuth client to speak it with.
+  local provider
+  provider=$(gum choose --header "Where is the mail?" \
+    "Fastmail" "iCloud" "mailbox.org" "Posteo" "Zoho" "Other IMAP server") ||
+    return 0
+
   local domain=${email#*@}
-  imap_host=$(gum input --prompt "IMAP server: " --value "imap.$domain") || return 0
+  # smtp_scheme: aerc reads smtps:// as implicit TLS and smtp:// as
+  # STARTTLS, which is the difference iCloud needs - it answers on 587
+  # only, with 465 refusing the connection outright.
+  local smtp_scheme=smtps note=""
+  case $provider in
+    "Fastmail")
+      imap_host=imap.fastmail.com; smtp_host=smtp.fastmail.com
+      note="Fastmail needs an app password: Settings -> Privacy & Security." ;;
+    "iCloud")
+      imap_host=imap.mail.me.com; smtp_host=smtp.mail.me.com
+      smtp_port=587; smtp_scheme=smtp
+      note="iCloud needs an app-specific password from appleid.apple.com." ;;
+    "mailbox.org")
+      imap_host=imap.mailbox.org; smtp_host=smtp.mailbox.org ;;
+    "Posteo")
+      imap_host=posteo.de; smtp_host=posteo.de ;;
+    "Zoho")
+      imap_host=imappro.zoho.com; smtp_host=smtppro.zoho.com
+      note="Zoho hosts EU accounts separately: imap.zoho.eu and smtp.zoho.eu." ;;
+    *)
+      # the mail.<domain> convention, which is right often enough to be a
+      # better starting point than an empty field
+      imap_host=imap.$domain; smtp_host=smtp.$domain ;;
+  esac
+
+  imap_host=$(gum input --prompt "IMAP server: " --value "$imap_host") || return 0
   imap_port=$(gum input --prompt "IMAP port: " --value "993") || return 0
-  smtp_host=$(gum input --prompt "SMTP server: " --value "smtp.$domain") || return 0
-  smtp_port=$(gum input --prompt "SMTP port: " --value "465") || return 0
+  smtp_host=$(gum input --prompt "SMTP server: " --value "$smtp_host") || return 0
+  smtp_port=$(gum input --prompt "SMTP port: " --value "${smtp_port:-465}") || return 0
   user=$(gum input --prompt "Username: " --value "$email") || return 0
+
+  # Said before the password prompt: an app password is something the user
+  # has to go and create somewhere else first.
+  if [[ -n $note ]]; then
+    echo
+    say "$note"
+    echo
+  fi
 
   local password
   password=$(gum input --password --prompt "Password: ") || return 0
@@ -485,13 +527,13 @@ mail_entry() {
       # aerc runs the command itself rather than expanding it into a URL
       echo "source = imaps://$(url_escape "$user")@$imap_host:$imap_port"
       echo "source-cred-cmd = $cred_cmd"
-      echo "outgoing = smtps://$(url_escape "$user")@$smtp_host:$smtp_port"
+      echo "outgoing = $smtp_scheme://$(url_escape "$user")@$smtp_host:$smtp_port"
       echo "outgoing-cred-cmd = $cred_cmd"
       # otherwise the keyring is queried once per message sent
       echo "outgoing-cred-cmd-cache = true"
     else
       echo "source = imaps://$(url_escape "$user"):$(url_escape "$password")@$imap_host:$imap_port"
-      echo "outgoing = smtps://$(url_escape "$user"):$(url_escape "$password")@$smtp_host:$smtp_port"
+      echo "outgoing = $smtp_scheme://$(url_escape "$user"):$(url_escape "$password")@$smtp_host:$smtp_port"
     fi
     echo "copy-to = Sent"
   } >> "$AERC_ACCOUNTS"
