@@ -1,0 +1,30 @@
+# Say what is no longer needed, at the moment it stops being needed.
+#
+# On a rolling distribution orphans accumulate quietly: a package drops a
+# dependency in an upgrade, the old one stays installed forever, and
+# nobody notices until the machine is years old. `pacman -Qtdq` has always
+# answered this; almost nobody knows it exists, and by the time they look
+# the list is long enough to be frightening rather than useful.
+#
+# 95- so it runs after the hooks that actually do work - a report about
+# the transaction reads better once the transaction's own output is done.
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Checking for packages nothing needs any more
+When = PostTransaction
+# Deliberately not `pacman -Qtdq | pacman -Rns -`, which the upstream hook
+# suggests. That cascades, and on a desktop it removes things the user
+# installed as a dependency of something they later dropped but still
+# want. Report and point at how to look; the destructive half belongs
+# behind a confirm in the settings TUI, not in a line someone pastes.
+#
+# Prints nothing at all when there are no orphans - the common case, and
+# the reason this can run on every transaction including pacstrap.
+Exec = /bin/sh -c 'orphans=$(pacman -Qtdq 2>/dev/null); [ -n "$orphans" ] || exit 0; printf "\nInstalled but no longer required by anything:\n"; printf "%s\n" "$orphans" | sed "s/^/  /"; printf "\nInspect one with: pacman -Qi <name>\nKeep one deliberately: sudo pacman -D --asexplicit <name>\n"'

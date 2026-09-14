@@ -280,7 +280,75 @@ hardware_menu() {
   done
 }
 
-# 6. FINGERPRINT
+# 6. ORPHANS
+#
+# The hook (95-ashlaros-orphans.hook) reports after every transaction and
+# deliberately suggests nothing destructive. This is where the destructive
+# half lives: one package at a time, named, behind a confirm.
+#
+# `pacman -Qtdq | pacman -Rns -` is the command the upstream hook prints
+# and it is a footgun - it cascades, and on a desktop it takes things
+# installed as a dependency of something since removed but still wanted.
+# Removing one at a time is slower and is the point.
+orphans_entry() {
+  local choice orphans
+  while true; do
+    screen "Packages nothing needs"
+
+    mapfile -t orphans < <(pacman -Qtdq 2>/dev/null)
+    if ((${#orphans[@]} == 0)); then
+      say "✓ nothing is installed that is no longer required"
+      pause
+      return 0
+    fi
+
+    say "${#orphans[@]} package(s) installed as dependencies that nothing"
+    say "depends on any more:"
+    echo
+    printf "  %s\n" "${orphans[@]}"
+    echo
+
+    choice=$(gum choose --header "Orphans" \
+      "Show what one is" "Keep one (mark explicit)" "Remove one" "Back") || return 0
+
+    case $choice in
+      "Show what one is")
+        local pkg
+        pkg=$(gum choose --header "Which" "${orphans[@]}") || continue
+        screen "$pkg"
+        pacman -Qi "$pkg" 2>&1 | sed "s/^/  /"
+        pause
+        ;;
+      "Keep one (mark explicit)")
+        local pkg
+        pkg=$(gum choose --header "Which" "${orphans[@]}") || continue
+        # The safe half of the original advice, and the one nobody knows:
+        # it says "I want this" without removing anything.
+        root_run pacman -D --asexplicit "$pkg" && say "$pkg is now explicit."
+        pause
+        ;;
+      "Remove one")
+        local pkg
+        pkg=$(gum choose --header "Which" "${orphans[@]}") || continue
+        # -Rns on a single named package, never on a piped list. What it
+        # would take with it is shown before the confirm, because that is
+        # the part that surprises people.
+        screen "Remove $pkg"
+        say "This would remove:"
+        echo
+        pacman -Rns --print "$pkg" 2>&1 | sed "s/^/  /"
+        echo
+        gum confirm --affirmative "Remove" --negative "Cancel" \
+          "Remove $pkg and what it pulls with it?" || continue
+        root_run pacman -Rns --noconfirm "$pkg"
+        pause
+        ;;
+      "Back") return 0 ;;
+    esac
+  done
+}
+
+# 7. FINGERPRINT
 #
 # Installed everywhere, enabled nowhere. A fresh machine behaves exactly
 # as it did before; fingerprint auth turns on only when someone has
@@ -420,7 +488,7 @@ fingerprint_entry() {
   done
 }
 
-# 7. NETWORK
+# 8. NETWORK
 #
 # Only the QR code lives here: nmtui does everything else and is one
 # click away on the bar. Rendering a live passphrase to the screen is an
@@ -430,7 +498,7 @@ network_entry() {
   /usr/share/sway/scripts/wifi-qr.sh
 }
 
-# 8. ADAPTIVE BRIGHTNESS
+# 9. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -570,6 +638,9 @@ main() {
       [[ -n $(ls -A /sys/class/backlight 2>/dev/null) ]]; then
       entries+=("Adaptive brightness")
     fi
+    # only when there is something to say - an entry that always reports
+    # "nothing to do" is an entry people stop reading
+    [[ -n $(pacman -Qtdq 2>/dev/null) ]] && entries+=("Unneeded packages")
     entries+=("Quit")
 
     local choice
@@ -586,6 +657,7 @@ main() {
       "Adaptive brightness") wluma_entry ;;
       "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
+      "Unneeded packages") orphans_entry ;;
       "Quit") exit 0 ;;
     esac
   done
