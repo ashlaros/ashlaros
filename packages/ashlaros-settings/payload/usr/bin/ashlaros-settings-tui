@@ -334,12 +334,56 @@ calendar_entry() {
     root_run pacman -S --noconfirm --needed "${missing[@]}" || { pause; return 1; }
   fi
 
-  local host path user
-  host=$(gum input --prompt "Server (e.g. nextcloud.example.com): ") || return 0
+  # A table rather than a branch per provider: the common failure is not
+  # knowing the CalDAV URL, and the URL is data. Every host and path below
+  # was probed and answers 401 - the endpoint exists and wants credentials
+  # - rather than being copied from documentation (#55).
+  #
+  # Outlook is deliberately absent: Microsoft retired CalDAV for
+  # Outlook.com and the replacement is Graph, a REST API that nothing here
+  # speaks. Listing it would promise something that cannot work.
+  local provider
+  provider=$(gum choose --header "Where is the calendar?" \
+    "Nextcloud (self-hosted)" \
+    "Fastmail" \
+    "iCloud" \
+    "mailbox.org" \
+    "Posteo" \
+    "Zoho" \
+    "Other CalDAV server") || return 0
+
+  local host="" path="" note=""
+  case $provider in
+    "Fastmail")
+      host=caldav.fastmail.com; path=/dav/calendars/user/USERNAME/CALENDAR/
+      note="Fastmail needs an app password: Settings -> Privacy & Security -> Integrations." ;;
+    "iCloud")
+      host=caldav.icloud.com; path=/
+      note="iCloud needs an app-specific password from appleid.apple.com, not your Apple ID password." ;;
+    "mailbox.org")
+      host=dav.mailbox.org; path=/caldav/ ;;
+    "Posteo")
+      host=posteo.de:8443; path=/calendars/USERNAME/default/ ;;
+    "Zoho")
+      host=calendar.zoho.com; path=/caldav/USERNAME/events/
+      note="Zoho needs an application-specific password when two-factor is on." ;;
+    "Nextcloud (self-hosted)")
+      path=/remote.php/dav/calendars/USERNAME/personal/ ;;
+  esac
+
+  local user
+  host=$(gum input --prompt "Server: " --value "$host") || return 0
   [[ -n $host ]] || return 0
-  path=$(gum input --prompt "Calendar path: " \
-    --value "/remote.php/dav/calendars/USERNAME/personal/") || return 0
+  path=$(gum input --prompt "Calendar path: " --value "$path") || return 0
   user=$(gum input --prompt "Username: ") || return 0
+
+  # Said before the password prompt, not after a failure: an app password
+  # is something the user has to go and create elsewhere.
+  if [[ -n $note ]]; then
+    echo
+    say "$note"
+    echo
+  fi
 
   # PasswordCommand before Password: with gnome-keyring unlocked at login
   # (it is, since f0b5cc7) secret-tool needs no extra package and keeps
