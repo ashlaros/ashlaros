@@ -28,12 +28,46 @@ refresh() {
         *) return 1 ;;
     esac
 
-    # The AUR half is whatever helper the user has, and is allowed to fail
-    # without invalidating the pacman half: `yay -Qua` needs the network
-    # too, and an unreachable AUR should not blank a real pacman count.
+    # Everything below is a source the click action (topgrade) also
+    # updates, counted so the badge and the button describe the same work.
+    # Each is optional and each is allowed to fail on its own: they all
+    # need the network, and one unreachable source must not blank a count
+    # that was fetched successfully. A source that cannot answer
+    # contributes nothing rather than zero.
+
+    # The AUR half is whatever helper the user has.
     if [ -x "$(command -v yay)" ]; then
-        aur=$(yay -Qua 2>/dev/null)
-        out=$(printf '%s\n%s' "$out" "$aur")
+        out=$(printf '%s\n%s' "$out" "$(yay -Qua 2>/dev/null)")
+    fi
+
+    # One line per updatable ref. `remote-ls --updates` asks the remotes,
+    # so it is the network call, not a local query.
+    if [ -x "$(command -v flatpak)" ]; then
+        out=$(printf '%s\n%s' "$out" \
+            "$(flatpak remote-ls --updates --columns=application,version 2>/dev/null |
+                sed 's/^/flatpak /')")
+    fi
+
+    # fwupdmgr exits 0 whether it found updates, found none, or could not
+    # reach its daemon at all - "Failed to connect to daemon" and success
+    # are indistinguishable by status. So the JSON is parsed instead, and
+    # a payload carrying an Error rather than Devices contributes nothing.
+    if [ -x "$(command -v fwupdmgr)" ] && [ -x "$(command -v jq)" ]; then
+        out=$(printf '%s\n%s' "$out" \
+            "$(fwupdmgr get-updates --json 2>/dev/null |
+                jq -r '.Devices // [] | .[] | "firmware \(.Name) \(.Releases[0].Version // "")"' \
+                    2>/dev/null)")
+    fi
+
+    # mise reports against the version the user asked for, so a pinned
+    # tool is never "outdated" and a fuzzy one is only listed when the
+    # pin itself can move. That is the right question for a badge: it
+    # counts upgrades that would actually be taken.
+    if [ -x "$(command -v mise)" ] && [ -x "$(command -v jq)" ]; then
+        out=$(printf '%s\n%s' "$out" \
+            "$(mise outdated --json 2>/dev/null |
+                jq -r 'to_entries[] | "mise \(.key) \(.value.current // "") -> \(.value.latest // "")"' \
+                    2>/dev/null)")
     fi
 
     # `grep -v` exits 1 when nothing survives the filter, which for a
@@ -71,11 +105,14 @@ case $1'' in
     FRESH=$?
     COUNT=$(echo "$UPDATES" | grep -cv '^$')
     TOOLTIP=$(echo "$UPDATES" | awk 1 ORS='\\n' | sed 's/\\n$//')
-    # The badge counts pacman and AUR, which is all that can be counted
-    # cheaply. Clicking runs topgrade, which also updates flatpaks, cargo
-    # binaries, firmware and git checkouts - so the tooltip says what the
-    # number is rather than letting it read as a prediction of the run.
-    TOOLTIP="$TOOLTIP\n\npacman and AUR. Updating also runs topgrade's other steps."
+    # The badge counts pacman, AUR, flatpak, firmware and mise - the
+    # sources that can say how much work they have without doing it.
+    # Clicking runs topgrade, which has ~180 steps and no count-only mode,
+    # so the remainder (cargo, git checkouts, shell plugins) is still work
+    # the run may find and the badge cannot see. The tooltip says which
+    # side of that line the number is on rather than letting it read as a
+    # prediction of the run.
+    TOOLTIP="$TOOLTIP\n\npacman, AUR, flatpak, firmware, mise. Updating runs topgrade's other steps too."
     if [ "$FRESH" -ne 0 ]; then
         # Say the number is old rather than presenting it as current. A
         # badge that silently stops moving is worse than one that admits
