@@ -11,6 +11,7 @@ set -uo pipefail
 
 out_dir=${1:-/out}
 manifest=${MANIFEST:-/screenshots/shots.yaml}
+failed=" "
 
 # Before sourcing, because exec from inside a sourced file would replace
 # this script mid-source. waybar's tray, mako and the portal are D-Bus
@@ -80,10 +81,36 @@ while read -r shot; do
         sleep "$overlay_settle"
     fi
 
+    # A shot that asked for windows must have them. `settings` published a
+    # picture of bare wallpaper because the TUI exited before grim fired -
+    # ashlaros-settings did not depend on gum - and nothing here could
+    # tell an empty desktop from a desktop that was meant to be empty.
+    #
+    # Counted from sway rather than from the pixels: a window that opened
+    # and closed leaves no trace in the image, and "is anything running"
+    # is the question, not "is the picture dark".
+    if [ -n "$(lines "$shot" commands)" ]; then
+        windows=$(swaymsg -t get_tree |
+            python3 -c 'import json,sys
+def walk(n):
+    return (1 if n.get("app_id") else 0) + sum(walk(c) for c in n.get("nodes", []) + n.get("floating_nodes", []))
+print(walk(json.load(sys.stdin)))')
+        if [ "$windows" -eq 0 ]; then
+            log "  ERROR: $name launched apps and has no windows"
+            failed="$failed $name"
+            continue
+        fi
+    fi
+
     grim "$out_dir/$name.png"
     log "  wrote $name.png ($(stat -c%s "$out_dir/$name.png") bytes)"
 done < /tmp/shots.jsonl
 
 session_end
+
+if [ -n "${failed# }" ]; then
+    echo "shots with no windows:$failed" >&2
+    exit 1
+fi
 
 ls -la "$out_dir"/*.png
