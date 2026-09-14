@@ -280,6 +280,116 @@ hardware_menu() {
   done
 }
 
+# 6. ADAPTIVE BRIGHTNESS
+#
+# Report first, because the interesting failure is invisible: wluma
+# auto-detects the light sensor, the backlight and the keyboard LED, and
+# an explicit config section turns that detection OFF for whatever it
+# names. We used to ship a config naming one specific ThinkPad, so every
+# other machine got a dead webcam sensor and no backlight at all (#41).
+#
+# Nothing here writes /etc/xdg: that path is package-owned and a user edit
+# there is a .pacnew conflict on the next upgrade. Overrides go to the
+# user's own config, which replaces the shipped one wholesale.
+wluma_entry() {
+  local user_config="${XDG_CONFIG_HOME:-$HOME/.config}/wluma/config.toml"
+  local choice
+
+  while true; do
+    screen "Adaptive brightness"
+
+    if systemctl --user is-active wluma >/dev/null 2>&1; then
+      say "✓ wluma is running"
+    else
+      warn "! wluma is not running"
+      warn "  the waybar toggle starts it, or: systemctl --user enable --now wluma"
+    fi
+
+    # What it could possibly control, read from the machine rather than
+    # assumed. A laptop with no backlight directory is a laptop where this
+    # tool has nothing to do, and saying so beats an empty success.
+    local backlights
+    backlights=$(ls -A /sys/class/backlight 2>/dev/null | tr '\n' ' ')
+    if [[ -n $backlights ]]; then
+      say "  backlights: $backlights"
+    else
+      oops "  no /sys/class/backlight device - nothing to dim"
+    fi
+
+    # a glob rather than ls|grep: wluma matches on the same substring
+    local leds=""
+    for led in /sys/class/leds/*kbd_backlight*; do
+      [[ -e $led ]] && leds+="${led##*/} "
+    done
+    [[ -n $leds ]] && say "  keyboard LEDs: $leds"
+
+    # wluma discovers an IIO ambient light sensor when one exists and no
+    # explicit [als.*] section overrides it. A real sensor beats inferring
+    # room brightness from a webcam image, so it is worth naming.
+    if [[ -d /sys/bus/iio/devices ]] &&
+      compgen -G "/sys/bus/iio/devices/iio:device*" >/dev/null; then
+      say "  ambient light sensor: present (IIO)"
+    else
+      say "  ambient light sensor: none found; wluma will use screen contents"
+    fi
+
+    echo
+    if [[ -f $user_config ]]; then
+      warn "Your own config overrides auto-detection:"
+      say "  $user_config"
+    else
+      say "No user config: everything is auto-detected, which is usually right."
+    fi
+
+    echo
+    choice=$(gum choose --header "Adaptive brightness" \
+      "Show what wluma detected" "Edit my config" "Remove my config" "Back") || return 0
+
+    case $choice in
+      "Show what wluma detected")
+        screen "Adaptive brightness"
+        # The daemon logs what it discovered at debug level, which is the
+        # only place the detected names appear. Reading its journal beats
+        # reimplementing the detection and disagreeing with it.
+        say "The last thing wluma logged:"
+        echo
+        journalctl --user -u wluma -n 25 --no-pager 2>&1 | sed "s/^/  /"
+        echo
+        say "Names and paths appear here with RUST_LOG=debug."
+        pause
+        ;;
+      "Edit my config")
+        # Seeded from the packaged example rather than from nothing: an
+        # empty file is a valid config that changes no behaviour, and a
+        # user who wanted to override something would have no idea what
+        # the sections are called.
+        mkdir -p "$(dirname "$user_config")"
+        if [[ ! -f $user_config ]] && [[ -f /usr/share/wluma/examples/config.toml ]]; then
+          {
+            echo "# Everything below is OPTIONAL and every section you"
+            echo "# uncomment turns OFF auto-detection for what it names."
+            echo "# An empty file is the right config on most machines."
+            echo
+            sed "s/^/# /" /usr/share/wluma/examples/config.toml
+          } > "$user_config"
+        fi
+        "${EDITOR:-vim}" "$user_config"
+        systemctl --user restart wluma 2>/dev/null
+        ;;
+      "Remove my config")
+        [[ -f $user_config ]] || { warn "There is no user config to remove."; pause; continue; }
+        gum confirm --affirmative "Remove" --negative "Cancel" \
+          "Delete $user_config and go back to auto-detection?" || continue
+        rm -f "$user_config"
+        systemctl --user restart wluma 2>/dev/null
+        say "Removed. wluma will detect everything again."
+        pause
+        ;;
+      "Back") return 0 ;;
+    esac
+  done
+}
+
 main() {
   command -v gum >/dev/null || { echo "ashlaros-settings-tui: gum is not installed" >&2; exit 1; }
 
@@ -295,6 +405,13 @@ main() {
     command -v pacseek >/dev/null && entries+=("Install packages")
     entries+=("Time and date")
     command -v chwd >/dev/null && entries+=("Hardware profiles")
+    # only where there is a backlight to adapt - the same predicate the
+    # waybar toggle uses, so the bar and the menu agree about whether this
+    # machine has the hardware at all
+    if command -v wluma >/dev/null &&
+      [[ -n $(ls -A /sys/class/backlight 2>/dev/null) ]]; then
+      entries+=("Adaptive brightness")
+    fi
     entries+=("Quit")
 
     local choice
@@ -308,6 +425,7 @@ main() {
       "Install packages") packages_entry ;;
       "Time and date") time_menu ;;
       "Hardware profiles") hardware_menu ;;
+      "Adaptive brightness") wluma_entry ;;
       "Quit") exit 0 ;;
     esac
   done
