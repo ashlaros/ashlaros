@@ -1001,10 +1001,22 @@ face_enabled() {
   grep -q "^auth .*pam_howdy.so" "$FACE_SUDO" 2>/dev/null
 }
 
-# A model belongs to a user and howdy stores it per user; `list` exits
-# non-zero when there is none, which is the question being asked.
-face_models() {
-  howdy --plain -U "$USER" list 2>/dev/null | grep -cE "^[0-9]" || true
+# Whether this user has a face model.
+#
+# Two things measured against the published package rather than assumed.
+# It needs root: `howdy list` answers "This command requires root
+# privileges" and exits before printing anything, and the models it would
+# read live in /etc/howdy/models, which is 750 root. And it reports by
+# exit status, not output - with no model it prints nothing at all and
+# exits 1 - so an unprivileged run counting printed rows found none
+# whether or not one existed, and the menu could never show an enrolled
+# model.
+#
+# -n: this only draws a menu, so it must not stop to ask for a password.
+# Without a cached credential it reports none, which is the answer the
+# unprivileged call always gave and no worse than the state it replaces.
+face_has_model() {
+  sudo -n howdy --plain -U "$USER" list >/dev/null 2>&1
 }
 
 face_entry() {
@@ -1012,10 +1024,10 @@ face_entry() {
   while true; do
     screen "Face unlock"
 
-    local models
-    models=$(face_models)
+    local models=0
+    face_has_model && models=1
     if ((models > 0)); then
-      say "✓ $models face model(s) for $USER"
+      say "✓ a face model exists for $USER"
     else
       warn "! no face model yet"
     fi
