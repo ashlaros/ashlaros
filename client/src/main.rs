@@ -38,18 +38,211 @@ enum Screen {
     Quarry(QuarryRun),
 }
 
+/// Where a finished run goes, and what happened to it.
+///
+/// Three initials and nothing else, like the page: the board stores a
+/// score and a seed, never a person.
+struct Submission {
+    initials: [u8; 3],
+    cursor: usize,
+    status: Option<String>,
+    sent: bool,
+}
+
+impl Submission {
+    fn new() -> Self {
+        Self {
+            initials: [b'A'; 3],
+            cursor: 0,
+            status: None,
+            sent: false,
+        }
+    }
+
+    fn text(&self) -> String {
+        String::from_utf8_lossy(&self.initials).into_owned()
+    }
+}
+
+/// The host the board lives on. Overridable so a run can be pointed at a
+/// local worker while developing, which is also how this was tested.
+fn endpoint() -> String {
+    std::env::var("ASHLAROS_GAME_HOST")
+        .unwrap_or_else(|_| "https://ashlaros.download".into())
+}
+
+/// POST the run, and return what the server said about it.
+///
+/// curl rather than an HTTP crate: this binary links raylib and a
+/// simulation, and pulling in a TLS stack plus its dependency tree to
+/// send one request a day would be more machinery than program. curl is
+/// in `base`, so it is on every machine this package can be installed on.
+///
+/// No score is sent. The server replays the events against its own seed
+/// and discards any number the client reports - which is the whole design
+/// (R3.2), and means this cannot lie about a run even if it wanted to.
+fn submit(game: &str, day: &str, player: &str, events: &[Event]) -> String {
+    let log: Vec<String> = events
+        .iter()
+        .map(|e| {
+            if game == "quarry" {
+                format!("[{},{},{}]", e.action, e.tick, e.value)
+            } else {
+                format!("[{},{}]", e.action, e.tick)
+            }
+        })
+        .collect();
+    let body = format!(
+        r#"{{"game":"{game}","day":"{day}","player":"{player}","events":[{}]}}"#,
+        log.join(",")
+    );
+
+    let output = std::process::Command::new("curl")
+        .arg("--silent")
+        .arg("--show-error")
+        .arg("--max-time")
+        .arg("20")
+        .arg("-H")
+        .arg("content-type: application/json")
+        .arg("--data-binary")
+        .arg("@-")
+        .arg(format!("{}/game/score", endpoint()))
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .and_then(|mut child| {
+            use std::io::Write;
+            child
+                .stdin
+                .take()
+                .expect("stdin was piped")
+                .write_all(body.as_bytes())?;
+            child.wait_with_output()
+        });
+
+    let output = match output {
+        Ok(output) => output,
+        // a machine with no network is the ordinary case, not an error
+        // worth a stack trace on a game over screen
+        Err(error) => return format!("could not submit: {error}"),
+    };
+
+    let response = String::from_utf8_lossy(&output.stdout);
+    // The response is small and its shape is fixed, so this reads the two
+    // fields it needs rather than linking a JSON parser for them.
+    if let Some(score) = field(&response, "\"score\":") {
+        if response.contains("\"recorded\":true") {
+            return format!("recorded {score}");
+        }
+    }
+    if let Some(reason) = quoted(&response, "\"reason\":\"") {
+        return reason;
+    }
+    if let Some(error) = quoted(&response, "\"error\":\"") {
+        return error;
+    }
+    if response.trim().is_empty() {
+        return "no answer from the board".into();
+    }
+    response.trim().chars().take(60).collect()
+}
+
+/// The number following a key in the response, if it is there.
+fn field(haystack: &str, key: &str) -> Option<String> {
+    let rest = haystack.split(key).nth(1)?;
+    let digits: String = rest
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    (!digits.is_empty()).then_some(digits)
+}
+
+/// The string following a key in the response, if it is there.
+fn quoted(haystack: &str, key: &str) -> Option<String> {
+    let rest = haystack.split(key).nth(1)?;
+    Some(rest.split('"').next()?.to_string())
+}
+
 struct CoursesRun {
     state: courses::State,
     events: Vec<Event>,
+    submission: Submission,
 }
 
 struct QuarryRun {
     state: quarry::State,
     events: Vec<Event>,
+    submission: Submission,
     /// Where the mouse last put the paddle, in sub-pixels. Recorded only
     /// when it changes: the log is edges, not a sample per tick, or a
     /// two-minute run would be fourteen thousand numbers.
     last_target: i32,
+}
+
+/// Drive the three-initial entry and the submit key.
+///
+/// Shared by both games because the rules it implements are about the
+/// board rather than the game - the same reason scores.js keeps the day,
+/// the seed and the one-attempt rule outside the per-game modules.
+///
+/// Returns true when a run was just sent, so the caller can stop offering
+/// to send it again.
+fn handle_submission(
+    handle: &RaylibHandle,
+    submission: &mut Submission,
+    game: &str,
+    day: &str,
+    events: &[Event],
+) {
+    if submission.sent {
+        return;
+    }
+
+    for (key, letter) in [
+        (KeyboardKey::KEY_A, b'A'),
+        (KeyboardKey::KEY_B, b'B'),
+        (KeyboardKey::KEY_C, b'C'),
+        (KeyboardKey::KEY_D, b'D'),
+        (KeyboardKey::KEY_E, b'E'),
+        (KeyboardKey::KEY_F, b'F'),
+        (KeyboardKey::KEY_G, b'G'),
+        (KeyboardKey::KEY_H, b'H'),
+        (KeyboardKey::KEY_I, b'I'),
+        (KeyboardKey::KEY_J, b'J'),
+        (KeyboardKey::KEY_K, b'K'),
+        (KeyboardKey::KEY_L, b'L'),
+        (KeyboardKey::KEY_M, b'M'),
+        (KeyboardKey::KEY_N, b'N'),
+        (KeyboardKey::KEY_O, b'O'),
+        (KeyboardKey::KEY_P, b'P'),
+        (KeyboardKey::KEY_Q, b'Q'),
+        (KeyboardKey::KEY_R, b'R'),
+        (KeyboardKey::KEY_S, b'S'),
+        (KeyboardKey::KEY_T, b'T'),
+        (KeyboardKey::KEY_U, b'U'),
+        (KeyboardKey::KEY_V, b'V'),
+        (KeyboardKey::KEY_W, b'W'),
+        (KeyboardKey::KEY_X, b'X'),
+        (KeyboardKey::KEY_Y, b'Y'),
+        (KeyboardKey::KEY_Z, b'Z'),
+    ] {
+        if handle.is_key_pressed(key) {
+            submission.initials[submission.cursor] = letter;
+            submission.cursor = (submission.cursor + 1) % 3;
+        }
+    }
+    if handle.is_key_pressed(KeyboardKey::KEY_BACKSPACE) {
+        submission.cursor = (submission.cursor + 2) % 3;
+        submission.initials[submission.cursor] = b'A';
+    }
+
+    if handle.is_key_pressed(KeyboardKey::KEY_ENTER) {
+        submission.status = Some(submit(game, day, &submission.text(), events));
+        // one attempt per seed is the server's rule; not offering to send
+        // twice is this side agreeing with it rather than discovering it
+        submission.sent = true;
+    }
 }
 
 /// Today, as the server derives it. The seed follows from this, so a
@@ -102,14 +295,20 @@ fn main() {
                     screen = Screen::Courses(CoursesRun {
                         state,
                         events: Vec::new(),
+                        submission: Submission::new(),
                     });
                     accumulator = 0.0;
                 } else if handle.is_key_pressed(KeyboardKey::KEY_TWO) {
                     let seed = ashlaros_games::seed_for("quarry", &day);
                     screen = Screen::Quarry(QuarryRun {
+                        // seeded from the state's own target rather than
+                        // a sentinel: the threshold below is a distance,
+                        // so starting from -1 would mean the first small
+                        // move near the left wall is never logged
+                        last_target: quarry::State::new(seed).target,
                         state: quarry::State::new(seed),
                         events: Vec::new(),
-                        last_target: -1,
+                        submission: Submission::new(),
                     });
                     accumulator = 0.0;
                 }
@@ -137,6 +336,15 @@ fn main() {
                     accumulator -= 1.0 / TICK_HZ;
                     run.state.step();
                 }
+                if run.state.over {
+                    handle_submission(
+                        &handle,
+                        &mut run.submission,
+                        "courses",
+                        &day,
+                        &run.events,
+                    );
+                }
                 if handle.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
                     screen = Screen::Menu;
                 }
@@ -144,7 +352,16 @@ fn main() {
             Screen::Quarry(run) => {
                 let mouse = handle.get_mouse_x();
                 let target = (mouse - 60).max(0) * quarry::SUB;
-                if target != run.last_target && !run.state.over {
+                // Only when the aim has moved far enough to be worth an
+                // event. The page does the same (quarry-play.js:161) and
+                // for a hard reason: quarry's log is capped at 4000
+                // events, and logging every pixel of mouse travel spends
+                // that in under a minute - the server then refuses an
+                // honest run with "too many events". Measured: a scripted
+                // run that logged every change was rejected; the same run
+                // with this threshold is accepted.
+                const SAMPLE: i32 = quarry::FIELD_W / 40;
+                if (target - run.last_target).abs() >= SAMPLE && !run.state.over {
                     run.events.push(Event {
                         action: quarry::ACTION_TARGET,
                         tick: run.state.tick as i32,
@@ -164,6 +381,15 @@ fn main() {
                 while accumulator >= 1.0 / TICK_HZ {
                     accumulator -= 1.0 / TICK_HZ;
                     run.state.step();
+                }
+                if run.state.over {
+                    handle_submission(
+                        &handle,
+                        &mut run.submission,
+                        "quarry",
+                        &day,
+                        &run.events,
+                    );
                 }
                 if handle.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
                     screen = Screen::Menu;
@@ -187,6 +413,7 @@ fn draw_menu(d: &mut RaylibDrawHandle, day: &str) {
     d.draw_text("1  Courses", 40, 220, 24, FG);
     d.draw_text("2  Quarry", 40, 260, 24, FG);
     d.draw_text("Esc  back to this menu", 40, 340, 16, ACCENT);
+    d.draw_text("A run ends with three initials and enter.", 40, 370, 16, ACCENT);
     d.draw_text(
         "The same seed as the web board, the same rules.",
         40,
@@ -252,7 +479,26 @@ fn draw_courses(d: &mut RaylibDrawHandle, run: &CoursesRun) {
     );
     if run.state.over {
         d.draw_text("game over", ox, oy + courses::HEIGHT * CELL / 2, 28, FG);
+        draw_submission(d, &run.submission, ox, oy + courses::HEIGHT * CELL / 2 + 40);
     }
+}
+
+/// The entry prompt and whatever the board said back.
+fn draw_submission(d: &mut RaylibDrawHandle, submission: &Submission, x: i32, y: i32) {
+    if let Some(status) = &submission.status {
+        d.draw_text(status, x, y, 18, FG);
+        return;
+    }
+    d.draw_text(&format!("initials  {}", submission.text()), x, y, 20, FG);
+    // the caret sits under the letter the next keypress replaces
+    d.draw_text(
+        "^",
+        x + 9 * 11 + submission.cursor as i32 * 11,
+        y + 20,
+        20,
+        ACCENT,
+    );
+    d.draw_text("A-Z to type, backspace, enter to submit", x, y + 44, 14, ACCENT);
 }
 
 fn draw_quarry(d: &mut RaylibDrawHandle, run: &QuarryRun) {
@@ -339,5 +585,6 @@ fn draw_quarry(d: &mut RaylibDrawHandle, run: &QuarryRun) {
     }
     if run.state.over {
         d.draw_text("game over", ox, oy + to_px(quarry::FIELD_H) / 2, 28, FG);
+        draw_submission(d, &run.submission, ox, oy + to_px(quarry::FIELD_H) / 2 + 40);
     }
 }

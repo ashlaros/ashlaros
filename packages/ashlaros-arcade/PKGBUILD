@@ -1,7 +1,7 @@
 # Maintainer: AshlarOS <build@ashlaros.download>
 
 pkgname=ashlaros-arcade
-pkgver=20260913
+pkgver=20260914
 pkgrel=1
 pkgdesc="The AshlarOS games, natively: Courses and Quarry"
 arch=('x86_64' 'aarch64')
