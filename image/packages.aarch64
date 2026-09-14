@@ -104,3 +104,13 @@ e2fsprogs
 # the image is written to a card; a user who wants to check it wants this
 rsync
 openssh
+# FUSE, so a self-mounting SquashFS works rather than failing confusingly.
+# Not a claim that AppImages are a real option here: they are
+# overwhelmingly x86_64-only, and nothing on this image advertises them.
+# It is a megabyte, and the things that do use FUSE on ARM - sshfs, an
+# MTP mount, a flatpak - stop needing an explanation.
+fuse2
+fuse3
+# flatpak is what makes checkupdates.sh's flatpak branch true here too,
+# and it is the same version ALARM carries as Arch does
+flatpak

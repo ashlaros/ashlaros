@@ -162,6 +162,20 @@ DESKTOP_PACKAGES = [
     # firmware updates: LVFS metadata is refreshed by a timer, but nothing
     # is ever flashed unattended - see enable_services
     "fwupd",
+    # An AppImage is a self-mounting SquashFS, so without FUSE it exits
+    # with a confusing error instead of running - the single most common
+    # "AppImages do not work on this distro" complaint, for 1 MB.
+    #
+    # Both, deliberately: fuse2 is deprecated upstream but is what Type 2
+    # AppImages link, and those are still the majority. Shipping only
+    # fuse3 looks like it works until someone downloads an older one.
+    "fuse2",
+    "fuse3",
+    # checkupdates.sh already counts flatpak updates and the badge tooltip
+    # already claims it does. Without this the branch is dead on every
+    # machine and the tooltip is a lie - the same rot as #7, except the
+    # command -v guard makes it silent rather than broken.
+    "flatpak",
     # Installed everywhere, enabled nowhere. A laptop with a supported
     # reader otherwise has working hardware and no way to reach it, while
     # a machine without one is unaffected: fprintd.service is D-Bus

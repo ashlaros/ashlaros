@@ -320,9 +320,10 @@ counted. Until it is, the page says so rather than answering 500.
 
 `ashlaros-settings-tui` (`Super+,`) is one entry point for the settings
 that are otherwise commands you have to know: locale and keyboard layout,
-time and timezone, kernel variants from the cachyos repository, and chwd's
-hardware profiles. Displays and package installation dispatch to
-`ashlaros-displays` and `pacseek`.
+time and timezone, kernel variants from the cachyos repository, chwd's
+hardware profiles, fingerprint enrolment, adaptive brightness, sharing the
+current Wi-Fi as a QR code, and packages nothing needs any more. Displays
+and package installation dispatch to `ashlaros-displays` and `pacseek`.
 
 **A launcher, not a control panel.** Every entry either runs an existing
 tool or collects input and runs one command; the menu owns no settings
@@ -343,6 +344,30 @@ missing. A kernel package ships nothing in `/boot`, only
 preset named for the pkgbase exists; without one the machine gains an entry
 that silently does not boot. It reports rather than repairs: writing a
 preset for a kernel we did not package is guesswork.
+
+## AppImages
+
+They run. `fuse2` and `fuse3` are installed, which is the whole
+requirement: an AppImage is a self-mounting SquashFS, and without FUSE it
+exits with `No suitable fusermount binary found on the $PATH` rather than
+starting. Both are shipped because `fuse2` is deprecated upstream but is
+what Type 2 images link, and those are still the majority.
+
+Nothing integrates them into the launcher by itself — download, `chmod
++x`, run. [Gear Lever](https://gearlever.mijorus.it) is the current tool
+for managing and updating them, distributed as a flatpak.
+
+`flatpak` is installed but **no remote is configured**. Adding Flathub is
+one command and is deliberately left to you: it is a third-party software
+source, and enabling one without asking is not something an installer
+should do.
+
+```sh
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+```
+
+The update badge already counts flatpak updates once you have some, and
+`topgrade` updates them alongside everything else.
 
 ## Displays
 
