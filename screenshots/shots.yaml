@@ -47,6 +47,31 @@
     - footclient sh -c 'pacman -Q | wc -l | xargs printf "%s packages\n"; sway --version; exec zsh'
   settle: 8
 
+- name: settings
+  description: the settings TUI, which is what the distribution adds over Arch
+  commands:
+    # footclient takes the command to run, so the terminal opens on the
+    # menu rather than on a prompt someone has to be told to type into.
+    # The menu draws itself and waits for a choice, so there is no input to
+    # send and nothing to time.
+    - footclient ashlaros-settings-tui
+  # gum's first paint is one frame after foot maps the window, and grim
+  # will photograph the empty terminal in between
+  settle: 5
+  layout:
+    # floating and centred, the same as `desktop`: tiled it would cover the
+    # wallpaper and waybar, and the point of this picture is the tool in
+    # its place rather than the tool alone.
+    #
+    # Sized to the menu rather than to the terminal. gum draws a seven-line
+    # list at the top of whatever it is given, so a window big enough to
+    # look like a terminal is mostly empty space below the thing being
+    # photographed - and `move position center` centres the window, which
+    # leaves the content off-centre by however much of it is blank.
+    - '[app_id="foot"] floating enable'
+    - '[app_id="foot"] resize set 720 320'
+    - '[app_id="foot"] move position center'
+
 - name: launcher
   description: rofi over the desktop
   commands:

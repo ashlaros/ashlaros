@@ -41,6 +41,10 @@ depends=(
                               # loses auto-scale, hotplug and lid handling
     'nwg-wrapper'             # conky like onscreen information
     'dex'                     # executes desktop entries on autostart
+    'gum'                     # the TUI toolkit ashlaros-settings-tui and
+                              # ashlaros-displays are built from; without
+                              # it both exit with "gum is not installed"
+                              # the first time a user opens settings
     'jq'                      # json parsing, used across the scripts
     'bc'                      # arithmetic for the bar scripts
     'inotify-tools'           # file watchers
