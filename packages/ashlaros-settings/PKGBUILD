@@ -117,6 +117,15 @@ optdepends=(
     # desktop by default is a statement this distribution should not make
     # on the user's behalf
     'aichat: ask a model about a screen region (Print, then a)'
+    # the desktop otherwise cannot open a .docx at all: this installs
+    # Docs and Microsoft 365 as their own windows, from the settings TUI
+    'firefoxpwa: Google Docs and Microsoft 365 as web apps'
+    # 147 MB, and the only thing that faithfully round-trips Office
+    # formats - which is why it is here rather than absent or default
+    'libreoffice-still: full office suite, for real .docx round-tripping'
+    # mounts Drive and OneDrive as a directory, which is the version of
+    # "open it from the cloud" that does not publish the document first
+    'rclone: mount Drive and OneDrive as local directories'
 )
 # generated_background.svg is rewritten on every theme apply, and the
 # per-user theme.conf is the file the theme switcher edits

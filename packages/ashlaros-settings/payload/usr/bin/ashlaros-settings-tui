@@ -280,7 +280,35 @@ hardware_menu() {
   done
 }
 
-# 7. MODEL
+# 7. WEB APPS
+#
+# The desktop ships no office suite, no viewer, not even a PDF reader, so
+# a .docx that arrives has nothing to open it. LibreOffice is 147 MB and
+# an optdepend for people who need real Office round-tripping; this is the
+# lighter answer - Docs and Microsoft 365 as their own windows, in the
+# launcher, signed in as the user.
+#
+# A user action rather than a postinstall: the runtime is ~300 MB and
+# per-user, and nobody should have Google installed on their behalf.
+webapps_entry() {
+  screen "Web apps"
+  echo "  Office documents, as web apps in their own windows."
+  echo "  The first run downloads a ~300 MB browser runtime, once."
+  echo
+
+  local choice
+  choice=$(gum choose --header "Install" \
+    "Google Docs, Sheets and Slides" "Microsoft 365" "Back") || return 0
+
+  case $choice in
+    "Google Docs, Sheets and Slides") /usr/share/sway/scripts/webapps.sh docs ;;
+    "Microsoft 365") /usr/share/sway/scripts/webapps.sh office ;;
+    *) return 0 ;;
+  esac
+  pause
+}
+
+# 8. MODEL
 #
 # The Ask key (Print, then a) is the one capture action that leaves the
 # machine, and aichat owns its own provider/model/key configuration. This
@@ -308,7 +336,7 @@ model_entry() {
   ${EDITOR:-vim} "$config"
 }
 
-# 8. ORPHANS
+# 9. ORPHANS
 #
 # The hook (95-ashlaros-orphans.hook) reports after every transaction and
 # deliberately suggests nothing destructive. This is where the destructive
@@ -376,7 +404,7 @@ orphans_entry() {
   done
 }
 
-# 9. FINGERPRINT
+# 10. FINGERPRINT
 #
 # Installed everywhere, enabled nowhere. A fresh machine behaves exactly
 # as it did before; fingerprint auth turns on only when someone has
@@ -516,7 +544,7 @@ fingerprint_entry() {
   done
 }
 
-# 10. NETWORK
+# 11. NETWORK
 #
 # Only the QR code lives here: nmtui does everything else and is one
 # click away on the bar. Rendering a live passphrase to the screen is an
@@ -526,7 +554,7 @@ network_entry() {
   /usr/share/sway/scripts/wifi-qr.sh
 }
 
-# 11. ADAPTIVE BRIGHTNESS
+# 12. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -669,6 +697,7 @@ main() {
     # only when there is something to say - an entry that always reports
     # "nothing to do" is an entry people stop reading
     [[ -n $(pacman -Qtdq 2>/dev/null) ]] && entries+=("Unneeded packages")
+    command -v firefoxpwa >/dev/null && entries+=("Web apps")
     command -v aichat >/dev/null && entries+=("Model")
     entries+=("Quit")
 
@@ -687,6 +716,7 @@ main() {
       "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
       "Unneeded packages") orphans_entry ;;
+      "Web apps") webapps_entry ;;
       "Model") model_entry ;;
       "Quit") exit 0 ;;
     esac

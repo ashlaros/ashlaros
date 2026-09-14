@@ -345,6 +345,29 @@ preset named for the pkgbase exists; without one the machine gains an entry
 that silently does not boot. It reports rather than repairs: writing a
 preset for a kernel we did not package is guesswork.
 
+## Office documents
+
+Nothing here opens a `.docx` out of the box — no suite, no viewer. That is
+a deliberate floor rather than an oversight: LibreOffice is 147 MB and
+looks nothing like the rest of the desktop.
+
+Settings → **Web apps** installs Google Docs, Sheets and Slides, or
+Microsoft 365, as real web apps: own window, own icon, launchable from
+rofi, signed in as you. It needs `firefoxpwa` (`pacman -S firefoxpwa`) and
+downloads a browser runtime of about 300 MB the first time, per user.
+
+We write those manifests ourselves, because neither provider serves one to
+a logged-out fetch — `docs.google.com/manifest.json` is a 404 and
+`office.com/manifest.json` answers 403 in an HTML body, so pointing
+`firefoxpwa site install` at the page URL fails outright.
+
+If you need Office formats to round-trip faithfully, install
+`libreoffice-still`; it is the only thing that really does. And `rclone`
+mounts Drive or OneDrive as a directory, which is the version of "open it
+from the cloud" that does not involve publishing your document to a public
+URL first — which is what the Office and Google *viewers* would require,
+since both take a URL and neither accepts a local file.
+
 ## Reading the screen: text, QR codes, and asking a model
 
 `Print` opens screenshot mode. Beside `p` and `o`, which photograph:
