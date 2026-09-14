@@ -79,8 +79,24 @@ def field(pattern: re.Pattern, text: str) -> list[str]:
 
 
 def scalar(pattern: re.Pattern, text: str) -> str | None:
+    """The value of a `name=value` line, without a trailing comment.
+
+    catppuccin-gtk-theme-* carries `pkgver=1.0.3 # renovate: ...`, and
+    keeping the comment made the declared version
+    "1.0.3 # renovate: ...-1", which can never equal the "1.0.3-1" the
+    database records - so those packages were rebuilt on every run
+    forever. Harmless while a rebuild was merely wasteful; a hard failure
+    once publish.py started refusing to overwrite a published object with
+    different bytes, which is what makepkg produces every time (#57).
+    """
     match = pattern.search(text)
-    return match.group(1).strip().strip("'\"") if match else None
+    if not match:
+        return None
+    value = match.group(1).strip()
+    # only an unquoted comment: a # inside quotes is part of the value
+    if not value.startswith(("'", '"')):
+        value = value.split("#", 1)[0].strip()
+    return value.strip("'\"")
 
 
 def pkgname_of(pkgbuild: Path, text: str) -> str:
