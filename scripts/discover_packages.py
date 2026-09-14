@@ -55,6 +55,11 @@ PKGREL_RE = re.compile(r"^pkgrel=(.+)$", re.MULTILINE)
 EPOCH_RE = re.compile(r"^epoch=(.+)$", re.MULTILINE)
 # a pinned revision makes a pkgver() deterministic
 COMMIT_RE = re.compile(r"^_commit=[\"']?[0-9a-f]{40}", re.MULTILINE)
+# A definition at the start of a line, not the substring "pkgver()"
+# anywhere: gtk-nocsd's own comment explains why it does NOT use one, and
+# matching that sentence made its version unknowable, so it was rebuilt on
+# every run - the very failure the comment describes.
+PKGVER_FN_RE = re.compile(r"^\s*pkgver\s*\(\)\s*\{", re.MULTILINE)
 
 REPO_URL = os.environ.get("REPO_URL", "https://packages.ashlaros.download")
 FIELD = re.compile(r"%([A-Z0-9]+)%\n([^\n]*)")
@@ -136,7 +141,7 @@ def declared_version(text: str) -> str | None:
     result. An unpinned pkgver() - a package tracking a branch tip - is
     genuinely unknowable and never skipped.
     """
-    if "pkgver()" in text and not COMMIT_RE.search(text):
+    if PKGVER_FN_RE.search(text) and not COMMIT_RE.search(text):
         return None
     pkgver = scalar(PKGVER_RE, text)
     pkgrel = scalar(PKGREL_RE, text)
