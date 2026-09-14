@@ -408,9 +408,10 @@ mail is personal, and a client that opens onto nothing is worse than no
 client.
 
 `calcurse` **is** installed — it has a keybind and a daemon — and
-Settings → **Calendar** points it at a CalDAV server. Nextcloud, Fastmail,
-iCloud, mailbox.org, Posteo and Zoho have their hostnames and paths
-prefilled; "Other CalDAV server" is a first-class option. The first sync
+Settings → **Calendar** points it at a CalDAV server. Nextcloud, Google,
+Fastmail, iCloud, mailbox.org, Posteo and Zoho are offered — the
+password-based ones with their hostnames and paths prefilled — and "Other
+CalDAV server" is a first-class option. The first sync
 is a dry run you read before anything is written, and the three
 initialisation modes are described by what they delete rather than by
 name.
@@ -421,13 +422,33 @@ speaks.
 
 Settings → **Mail** configures [`aerc`](https://aerc-mail.org)
 (`pacman -S aerc`) against IMAP and SMTP with a password. Both clients put
-the password in the login keyring and read it back with a command, so
+the credential in the login keyring and read it back with a command, so
 neither config file holds a secret.
 
-Google and Microsoft accounts need OAuth, which needs an OAuth client
-registration this project does not have. `aerc` supports it
-(`imaps+oauthbearer`) and the wiring is understood; the open question is
-whether a distribution may ship the credentials at all.
+### Google accounts use your own OAuth client
+
+Gmail and Google Calendar are offered, and both ask for a client ID and
+secret from a Google Cloud project you create. **We deliberately ship no
+credentials of our own.** Google's terms, section "Confidential Matters",
+are read by `vdirsyncer` — a mature project that had to answer the same
+question — as forbidding hardcoded credentials in open-source software,
+so every one of its users registers their own project. Until that reading
+is settled with Google rather than guessed at, this is the version that
+is certainly allowed, and it is the same configuration a shipped client
+ID would later fill in.
+
+Nothing of ours is in the exchange either way: the browser talks to
+Google, and the token lands on your machine.
+
+Two details are easy to get wrong and the wizard names both. For the
+calendar, **the CalDAV API has to be enabled, not the Calendar API** —
+they are different and the wrong one syncs nothing. For mail, obtaining
+the initial refresh token needs an OAuth flow the entry does not run;
+Google's OAuth 2.0 Playground does it in a browser.
+
+**Outlook mail and calendar are not supported.** Microsoft needs an Entra
+registration under separate terms, and Outlook.com's calendar needs Graph
+(above).
 
 The aerc styleset is regenerated from the active desktop theme on every
 theme switch, like the waybar colours.
