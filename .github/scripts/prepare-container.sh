@@ -86,7 +86,15 @@ pacman -Sy --noconfirm || true
 # would enter the repository as first-class packages nobody asked for, and
 # roughly double what a build leg uploads. OPTIONS is readonly inside
 # makepkg and has no flag, so the config file is the only place to say it.
-sed -i 's/^\(OPTIONS=(.*\)\bdebug\b/\1!debug/' /etc/makepkg.conf
+#
+# Negate every bare `debug` and leave an existing `!debug` alone. The
+# previous expression matched `debug` inside `!debug` too, so a config
+# that already carried the negation became `!!debug` - which makepkg
+# rejects outright with "OPTIONS array contains unknown option", failing
+# the build before it starts. Requiring a space or paren on both sides is
+# what distinguishes a bare `debug` from one already negated - and keeps
+# it off `debuginfo`-style names that merely start the same way.
+sed -i -E 's/([ (])debug([ )])/\1!debug\2/g' /etc/makepkg.conf
 
 useradd -m -G wheel builder 2>/dev/null || true
 echo 'builder ALL=(ALL) NOPASSWD: ALL' >/etc/sudoers.d/builder
