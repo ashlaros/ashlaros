@@ -280,7 +280,147 @@ hardware_menu() {
   done
 }
 
-# 6. NETWORK
+# 6. FINGERPRINT
+#
+# Installed everywhere, enabled nowhere. A fresh machine behaves exactly
+# as it did before; fingerprint auth turns on only when someone has
+# enrolled a finger, proved it verifies, and asked for it.
+#
+# The danger here is specific and has no recovery from inside the
+# session: a PAM stack that cannot fall back to a password turns a reader
+# that stops enumerating after a suspend into a machine nobody can use.
+# So `sufficient`, placed before the password line, never `required` - a
+# finger that fails falls through to the prompt that always worked.
+readonly FPRINT_LINE="auth       sufficient   pam_fprintd.so"
+readonly FPRINT_SUDO=/etc/pam.d/sudo
+
+fingerprint_enabled() {
+  grep -q "^auth .*pam_fprintd.so" "$FPRINT_SUDO" 2>/dev/null
+}
+
+# Only the narrowest stack that pays for itself. sudo prompts many times a
+# day; the lock screen is where a reader failing after suspend bites
+# hardest, and greetd is a TUI greeter where the interaction is poor - so
+# neither is offered here.
+fingerprint_enable() {
+  say "This changes sudo only. Your password keeps working:"
+  say "  pam_fprintd is 'sufficient', so a finger that fails or a reader"
+  say "  that has stopped responding falls through to the password."
+  echo
+  gum confirm --affirmative "Enable for sudo" --negative "Cancel" \
+    "Use a fingerprint for sudo?" || return 0
+
+  # Inserted before the first auth line, because PAM takes the first
+  # sufficient match: after `auth include system-auth` the password has
+  # already been asked for and the finger would never be reached.
+  #
+  # sed -i on a package-owned file edits it in place rather than replacing
+  # it, so pacman still owns it and no .pacnew appears.
+  #
+  # Any existing line is deleted first, so enabling twice cannot stack two
+  # of them. The menu already guards on fingerprint_enabled, but an edit
+  # to an authentication file should be idempotent on its own terms.
+  root_run sed -i -e "/pam_fprintd.so/d" \
+    -e "0,/^auth/s//$FPRINT_LINE\nauth/" "$FPRINT_SUDO" || return 1
+
+  # The safety rail: prove the password still authenticates before
+  # leaving the user with a stack they cannot reach.
+  echo
+  say "Enabled. Check it now, while this menu is still open:"
+  say "  open another terminal and run: sudo -k true"
+  say "A password must still work there. If it does not, choose Disable."
+  pause
+}
+
+fingerprint_disable() {
+  root_run sed -i "/pam_fprintd.so/d" "$FPRINT_SUDO" || return 1
+  say "Disabled. sudo is back to password only."
+  pause
+}
+
+fingerprint_entry() {
+  local choice
+  while true; do
+    screen "Fingerprint"
+
+    # Enrolment is per user and needs no root; the PAM edit does. Taking
+    # privilege per action rather than running the whole menu as root.
+    local enrolled
+    enrolled=$(fprintd-list "$USER" 2>/dev/null | grep -c "#" || true)
+    if ((enrolled > 0)); then
+      say "✓ $enrolled finger(s) enrolled"
+    else
+      warn "! no fingers enrolled yet"
+    fi
+
+    if fingerprint_enabled; then
+      say "✓ sudo accepts a fingerprint (password still works)"
+    else
+      say "  sudo is password only"
+    fi
+
+    # Nothing here touches disk unlock: LUKS happens long before PAM
+    # exists, and the installer enrols the TPM against PCR 7. Said out
+    # loud so nobody waits for a reader at the passphrase prompt.
+    echo
+    say "This does not affect the disk passphrase at boot."
+    echo
+
+    local entries=("Enrol a finger")
+    ((enrolled > 0)) && entries+=("Test it" "Delete enrolled fingers")
+    if ((enrolled > 0)) && ! fingerprint_enabled; then
+      entries+=("Use it for sudo")
+    fi
+    fingerprint_enabled && entries+=("Stop using it for sudo")
+    entries+=("Back")
+
+    choice=$(gum choose --header "Fingerprint" "${entries[@]}") || return 0
+    case $choice in
+      "Enrol a finger")
+        screen "Fingerprint"
+        say "Touch the reader repeatedly when asked."
+        echo
+        fprintd-enroll 2>&1 | sed "s/^/  /"
+        pause
+        ;;
+      "Test it")
+        screen "Fingerprint"
+        fprintd-verify 2>&1 | sed "s/^/  /"
+        pause
+        ;;
+      "Delete enrolled fingers")
+        gum confirm --affirmative "Delete" --negative "Cancel" \
+          "Remove every enrolled finger for $USER?" || continue
+        fprintd-delete "$USER" 2>&1 | sed "s/^/  /"
+        # Leaving PAM asking for a finger that no longer exists would
+        # mean a pointless prompt before every password.
+        fingerprint_enabled && root_run sed -i "/pam_fprintd.so/d" "$FPRINT_SUDO"
+        pause
+        ;;
+      "Use it for sudo")
+        screen "Fingerprint"
+        # Refused until verification has actually succeeded: enabling on
+        # a reader that has never read anything is how someone ends up
+        # with an extra prompt and no working finger.
+        say "Testing the reader first."
+        echo
+        if fprintd-verify 2>&1 | sed "s/^/  /" | grep -q "verify-match"; then
+          echo
+          fingerprint_enable
+        else
+          echo
+          oops "That did not verify, so nothing was changed."
+          oops "Enrol a finger and test it before enabling."
+          pause
+        fi
+        ;;
+      "Stop using it for sudo") fingerprint_disable ;;
+      "Back") return 0 ;;
+    esac
+  done
+}
+
+# 7. NETWORK
 #
 # Only the QR code lives here: nmtui does everything else and is one
 # click away on the bar. Rendering a live passphrase to the screen is an
@@ -290,7 +430,7 @@ network_entry() {
   /usr/share/sway/scripts/wifi-qr.sh
 }
 
-# 7. ADAPTIVE BRIGHTNESS
+# 8. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -417,6 +557,12 @@ main() {
     command -v chwd >/dev/null && entries+=("Hardware profiles")
     command -v qrencode >/dev/null && command -v nmcli >/dev/null &&
       entries+=("Share this network")
+    # a machine with no reader must not show the entry at all: fprintd is
+    # installed everywhere, so the binary existing proves nothing
+    if command -v fprintd-enroll >/dev/null &&
+      fprintd-list "$USER" >/dev/null 2>&1; then
+      entries+=("Fingerprint")
+    fi
     # only where there is a backlight to adapt - the same predicate the
     # waybar toggle uses, so the bar and the menu agree about whether this
     # machine has the hardware at all
@@ -439,6 +585,7 @@ main() {
       "Hardware profiles") hardware_menu ;;
       "Adaptive brightness") wluma_entry ;;
       "Share this network") network_entry ;;
+      "Fingerprint") fingerprint_entry ;;
       "Quit") exit 0 ;;
     esac
   done

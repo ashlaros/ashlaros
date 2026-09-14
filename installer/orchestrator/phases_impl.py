@@ -162,6 +162,13 @@ DESKTOP_PACKAGES = [
     # firmware updates: LVFS metadata is refreshed by a timer, but nothing
     # is ever flashed unattended - see enable_services
     "fwupd",
+    # Installed everywhere, enabled nowhere. A laptop with a supported
+    # reader otherwise has working hardware and no way to reach it, while
+    # a machine without one is unaffected: fprintd.service is D-Bus
+    # activated, so it needs no SERVICES entry for the same reason fwupd
+    # does not, and nothing authenticates against it until someone
+    # enrols a finger in the settings TUI and asks for it.
+    "fprintd",
     # An editor has to exist: $EDITOR is set in the shipped .profile and
     # git, visudo and systemctl edit all consume it, including from a TTY
     # or an ssh session. vim carries the desktop file the mime list points
