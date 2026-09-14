@@ -46,6 +46,26 @@ pause() {
   gum confirm --affirmative "Back" --negative "" "" >/dev/null 2>&1
 }
 
+# A username in a URL is an email address more often than not, and the @
+# in it ends the userinfo component - so aerc parses the domain as part of
+# the host and the account never connects. Percent-encoding is the fix the
+# URL grammar already provides.
+url_escape() {
+  # LC_ALL=C so the loop walks bytes: percent-encoding is defined over
+  # octets, and a character-wise loop encodes U+00FC as %FC rather than
+  # the %C3%BC a server is expecting.
+  local s=$1 out="" i c
+  local LC_ALL=C
+  for ((i = 0; i < ${#s}; i++)); do
+    c=${s:i:1}
+    case $c in
+      [a-zA-Z0-9.~_-]) out+=$c ;;
+      *) printf -v c '%%%02X' "'$c" && out+=$c ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
 # Runs a command as root and reports rather than failing silently: a
 # permission error that prints nothing is indistinguishable from a setting
 # that did not take.
@@ -280,7 +300,104 @@ hardware_menu() {
   done
 }
 
-# 7. CALENDAR
+# 7. MAIL
+#
+# aerc is an optdepend and this configures one account. IMAP/SMTP with a
+# password only: the OAuth half needs an OAuth client registration this
+# project does not have yet (#53), and aerc's +oauthbearer wants a
+# client_id and token_endpoint we cannot supply. Offering a Google entry
+# that cannot complete would be worse than saying where the line is.
+#
+# The password goes to the login keyring and the config reads it back with
+# source-cred-cmd, so accounts.conf never holds a secret - the same shape
+# as the calendar entry's PasswordCommand.
+AERC_ACCOUNTS="${XDG_CONFIG_HOME:-$HOME/.config}/aerc/accounts.conf"
+
+mail_entry() {
+  screen "Mail"
+
+  if [[ -f $AERC_ACCOUNTS ]]; then
+    say "Configured accounts:"
+    sed -n 's/^\[\(.*\)\]$/  \1/p' "$AERC_ACCOUNTS"
+    echo
+    gum confirm --affirmative "Add another" --negative "Back" "Add an account?" || return 0
+  fi
+
+  local name email imap_host imap_port smtp_host smtp_port user
+  name=$(gum input --prompt "Account name: " --value "Personal") || return 0
+  [[ -n $name ]] || return 0
+  email=$(gum input --prompt "Email address: ") || return 0
+  [[ -n $email ]] || return 0
+
+  # A guess from the address rather than a provider table: unlike CalDAV
+  # paths, IMAP hostnames follow the mail.<domain> convention often enough
+  # to be a useful default, and every field stays editable.
+  local domain=${email#*@}
+  imap_host=$(gum input --prompt "IMAP server: " --value "imap.$domain") || return 0
+  imap_port=$(gum input --prompt "IMAP port: " --value "993") || return 0
+  smtp_host=$(gum input --prompt "SMTP server: " --value "smtp.$domain") || return 0
+  smtp_port=$(gum input --prompt "SMTP port: " --value "465") || return 0
+  user=$(gum input --prompt "Username: " --value "$email") || return 0
+
+  local password
+  password=$(gum input --password --prompt "Password: ") || return 0
+  [[ -n $password ]] || return 0
+
+  local cred_cmd=""
+  if command -v secret-tool >/dev/null; then
+    printf '%s' "$password" |
+      secret-tool store --label="aerc $name" service aerc account "$name" || {
+        oops "Could not store the password in the keyring."
+        pause
+        return 1
+      }
+    cred_cmd="secret-tool lookup service aerc account $name"
+    password=""
+  fi
+
+  mkdir -p "$(dirname "$AERC_ACCOUNTS")"
+  {
+    echo
+    echo "[$name]"
+    echo "from = $email"
+    if [[ -n $cred_cmd ]]; then
+      # no credential in the file, and none on a command line either:
+      # aerc runs the command itself rather than expanding it into a URL
+      echo "source = imaps://$(url_escape "$user")@$imap_host:$imap_port"
+      echo "source-cred-cmd = $cred_cmd"
+      echo "outgoing = smtps://$(url_escape "$user")@$smtp_host:$smtp_port"
+      echo "outgoing-cred-cmd = $cred_cmd"
+      # otherwise the keyring is queried once per message sent
+      echo "outgoing-cred-cmd-cache = true"
+    else
+      echo "source = imaps://$(url_escape "$user"):$(url_escape "$password")@$imap_host:$imap_port"
+      echo "outgoing = smtps://$(url_escape "$user"):$(url_escape "$password")@$smtp_host:$smtp_port"
+    fi
+    echo "copy-to = Sent"
+  } >> "$AERC_ACCOUNTS"
+  chmod 600 "$AERC_ACCOUNTS"
+
+  # The generated styleset follows the desktop theme; point aerc at it
+  # here rather than making the theme script edit a config it does not own.
+  local aerc_conf="${XDG_CONFIG_HOME:-$HOME/.config}/aerc/aerc.conf"
+  if [[ ! -f $aerc_conf ]]; then
+    printf '[ui]\nstyleset-name = ashlaros\n' > "$aerc_conf"
+  elif ! grep -q '^styleset-name' "$aerc_conf"; then
+    say "Set styleset-name = ashlaros under [ui] in aerc.conf for the desktop theme."
+  fi
+
+  echo
+  if [[ -n $cred_cmd ]]; then
+    say "Written to $AERC_ACCOUNTS - the password is in the keyring, not the file."
+  else
+    say "Written to $AERC_ACCOUNTS (mode 600). No keyring available, so the"
+    say "password is in the file."
+  fi
+  say "Run aerc to check it."
+  pause
+}
+
+# 8. CALENDAR
 #
 # calcurse is a hard dependency with a keybind, an autostarted daemon and
 # a place in our screenshots, and we shipped no configuration for it at
@@ -464,7 +581,7 @@ calendar_entry() {
   pause
 }
 
-# 8. BACKGROUND
+# 9. BACKGROUND
 #
 # The wallpaper is generated, not chosen: generate-bg.sh recolours the
 # ashlar mark from the active palette into ~/.config/sway/
@@ -562,7 +679,7 @@ background_entry() {
   pause
 }
 
-# 9. WEB APPS
+# 10. WEB APPS
 #
 # The desktop ships no office suite, no viewer, not even a PDF reader, so
 # a .docx that arrives has nothing to open it. LibreOffice is 147 MB and
@@ -590,7 +707,7 @@ webapps_entry() {
   pause
 }
 
-# 10. MODEL
+# 11. MODEL
 #
 # The Ask key (Print, then a) is the one capture action that leaves the
 # machine, and aichat owns its own provider/model/key configuration. This
@@ -618,7 +735,7 @@ model_entry() {
   ${EDITOR:-vim} "$config"
 }
 
-# 11. ORPHANS
+# 12. ORPHANS
 #
 # The hook (95-ashlaros-orphans.hook) reports after every transaction and
 # deliberately suggests nothing destructive. This is where the destructive
@@ -686,7 +803,7 @@ orphans_entry() {
   done
 }
 
-# 12. FINGERPRINT
+# 13. FINGERPRINT
 #
 # Installed everywhere, enabled nowhere. A fresh machine behaves exactly
 # as it did before; fingerprint auth turns on only when someone has
@@ -826,7 +943,7 @@ fingerprint_entry() {
   done
 }
 
-# 13. NETWORK
+# 14. NETWORK
 #
 # Only the QR code lives here: nmtui does everything else and is one
 # click away on the bar. Rendering a live passphrase to the screen is an
@@ -836,7 +953,7 @@ network_entry() {
   /usr/share/sway/scripts/wifi-qr.sh
 }
 
-# 14. ADAPTIVE BRIGHTNESS
+# 15. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -979,6 +1096,7 @@ main() {
     # only when there is something to say - an entry that always reports
     # "nothing to do" is an entry people stop reading
     [[ -n $(pacman -Qtdq 2>/dev/null) ]] && entries+=("Unneeded packages")
+    command -v aerc >/dev/null && entries+=("Mail")
     command -v calcurse-caldav >/dev/null && entries+=("Calendar")
     entries+=("Background")
     command -v firefoxpwa >/dev/null && entries+=("Web apps")
@@ -1000,6 +1118,7 @@ main() {
       "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
       "Unneeded packages") orphans_entry ;;
+      "Mail") mail_entry ;;
       "Calendar") calendar_entry ;;
       "Background") background_entry ;;
       "Web apps") webapps_entry ;;

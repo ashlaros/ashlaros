@@ -345,6 +345,37 @@ preset named for the pkgbase exists; without one the machine gains an entry
 that silently does not boot. It reports rather than repairs: writing a
 preset for a kernel we did not package is guesswork.
 
+## Mail and calendar
+
+Neither is preinstalled and neither does anything until you configure it:
+mail is personal, and a client that opens onto nothing is worse than no
+client.
+
+`calcurse` **is** installed — it has a keybind and a daemon — and
+Settings → **Calendar** points it at a CalDAV server. Nextcloud, Fastmail,
+iCloud, mailbox.org, Posteo and Zoho have their hostnames and paths
+prefilled; "Other CalDAV server" is a first-class option. The first sync
+is a dry run you read before anything is written, and the three
+initialisation modes are described by what they delete rather than by
+name.
+
+**Outlook calendar is not supported.** Microsoft retired CalDAV for
+Outlook.com and the replacement is Microsoft Graph, which nothing here
+speaks.
+
+Settings → **Mail** configures [`aerc`](https://aerc-mail.org)
+(`pacman -S aerc`) against IMAP and SMTP with a password. Both clients put
+the password in the login keyring and read it back with a command, so
+neither config file holds a secret.
+
+Google and Microsoft accounts need OAuth, which needs an OAuth client
+registration this project does not have. `aerc` supports it
+(`imaps+oauthbearer`) and the wiring is understood; the open question is
+whether a distribution may ship the credentials at all.
+
+The aerc styleset is regenerated from the active desktop theme on every
+theme switch, like the waybar colours.
+
 ## Office documents
 
 Nothing here opens a `.docx` out of the box — no suite, no viewer. That is

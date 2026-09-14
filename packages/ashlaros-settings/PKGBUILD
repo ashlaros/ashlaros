@@ -117,6 +117,9 @@ optdepends=(
     # desktop by default is a statement this distribution should not make
     # on the user's behalf
     'aichat: ask a model about a screen region (Print, then a)'
+    # mail is personal and aerc does nothing until it has an account, so
+    # an unconfigured client in the launcher would be worse than none
+    'aerc: terminal mail client, configured from the settings TUI'
     # the desktop otherwise cannot open a .docx at all: this installs
     # Docs and Microsoft 365 as their own windows, from the settings TUI
     'firefoxpwa: Google Docs and Microsoft 365 as web apps'
