@@ -131,6 +131,12 @@ export function renderIndex(byVersion, shots = [], tour = null) {
           ><code>/latest/ashlaros-rpi5.img.xz</code></a
         >. Verify a download against the <code>SHA256SUMS</code> beside it.
         <a class="link" href="/stats">Download stats</a>.</p>
+      <!-- beside the download rather than in a footnote (#29): the ISO
+           encrypts by default and someone who knows that will reasonably
+           assume the Pi image does too -->
+      <p>The ISO installs an encrypted disk by default. The Pi image is
+        written to a card and is <strong>not encrypted</strong> - a Pi has
+        neither UEFI nor a TPM, so there is nothing to unlock it with.</p>
 ${renderTour(tour)}
 ${renderShots(shots)}
 ${sections || '<p>No images published yet.</p>'}`,
