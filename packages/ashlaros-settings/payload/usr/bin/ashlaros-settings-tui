@@ -280,7 +280,105 @@ hardware_menu() {
   done
 }
 
-# 7. WEB APPS
+# 7. BACKGROUND
+#
+# The wallpaper is generated, not chosen: generate-bg.sh recolours the
+# ashlar mark from the active palette into ~/.config/sway/
+# generated_background.svg, and every theme apply overwrites it
+# (90-enable-theme.conf:12). So a picker that writes the user's JPEG into
+# that file loses it at the next theme switch, and one that only calls
+# swaymsg loses it at the next login.
+#
+# Both are avoided by writing `set $background` into definitions.d/, which
+# is user-owned, documented as the override path in its own README, and
+# untouched by the theme machinery. The generated background stays the
+# default and is always offered back.
+BACKGROUND_OVERRIDE="$HOME/.config/sway/definitions.d/50-background.conf"
+
+background_entry() {
+  screen "Background"
+
+  local generated="$HOME/.config/sway/generated_background.svg"
+  local -a paths=() labels=()
+
+  paths+=("$generated")
+  labels+=("The theme's background (recoloured on every theme switch)")
+
+  # xdg-user-dir rather than ~/Pictures: the directory is localised, and
+  # xdg-user-dirs is already a dependency
+  local pictures
+  pictures=$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")
+
+  local dir f
+  for dir in /usr/share/backgrounds "$HOME/.local/share/backgrounds" "$pictures"; do
+    [[ -d $dir ]] || continue
+    while IFS= read -r f; do
+      [[ -n $f ]] || continue
+      [[ $f == "$generated" ]] && continue
+      paths+=("$f")
+      labels+=("${f/#$HOME/\~}")
+    done < <(find "$dir" -maxdepth 2 -type f \
+      \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \
+      -o -iname '*.svg' -o -iname '*.webp' \) 2>/dev/null | sort)
+  done
+
+  if [[ ${#paths[@]} -le 1 ]]; then
+    say "No images found in /usr/share/backgrounds, ~/.local/share/backgrounds"
+    say "or $pictures."
+    pause
+    return 0
+  fi
+
+  local choice
+  choice=$(printf '%s\n' "${labels[@]}" | gum choose --header "Background") || return 0
+
+  local index=-1 i
+  for i in "${!labels[@]}"; do
+    [[ ${labels[$i]} == "$choice" ]] && index=$i && break
+  done
+  [[ $index -ge 0 ]] || return 0
+  local picked=${paths[$index]}
+
+  # fill is right for a photograph and wrong for a logo or a tile, which
+  # is why the shipped config hardcoding it was worth exposing
+  local mode
+  mode=$(gum choose --header "How should it fit?" \
+    "fill" "fit" "stretch" "center" "tile") || return 0
+
+  # Applied before it is committed: a wallpaper picker you cannot see the
+  # result of is not a picker.
+  swaymsg output "*" bg "$picked" "$mode" >/dev/null 2>&1
+
+  gum confirm --affirmative "Keep" --negative "Revert" "Keep this background?" || {
+    # back to whatever the config says, without writing anything
+    local previous=$generated
+    [[ -f $BACKGROUND_OVERRIDE ]] &&
+      previous=$(sed -n 's/^set \$background //p' "$BACKGROUND_OVERRIDE" | tr -d "'\"" | head -1)
+    swaymsg output "*" bg "${previous:-$generated}" fill >/dev/null 2>&1
+    say "Reverted."
+    pause
+    return 0
+  }
+
+  if [[ $picked == "$generated" ]]; then
+    # the default is the absence of an override, so the theme's own
+    # background keeps being regenerated rather than pinned to today's
+    rm -f "$BACKGROUND_OVERRIDE"
+    say "Using the theme's background again."
+  else
+    mkdir -p "$(dirname "$BACKGROUND_OVERRIDE")"
+    # quoted: paths with spaces are ordinary in ~/Pictures
+    {
+      echo "# written by ashlaros-settings-tui"
+      echo "# definitions.d survives theme switches; generated_background.svg does not"
+      echo "set \$background '$picked'"
+    } > "$BACKGROUND_OVERRIDE"
+    say "Saved. It will still be there after a theme switch and a login."
+  fi
+  pause
+}
+
+# 8. WEB APPS
 #
 # The desktop ships no office suite, no viewer, not even a PDF reader, so
 # a .docx that arrives has nothing to open it. LibreOffice is 147 MB and
@@ -308,7 +406,7 @@ webapps_entry() {
   pause
 }
 
-# 8. MODEL
+# 9. MODEL
 #
 # The Ask key (Print, then a) is the one capture action that leaves the
 # machine, and aichat owns its own provider/model/key configuration. This
@@ -336,7 +434,7 @@ model_entry() {
   ${EDITOR:-vim} "$config"
 }
 
-# 9. ORPHANS
+# 10. ORPHANS
 #
 # The hook (95-ashlaros-orphans.hook) reports after every transaction and
 # deliberately suggests nothing destructive. This is where the destructive
@@ -404,7 +502,7 @@ orphans_entry() {
   done
 }
 
-# 10. FINGERPRINT
+# 11. FINGERPRINT
 #
 # Installed everywhere, enabled nowhere. A fresh machine behaves exactly
 # as it did before; fingerprint auth turns on only when someone has
@@ -544,7 +642,7 @@ fingerprint_entry() {
   done
 }
 
-# 11. NETWORK
+# 12. NETWORK
 #
 # Only the QR code lives here: nmtui does everything else and is one
 # click away on the bar. Rendering a live passphrase to the screen is an
@@ -554,7 +652,7 @@ network_entry() {
   /usr/share/sway/scripts/wifi-qr.sh
 }
 
-# 12. ADAPTIVE BRIGHTNESS
+# 13. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -697,6 +795,7 @@ main() {
     # only when there is something to say - an entry that always reports
     # "nothing to do" is an entry people stop reading
     [[ -n $(pacman -Qtdq 2>/dev/null) ]] && entries+=("Unneeded packages")
+    entries+=("Background")
     command -v firefoxpwa >/dev/null && entries+=("Web apps")
     command -v aichat >/dev/null && entries+=("Model")
     entries+=("Quit")
@@ -716,6 +815,7 @@ main() {
       "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
       "Unneeded packages") orphans_entry ;;
+      "Background") background_entry ;;
       "Web apps") webapps_entry ;;
       "Model") model_entry ;;
       "Quit") exit 0 ;;
