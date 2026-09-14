@@ -1,0 +1,22 @@
+# libfm-qt only launches terminals it has an entry for. For a
+# `Terminal=true` desktop entry it looks up the configured terminal -
+# ours is `terminal=xdg-terminal-exec` in libfm.conf - and, finding no
+# group of that name, falls back to a hard-coded `xterm`, which we do not
+# ship. Double-clicking a Makefile or a .c in pcmanfm-qt then does
+# nothing at all, silently.
+#
+# This path rather than /usr/share/libfm-qt6/: terminal.cpp tries
+# g_key_file_load_from_data_dirs("libfm-qt/terminals.list") first, which
+# searches XDG_DATA_DIRS, and only then the packaged libfm-qt6 file. That
+# also means this file must not be in libfm-qt6/ - that one is owned by
+# the libfm-qt package, and two packages owning one file is a failed
+# transaction rather than an override.
+#
+# Both argument keys are set deliberately. The lookup falls back to the
+# global list per missing key, and that list has no xdg-terminal-exec
+# group to fill either from, so a half-specified group resolves to
+# nothing. `--` terminates xdg-terminal-exec's own option parsing, so a
+# command starting with a dash reaches the terminal untouched.
+[xdg-terminal-exec]
+open_arg=--
+noclose_arg=--hold --
