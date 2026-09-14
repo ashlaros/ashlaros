@@ -445,6 +445,100 @@ EOF
 # as the calendar entry's PasswordCommand.
 AERC_ACCOUNTS="${XDG_CONFIG_HOME:-$HOME/.config}/aerc/accounts.conf"
 
+# Gmail over OAuth, with the user's own client. aerc takes the OAuth
+# parameters in the source URL - token_endpoint, client_id, client_secret,
+# scope - and treats the stored password as the refresh token, exchanging
+# it for an access token on each connection. So nothing of ours is in the
+# exchange, and the same Cloud project the calendar entry asks for covers
+# mail too if the Gmail scope is added to it.
+#
+# The refresh token is what has to be obtained once, and Google only hands
+# one back through the same authorization-code flow the calendar entry
+# runs. calcurse-caldav already implements that flow, but for a different
+# scope, so this asks for the token rather than pretending to fetch it -
+# an entry that half-works is worse than one that says what it needs.
+gmail_account() {
+  local name=$1 email=$2
+
+  screen "Gmail"
+  say "Gmail needs OAuth, and Google does not let us ship credentials for"
+  say "it, so this uses your own - the same Cloud project the calendar"
+  say "entry asks for, with the Gmail scope added:"
+  echo
+  say "  1. console.cloud.google.com -> your project"
+  say "  2. APIs & Services -> Library -> enable Gmail API"
+  say "  3. Credentials -> OAuth client ID -> Desktop app"
+  say "  4. Obtain a refresh token for scope https://mail.google.com/"
+  echo
+  # Named plainly: this is the step with no button to press, and finding
+  # that out after typing a client ID would be worse than reading it here.
+  warn "Step 4 needs an OAuth flow this entry does not run: Google's"
+  warn "OAuth 2.0 Playground does it in a browser, or any tool that"
+  warn "completes an authorization-code flow for that scope."
+  echo
+  gum confirm --affirmative "I have a refresh token" --negative "Back" \
+    "Continue?" || return 1
+
+  local client_id client_secret refresh_token
+  client_id=$(gum input --prompt "Client ID: ") || return 1
+  [[ -n $client_id ]] || return 1
+  client_secret=$(gum input --password --prompt "Client secret: ") || return 1
+  refresh_token=$(gum input --password --prompt "Refresh token: ") || return 1
+  [[ -n $refresh_token ]] || return 1
+
+  # The refresh token is the credential here, so it goes where passwords
+  # go rather than into the URL: aerc runs the command and never stores it.
+  local cred_cmd=""
+  if command -v secret-tool >/dev/null &&
+    gum confirm --affirmative "Keyring" --negative "Config file" \
+      "Store the refresh token in the login keyring?"; then
+    printf '%s' "$refresh_token" |
+      secret-tool store --label="aerc $name" service aerc account "$name" || {
+        oops "Could not store the refresh token in the keyring."
+        pause
+        return 1
+      }
+    cred_cmd="secret-tool lookup service aerc account $name"
+  fi
+
+  # token_endpoint present, so aerc treats the stored value as a refresh
+  # token and exchanges it; without it the value would have to be a
+  # short-lived access token instead
+  local params="token_endpoint=https://oauth2.googleapis.com/token"
+  params+="&client_id=$(url_escape "$client_id")"
+  params+="&client_secret=$(url_escape "$client_secret")"
+  params+="&scope=$(url_escape "https://mail.google.com/")"
+
+  mkdir -p "$(dirname "$AERC_ACCOUNTS")"
+  {
+    echo
+    echo "[$name]"
+    echo "from = $email"
+    if [[ -n $cred_cmd ]]; then
+      echo "source = imaps+xoauth2://$(url_escape "$email")@imap.gmail.com:993?$params"
+      echo "source-cred-cmd = $cred_cmd"
+      echo "outgoing = smtps+xoauth2://$(url_escape "$email")@smtp.gmail.com:465?$params"
+      echo "outgoing-cred-cmd = $cred_cmd"
+      echo "outgoing-cred-cmd-cache = true"
+    else
+      echo "source = imaps+xoauth2://$(url_escape "$email"):$(url_escape "$refresh_token")@imap.gmail.com:993?$params"
+      echo "outgoing = smtps+xoauth2://$(url_escape "$email"):$(url_escape "$refresh_token")@smtp.gmail.com:465?$params"
+    fi
+    # Gmail files sent mail itself, and a copy-to would leave two
+    echo "copy-to = "
+  } >> "$AERC_ACCOUNTS"
+  chmod 600 "$AERC_ACCOUNTS"
+
+  echo
+  if [[ -n $cred_cmd ]]; then
+    say "Written to $AERC_ACCOUNTS - the refresh token is in the keyring."
+  else
+    say "Written to $AERC_ACCOUNTS (mode 600), refresh token included."
+  fi
+  say "Run aerc to check it."
+  pause
+}
+
 mail_entry() {
   screen "Mail"
 
@@ -466,12 +560,20 @@ mail_entry() {
   # below answered with a protocol banner when probed - not copied from a
   # support page - and every field stays editable.
   #
-  # Google and Microsoft are absent: both want OAuth for IMAP, aerc speaks
-  # it (imaps+oauthbearer) but we have no OAuth client to speak it with.
+  # Microsoft is absent: Outlook.com wants OAuth and an Entra app
+  # registration, which is a separate account and a separate set of terms
+  # from Google's (#55). Gmail is offered because aerc takes the OAuth
+  # parameters in the URL, so the user's own client works with no code of
+  # ours in the exchange.
   local provider
   provider=$(gum choose --header "Where is the mail?" \
-    "Fastmail" "iCloud" "mailbox.org" "Posteo" "Zoho" "Other IMAP server") ||
+    "Gmail" "Fastmail" "iCloud" "mailbox.org" "Posteo" "Zoho" \
+    "Other IMAP server") || return 0
+
+  if [[ $provider == Gmail ]]; then
+    gmail_account "$name" "$email" || return 0
     return 0
+  fi
 
   local domain=${email#*@}
   # smtp_scheme: aerc reads smtps:// as implicit TLS and smtp:// as
