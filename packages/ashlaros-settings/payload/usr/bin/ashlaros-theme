@@ -44,7 +44,51 @@ install() {
     fi
 }
 
-THEMES=$(find ${THEME_DIR} -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+# Can this theme's packages be installed at all on this machine?
+#
+# Offering a theme that cannot finish is the failure #56 describes: on ARM
+# the four catppuccin themes name five AUR-only packages and yay has no
+# aarch64 build, so picking one applied the sway colours and then told the
+# user to install something that does not exist for their architecture.
+#
+# A missing package is fine when pacman can resolve it, or when yay is
+# there to build it. Only a package that is in neither makes a theme
+# unofferable - which keeps every theme visible on a normal x86_64 desktop
+# and hides just the unreachable ones elsewhere.
+installable() {
+    local dir=$1
+    [ -f "$dir/packages" ] || return 0
+
+    local -a wanted
+    mapfile -t wanted < "$dir/packages"
+
+    local missing
+    missing=$(pacman -T "${wanted[@]}" 2>/dev/null) || true
+    [ -n "$missing" ] || return 0
+
+    command -v yay >/dev/null && return 0
+
+    local pkg
+    while read -r pkg; do
+        [ -n "$pkg" ] || continue
+        pacman -Si "$pkg" >/dev/null 2>&1 || return 1
+    done <<< "$missing"
+    return 0
+}
+
+THEMES=""
+while read -r theme; do
+    [ -n "$theme" ] || continue
+    installable "${THEME_DIR}/${theme}" || continue
+    THEMES="${THEMES}${theme}"$'\n'
+done <<< "$(find "${THEME_DIR}" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)"
+THEMES=${THEMES%$'\n'}
+
+if [ -z "$THEMES" ]; then
+    echo "> No theme on this machine can install its packages."
+    prompt
+    exit 1
+fi
 
 DARK_THEME=$(echo "$THEMES" | rofi -dmenu -p "Select day theme")
 DARK_THEME_DIR="${THEME_DIR}/${DARK_THEME}"
