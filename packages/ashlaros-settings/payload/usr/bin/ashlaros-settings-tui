@@ -17,6 +17,13 @@
 # expected where one is due.
 set -uo pipefail
 
+# Who this actually is, asked of the kernel rather than the environment.
+# $USER is just an exported string: `USER=root ashlaros-settings-tui` makes
+# every enrolment below target an account this is not, and a face model
+# enrolled against the wrong user is a PAM rule that never matches - or one
+# that matches for somebody else.
+ME=$(id -un)
+
 export GUM_CHOOSE_CURSOR_FOREGROUND="7"
 export GUM_CHOOSE_SELECTED_FOREGROUND="15"
 export GUM_CONFIRM_SELECTED_BACKGROUND="8"
@@ -64,6 +71,20 @@ url_escape() {
     esac
   done
   printf '%s' "$out"
+}
+
+# Creates a config file private BEFORE anything is written into it.
+#
+# `{ ... } > file` creates it with the user's umask, which is 022 on a
+# fresh install - so a file holding a password or a refresh token exists
+# world-readable for as long as the block takes to write, and the chmod
+# afterwards closes a door that was already open. Touching it first makes
+# the private mode the mode it is created with.
+private_file() {
+  local path=$1
+  mkdir -p "$(dirname "$path")"
+  [[ -e $path ]] || : > "$path"
+  chmod 600 "$path"
 }
 
 # Runs a command as root and reports rather than failing silently: a
@@ -509,7 +530,7 @@ gmail_account() {
   params+="&client_secret=$(url_escape "$client_secret")"
   params+="&scope=$(url_escape "https://mail.google.com/")"
 
-  mkdir -p "$(dirname "$AERC_ACCOUNTS")"
+  private_file "$AERC_ACCOUNTS"
   {
     echo
     echo "[$name]"
@@ -631,7 +652,7 @@ mail_entry() {
     password=""
   fi
 
-  mkdir -p "$(dirname "$AERC_ACCOUNTS")"
+  private_file "$AERC_ACCOUNTS"
   {
     echo
     echo "[$name]"
@@ -734,7 +755,7 @@ google_calendar() {
   email=$(gum input --prompt "Google account (email): ") || return 1
   [[ -n $email ]] || return 1
 
-  mkdir -p "$(dirname "$CALDAV_CONFIG")"
+  private_file "$CALDAV_CONFIG"
   {
     echo "# written by ashlaros-settings-tui"
     echo "[General]"
@@ -782,7 +803,15 @@ google_calendar() {
   screen "Google calendar"
   say "Trial run - DryRun is still on, so nothing is written anywhere:"
   echo
-  # still DryRun = Yes here, same as the password path
+  # still DryRun = Yes here, same as the password path.
+  #
+  # --authcode puts the code in this process's argv, where any user on the
+  # machine can read it out of /proc for as long as the exchange runs.
+  # calcurse-caldav offers no other way in - not stdin, not a file - so the
+  # exposure is upstream's interface, not a choice here. It is bounded:
+  # an authorization code is single-use and short-lived, it is spent by the
+  # exchange on the next line, and it is worthless without the client
+  # secret, which is in a 600 config rather than on a command line.
   calcurse-caldav --init=two-way --authcode "$authcode" 2>&1 |
     sed 's/^/  /' | head -40
   echo
@@ -911,7 +940,7 @@ calendar_entry() {
     password=$(gum input --password --prompt "Password: ") || return 0
   fi
 
-  mkdir -p "$(dirname "$CALDAV_CONFIG")"
+  private_file "$CALDAV_CONFIG"
   {
     echo "# written by ashlaros-settings-tui"
     echo "[General]"
@@ -1234,7 +1263,7 @@ face_enabled() {
 # Without a cached credential it reports none, which is the answer the
 # unprivileged call always gave and no worse than the state it replaces.
 face_has_model() {
-  sudo -n howdy --plain -U "$USER" list >/dev/null 2>&1
+  sudo -n howdy --plain -U "$ME" list >/dev/null 2>&1
 }
 
 face_entry() {
@@ -1245,7 +1274,7 @@ face_entry() {
     local models=0
     face_has_model && models=1
     if ((models > 0)); then
-      say "✓ a face model exists for $USER"
+      say "✓ a face model exists for $ME"
     else
       warn "! no face model yet"
     fi
@@ -1284,18 +1313,18 @@ face_entry() {
         echo
         say "Look at the camera."
         echo
-        root_run howdy -U "$USER" add
+        root_run howdy -U "$ME" add
         pause
         ;;
       "Test the camera")
         screen "Face unlock"
-        root_run howdy -U "$USER" test
+        root_run howdy -U "$ME" test
         pause
         ;;
       "Remove every face model")
         gum confirm --affirmative "Remove" --negative "Cancel" \
-          "Remove every face model for $USER?" || continue
-        root_run howdy -U "$USER" clear
+          "Remove every face model for $ME?" || continue
+        root_run howdy -U "$ME" clear
         # PAM asking for a face that no longer exists is a delay before
         # every password and nothing else.
         face_enabled && root_run sed -i "/pam_howdy.so/d" "$FACE_SUDO"
@@ -1308,7 +1337,7 @@ face_entry() {
         # reason - adds a wait before every password and nothing more.
         say "Testing recognition first. Look at the camera."
         echo
-        if ! root_run howdy -U "$USER" test; then
+        if ! root_run howdy -U "$ME" test; then
           echo
           oops "Recognition did not succeed, so this stays off."
           say "A dark infrared emitter is the usual cause: many laptops"
@@ -1414,7 +1443,7 @@ fingerprint_entry() {
     # Enrolment is per user and needs no root; the PAM edit does. Taking
     # privilege per action rather than running the whole menu as root.
     local enrolled
-    enrolled=$(fprintd-list "$USER" 2>/dev/null | grep -c "#" || true)
+    enrolled=$(fprintd-list "$ME" 2>/dev/null | grep -c "#" || true)
     if ((enrolled > 0)); then
       say "✓ $enrolled finger(s) enrolled"
     else
@@ -1458,8 +1487,8 @@ fingerprint_entry() {
         ;;
       "Delete enrolled fingers")
         gum confirm --affirmative "Delete" --negative "Cancel" \
-          "Remove every enrolled finger for $USER?" || continue
-        fprintd-delete "$USER" 2>&1 | sed "s/^/  /"
+          "Remove every enrolled finger for $ME?" || continue
+        fprintd-delete "$ME" 2>&1 | sed "s/^/  /"
         # Leaving PAM asking for a finger that no longer exists would
         # mean a pointless prompt before every password.
         fingerprint_enabled && root_run sed -i "/pam_fprintd.so/d" "$FPRINT_SUDO"
@@ -1629,7 +1658,7 @@ main() {
     # a machine with no reader must not show the entry at all: fprintd is
     # installed everywhere, so the binary existing proves nothing
     if command -v fprintd-enroll >/dev/null &&
-      fprintd-list "$USER" >/dev/null 2>&1; then
+      fprintd-list "$ME" >/dev/null 2>&1; then
       entries+=("Fingerprint")
     fi
     # howdy-next is an optdepend, so the binary existing is already a
