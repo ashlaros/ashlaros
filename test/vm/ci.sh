@@ -59,6 +59,22 @@ install)
   "$here/run.sh" wait-installed 5400
   "$here/run.sh" shot ci-installed >/dev/null
   echo "== the installed system boots"
+
+  # And again on a different GPU. The install above runs on the legacy
+  # `std` adapter, which is also what the ISO itself boots on - so an
+  # initramfs built against the installer's own hardware passes it and
+  # fails on anything else. That is a real bug this suite shipped:
+  # `autodetect` pruned the target's initramfs down to bochs.ko, the
+  # driver `std` uses, and the installed system came up black under Gnome
+  # Boxes, which gives a guest virtio-gpu.
+  #
+  # The disk is already written, so this is a boot, not a second install:
+  # minutes, and it covers the transition that actually broke.
+  "$here/run.sh" stop >/dev/null 2>&1 || true
+  CDROM=no VGA=virtio "$here/run.sh" boot
+  "$here/run.sh" wait-installed 900
+  "$here/run.sh" shot ci-installed-virtio >/dev/null
+  echo "== and it boots on virtio-gpu too"
   ;;
 *)
   echo "usage: ci.sh boot|install <iso>" >&2
