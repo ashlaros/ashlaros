@@ -1,6 +1,6 @@
 #!/bin/sh
 # Select a region containing a QR code and put its contents on the
-# clipboard. The mirror image of wifi-qr.sh, which writes one.
+# clipboard.
 set -u
 
 command -v zbarimg >/dev/null || {

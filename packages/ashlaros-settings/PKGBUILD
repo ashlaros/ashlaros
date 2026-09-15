@@ -38,7 +38,7 @@ depends=(
     # ASHLAROS_OCR_LANGS selects others once tesseract-data-deu and friends
     # are installed
     'tesseract-data-eng'
-    'zbar'                    # QR decode; qrencode below writes them, this reads
+    'zbar'                    # reads a QR code off the screen (capture-qr.sh)
     'wf-recorder'             # screen recording util
     'wl-clipboard'            # copy/paste utilities for wayland
     'wl-clip-persist'         # persists clipboard content between clients
@@ -55,9 +55,6 @@ depends=(
                               # ashlaros-displays are built from; without
                               # it both exit with "gum is not installed"
                               # the first time a user opens settings
-    'qrencode'                # renders the current wifi as a QR code a
-                              # phone can scan, instead of reading a
-                              # passphrase off a sticky note
     'jq'                      # json parsing, used across the scripts
     'bc'                      # arithmetic for the bar scripts
     'inotify-tools'           # file watchers

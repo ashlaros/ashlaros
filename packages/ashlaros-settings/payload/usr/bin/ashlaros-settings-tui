@@ -1657,17 +1657,7 @@ fingerprint_entry() {
   done
 }
 
-# 17. NETWORK
-#
-# Only the QR code lives here: nmtui does everything else and is one
-# click away on the bar. Rendering a live passphrase to the screen is an
-# explicit action rather than something on display.
-network_entry() {
-  screen "Share this network"
-  /usr/share/sway/scripts/wifi-qr.sh
-}
-
-# 18. ADAPTIVE BRIGHTNESS
+# 17. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -1678,7 +1668,8 @@ network_entry() {
 # Nothing here writes /etc/xdg: that path is package-owned and a user edit
 # there is a .pacnew conflict on the next upgrade. Overrides go to the
 # user's own config, which replaces the shipped one wholesale.
-# 12. POWER PROFILES
+
+# 18. POWER PROFILES
 #
 # power-profiles-daemon is installed and its service enabled, and until now
 # nothing offered it: GNOME and KDE ship switchers, sway does not, so the
@@ -1775,7 +1766,7 @@ power_entry() {
   done
 }
 
-# 13. SNAPSHOTS
+# 19. SNAPSHOTS
 #
 # snap-pac brackets every pacman transaction and configure_snapshots bounds
 # the retention, so snapshots happen without anyone asking. What was
@@ -1920,7 +1911,7 @@ snapshot_pick() {
   awk '{ print $1 }' <<<"$choice"
 }
 
-# 14. DISK UNLOCK
+# 20. DISK UNLOCK
 #
 # The installer enrols the LUKS passphrase into the TPM against PCR 7
 # whenever a TPM is present, and the machine then unlocks silently on
@@ -2251,8 +2242,6 @@ main() {
     entries+=("Chat")
     entries+=("Time and date")
     command -v chwd >/dev/null && entries+=("Hardware profiles")
-    command -v qrencode >/dev/null && command -v nmcli >/dev/null &&
-      entries+=("Share this network")
     # a machine with no reader must not show the entry at all: fprintd is
     # installed everywhere, so the binary existing proves nothing
     if command -v fprintd-enroll >/dev/null &&
@@ -2318,7 +2307,6 @@ main() {
       "Snapshots") snapshots_entry ;;
       "Power") power_entry ;;
     "Disk unlock") disk_unlock_entry ;;
-      "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
       "Face unlock") face_entry ;;
       "Unneeded packages") orphans_entry ;;
