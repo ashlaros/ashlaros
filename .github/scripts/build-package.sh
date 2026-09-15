@@ -86,6 +86,11 @@ done
 # --nocheck: several check() suites want a network or a display a sandboxed
 # runner does not have, and a package that builds but cannot self-test is
 # still the package we ship.
-sudo -u builder --preserve-env=GPG_KEYID \
+# GOOGLE_CLIENT_*: the OAuth client ashlaros-settings ships, supplied from
+# repository secrets rather than committed. sudo strips the environment, so
+# anything the PKGBUILD reads has to be named here; a build without them
+# ships no default client and the settings entry falls back to the user's
+# own, which is what a local makepkg gets.
+sudo -u builder --preserve-env=GPG_KEYID,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET \
   PACKAGER="AshlarOS <ashlaros-src:${source_hash}>" \
   makepkg -s --noconfirm --nocheck --sign --key "$GPG_KEYID"

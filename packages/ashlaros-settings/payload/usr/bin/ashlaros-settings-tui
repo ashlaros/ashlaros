@@ -847,13 +847,129 @@ mail_entry() {
 # real Radicale collection, pushes an event to it, and khal renders what
 # lands.
 #
-# Google is still not offered as a preset here. vdirsyncer needs an OAuth
-# client id and secret the user registers themselves, which is a Cloud
-# console project rather than a password - #55 has the question of whether
-# we may ship our own. Saying where the limit is beats a preset that fails
-# at sync time.
 VDIRSYNCER_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/vdirsyncer/config"
 VDIR_ROOT="$HOME/.calendars/synced"
+
+# Google is not a row in the provider table above: it wants OAuth rather
+# than a password, and vdirsyncer has a storage type of its own for it.
+#
+# The client AshlarOS is registered as ships in the package
+# (/usr/share/ashlaros/google-oauth-client). A user who would rather run
+# under their own Cloud project drops the same two names in
+# ~/.config/ashlaros/google-oauth-client and that wins - which is also the
+# way out if our registration is ever suspended or rate-limited.
+GOOGLE_CLIENT_SHIPPED=/usr/share/ashlaros/google-oauth-client
+GOOGLE_CLIENT_USER="${XDG_CONFIG_HOME:-$HOME/.config}/ashlaros/google-oauth-client"
+
+google_calendar() {
+  screen "Google calendar"
+
+  command -v vdirsyncer >/dev/null || {
+    oops "vdirsyncer is not installed."
+    pause
+    return 1
+  }
+
+  # vdirsyncer names aiohttp-oauthlib an optdepend and raises
+  # "aiohttp-oauthlib not installed" at SYNC time without it, which is
+  # after the account is configured and the wrong moment to find out.
+  if ! python3 -c "import aiohttp_oauthlib" 2>/dev/null; then
+    say "Google support needs python-aiohttp-oauthlib."
+    gum confirm --affirmative "Install" --negative "Back" "Install it?" || return 0
+    root_run pacman -S --noconfirm --needed python-aiohttp-oauthlib || { pause; return 1; }
+  fi
+
+  local client_id="" client_secret=""
+  # the user's own file wins over the shipped one
+  local source
+  for source in "$GOOGLE_CLIENT_SHIPPED" "$GOOGLE_CLIENT_USER"; do
+    # shellcheck disable=SC1090
+    [[ -r $source ]] && . "$source"
+  done
+  client_id="${GOOGLE_CLIENT_ID:-}"
+  client_secret="${GOOGLE_CLIENT_SECRET:-}"
+
+  if [[ -r $GOOGLE_CLIENT_USER ]]; then
+    say "Using the OAuth client in $GOOGLE_CLIENT_USER."
+  elif [[ -n $client_id ]]; then
+    say "Signing in through the AshlarOS application."
+    say --foreground 8 "Your calendar is read by this machine only; the token stays here."
+  else
+    oops "No OAuth client is configured and none ships with this package."
+    say "Register one at console.cloud.google.com (enable the CalDAV API,"
+    say "not the Calendar API) and write client_id and client_secret to"
+    say "$GOOGLE_CLIENT_USER."
+    pause
+    return 1
+  fi
+  echo
+
+  say "A browser will open for you to sign in to Google."
+  say "vdirsyncer catches the answer on this machine and stores a token in"
+  # shellcheck disable=SC2088
+  # prose in a message, not a path to expand
+  say "~/.local/share/vdirsyncer/."
+  echo
+  gum confirm --affirmative "Sign in" --negative "Back" "Continue?" || return 0
+
+  # What happens when the same event differs on both sides, asked in the
+  # same words as the password providers rather than vdirsyncer's own.
+  local conflict resolution
+  conflict=$(gum choose --header "If the same event was changed in both places, which wins?" \
+    "The server's copy" \
+    "This machine's copy") || return 0
+  case $conflict in
+    "The server's"*) resolution='"b wins"' ;;
+    *) resolution='"a wins"' ;;
+  esac
+
+  mkdir -p "$VDIR_ROOT"
+  private_file "$VDIRSYNCER_CONFIG"
+  {
+    echo "# written by ashlaros-settings-tui"
+    echo "[general]"
+    echo "status_path = \"~/.local/share/vdirsyncer/status/\""
+    echo
+    echo "[pair calendar]"
+    echo "a = \"local\""
+    echo "b = \"remote\""
+    echo "collections = [\"from a\", \"from b\"]"
+    echo "conflict_resolution = $resolution"
+    echo
+    echo "[storage local]"
+    echo "type = \"filesystem\""
+    echo "path = \"$VDIR_ROOT\""
+    echo "fileext = \".ics\""
+    echo
+    echo "[storage remote]"
+    echo "type = \"google_calendar\""
+    echo "token_file = \"~/.local/share/vdirsyncer/google_token\""
+    echo "client_id = \"$client_id\""
+    echo "client_secret = \"$client_secret\""
+  } > "$VDIRSYNCER_CONFIG"
+  chmod 600 "$VDIRSYNCER_CONFIG"
+
+  screen "Google calendar"
+  say "Written to $VDIRSYNCER_CONFIG"
+  echo
+
+  # discover is where the browser opens: the token does not exist yet, so
+  # this is the step that fetches it.
+  say "Signing in and looking for calendars:"
+  echo
+  yes | vdirsyncer discover 2>&1 | sed 's/^/  /' | head -30
+  echo
+
+  if gum confirm --affirmative "Sync now" --negative "Later" \
+    "Sync these calendars?"; then
+    vdirsyncer sync 2>&1 | sed 's/^/  /' | head -40
+    echo
+    say "Synced. khal reads these; the timer syncs every 15 minutes."
+  else
+    say "Nothing synced yet. This entry's \"Sync now\" does it."
+  fi
+  pause
+}
 
 calendar_entry() {
   screen "Calendar"
@@ -890,6 +1006,7 @@ calendar_entry() {
   local provider
   provider=$(gum choose --header "Where is the calendar?" \
     "Nextcloud (self-hosted)" \
+    "Google" \
     "Fastmail" \
     "iCloud" \
     "mailbox.org" \
@@ -915,6 +1032,11 @@ calendar_entry() {
     "Nextcloud (self-hosted)")
       note="The URL is your server plus /remote.php/dav/, e.g. https://cloud.example.org/remote.php/dav/" ;;
   esac
+
+  if [[ $provider == Google ]]; then
+    google_calendar || return 0
+    return 0
+  fi
 
   local user
   url=$(gum input --prompt "CalDAV URL: " --value "$url") || return 0

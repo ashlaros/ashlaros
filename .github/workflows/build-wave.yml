@@ -60,6 +60,10 @@ jobs:
       - name: build
         env:
           GPG_KEYID: ${{ vars.GPG_KEYID }}
+          # the OAuth client ashlaros-settings ships; every other package
+          # ignores them, and a build without them ships no default client
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: .github/scripts/build-package.sh "packages/${{ matrix.package }}"
       - name: collect the packages
         # upload-artifact rejects a colon anywhere in a path and a pacman
@@ -153,6 +157,10 @@ jobs:
         continue-on-error: ${{ matrix.arch == 'aarch64' }}
         env:
           GPG_KEYID: ${{ vars.GPG_KEYID }}
+          # the OAuth client ashlaros-settings ships; every other package
+          # ignores them, and a build without them ships no default client
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: .github/scripts/build-package.sh "packages/${{ matrix.package }}"
       # continue-on-error above turns a failed aarch64 build into a green
       # job, which is how way-displays was missing from the aarch64

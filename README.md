@@ -420,12 +420,19 @@ vdirsyncer refuses a sync that would empty both sides rather than doing
 it, and the conflict question is asked as *which copy wins* rather than in
 vdirsyncer's own "a wins"/"b wins" terms.
 
-**Google is not offered as a preset.** vdirsyncer needs an OAuth client id
-and secret you register yourself in a Google Cloud project — not a
-password — and whether we may ship our own is [#55]. `calcurse` was here
-until 2026-09-15 and could reach Google even less: its OAuth path is built
-on `python-oauth2client`, which Google archived, sends no PKCE, and wants
-a client secret in a config file.
+**Google** signs in through a browser rather than a password. AshlarOS is
+registered as an OAuth client and ships that registration, the way every
+desktop offering Google accounts does — GNOME bakes the same two values
+into `gnome-online-accounts` at build time. It identifies the application,
+not you: the sign-in happens in your browser against your own account, and
+the token lands in `~/.local/share/vdirsyncer/` and is never seen by us.
+Put your own `client_id` and `client_secret` in
+`~/.config/ashlaros/google-oauth-client` to run under your own Cloud
+project instead.
+
+`calcurse` was here until 2026-09-15 and could not reach Google at all:
+its OAuth path is built on `python-oauth2client`, which Google archived,
+sends no PKCE, and wants a client secret in a config file.
 
 **Outlook calendar is not supported.** Microsoft retired CalDAV for
 Outlook.com and the replacement is Microsoft Graph, which nothing here
