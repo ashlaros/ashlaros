@@ -78,6 +78,15 @@
       .muted {
         color: #8a8f98;
       }
+      /* body is a flex column with min-height 100vh, so margin-top auto
+         puts this at the bottom of short pages and after the content on
+         long ones */
+      footer {
+        margin-top: auto;
+        background: #141a1b;
+        padding: 0.7rem 20px;
+        font-size: 0.8rem;
+      }
     </style>
   </head>
   <body>
@@ -179,7 +188,14 @@
         >.
       </p>
       <p class="muted">Last updated 15 September 2026.</p>
-      <p><a class="link" href="/">← back</a></p>
     </main>
+    <footer>
+      <a class="link" href="/privacy.html">Privacy</a>
+      <span class="muted">·</span>
+      <span class="muted">Terms</span>
+      <span class="muted">·</span>
+      <a class="link" href="https://github.com/ashlaros/ashlaros">Source</a>
+      <span class="muted">· GPL-3.0-or-later</span>
+    </footer>
   </body>
 </html>
