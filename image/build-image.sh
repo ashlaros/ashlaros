@@ -17,6 +17,16 @@
 set -euo pipefail
 
 readonly ROOTFS_URL="${ROOTFS_URL:-http://os.archlinuxarm.org/os/ArchLinuxARM-rpi-aarch64-latest.tar.gz}"
+# Arch Linux ARM signs the rootfs tarball, and until this the signature was
+# never fetched. The tarball is extracted as root and then chroot'ed into,
+# so anyone who can answer for os.archlinuxarm.org - it redirects to plain
+# HTTP mirrors, and the geo host has no usable certificate - could put a
+# backdoored /bin/bash on the build host as root. Verifying the signature
+# makes the transport irrelevant.
+readonly ROOTFS_SIG_URL="${ROOTFS_SIG_URL:-${ROOTFS_URL}.sig}"
+# The key that signs it, pinned by fingerprint rather than fetched by ID:
+# asking a keyserver for whatever calls itself the signer is not a check.
+readonly ALARM_KEY_FPR="${ALARM_KEY_FPR:-68B3537F39A313B3E574D06777193F152BDBE6A6}"
 readonly REPO_URL="${REPO_URL:-https://packages.ashlaros.download}"
 readonly KEY_URL="${KEY_URL:-https://packages.ashlaros.download/ashlaros.gpg}"
 
@@ -59,6 +69,25 @@ say() { printf '\n== %s\n' "$*" >&2; }
 say "fetching the Arch Linux ARM rpi rootfs"
 mkdir -p "$mount_root"
 curl -fsSL "$ROOTFS_URL" -o "$work/rootfs.tar.gz"
+curl -fsSL "$ROOTFS_SIG_URL" -o "$work/rootfs.tar.gz.sig"
+
+say "verifying the rootfs signature"
+# Its own keyring, so this neither depends on nor pollutes the host's.
+export GNUPGHOME="$work/gnupg"
+mkdir -p "$GNUPGHOME"
+chmod 700 "$GNUPGHOME"
+gpg --batch --quiet --keyserver hkps://keyserver.ubuntu.com \
+    --recv-keys "$ALARM_KEY_FPR"
+# --status-fd, not the exit code alone: gpg exits 0 for a good signature
+# from a key it does not trust, which is exactly the case a pinned
+# fingerprint has to decide.
+if ! gpg --batch --status-fd 1 --verify "$work/rootfs.tar.gz.sig" \
+    "$work/rootfs.tar.gz" 2>/dev/null |
+    grep -q "^\[GNUPG:\] VALIDSIG ${ALARM_KEY_FPR} "; then
+    echo "rootfs signature is not a valid signature from ${ALARM_KEY_FPR}" >&2
+    exit 1
+fi
+say "rootfs signed by ${ALARM_KEY_FPR}"
 
 image="$work/ashlaros-${version}-aarch64-rpi5.img"
 say "creating a ${IMAGE_MB}MB image"
