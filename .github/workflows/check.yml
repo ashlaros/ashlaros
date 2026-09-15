@@ -110,7 +110,7 @@ jobs:
             iso/airootfs/root/.automated_script.sh \
             branding/ashlaros-logo-animate \
             packages/ashlaros-settings/payload/usr/bin/ashlaros-migrate \
-            packages/ashlaros-settings/payload/usr/bin/ashlaros-snapshot \
+            packages/ashlaros-snapshot/ashlaros-snapshot \
             packages/ashlaros-settings/payload/usr/bin/ashlaros-displays \
             packages/ashlaros-settings/payload/usr/bin/ashlaros-settings-tui \
             packages/ashlaros-settings/payload/usr/bin/ashlaros-theme \

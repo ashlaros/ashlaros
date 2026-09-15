@@ -23,7 +23,7 @@ license=('GPL-3.0-or-later')
 depends=('btrfs-progs' 'util-linux')
 optdepends=('snapper: taking and listing snapshots on an installed system')
 source=("ashlaros-snapshot")
-b2sums=('b23eea9833e7f1d2190656c8d8c4812b04517ea5a0ec433a2db2969cef4cd3d206b268b761bedcab4b6df0ec3f3a60315472be413c9983f72cbef618fb9cad17')
+b2sums=('4a8b78eafcf5da5e760320fa6a7c18d7158a498cf19e26dc38ff518f738e6d52ce6c5c53d0de2f7dda40d00cfb41fe85aede2c469ced14785bb22ca05fc89c1d')
 
 package() {
     install -Dm755 "$srcdir/ashlaros-snapshot" "$pkgdir/usr/bin/ashlaros-snapshot"
