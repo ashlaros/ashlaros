@@ -17,6 +17,11 @@ tpm="${TPM:-yes}"
 cdrom="${CDROM:-yes}"
 lid="${LID:-no}"
 
+case "${VGA:-std}" in
+  virtio) vga=(-device virtio-vga) ;;
+  *) vga=(-vga std) ;;
+esac
+
 mkdir -p /vm/tpm /vm/out
 [ -f /vm/target.qcow2 ] || qemu-img create -f qcow2 /vm/target.qcow2 20G >/dev/null
 
@@ -58,7 +63,11 @@ args+=(
   -drive "file=/vm/target.qcow2,if=virtio,format=qcow2"
   -serial "file:/vm/out/serial.log"
   -display none
-  -vga std
+  # VGA defaults to the legacy std adapter; VGA=virtio selects virtio-gpu,
+  # which is what Gnome Boxes and virt-manager give a guest by default.
+  # The two need different kernel drivers (bochs-drm against virtio_gpu),
+  # so a machine that comes up on one can come up black on the other.
+  "${vga[@]}"
   -qmp "unix:/vm/qmp.sock,server=on,wait=off"
   -monitor none
 )
