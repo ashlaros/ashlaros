@@ -752,6 +752,54 @@ def add_splash_cmdline(ctx: InstallContext) -> None:
     info("› boot entries: quiet splash")
 
 
+def add_verbose_entry(ctx: InstallContext) -> None:
+    """A second boot entry that says what went wrong.
+
+    The shipped entry carries `quiet splash`, and nothing configures a
+    serial console, so a boot that dies after the menu prints nothing
+    anywhere: the framebuffer is suppressed and the serial log ends at the
+    countdown. A black screen is then the only symptom, on a machine whose
+    owner has no way to get further.
+
+    This copies each entry, drops both flags, and keeps everything else -
+    the same kernel, the same initramfs, the same root and LUKS options -
+    so choosing it is the difference between a black screen and a readable
+    error. `console=ttyS0` goes on too: it costs nothing on hardware with
+    no serial port, and in a VM it puts the whole boot in the host's log,
+    which is where a bug report can come from.
+
+    No sort-key on either: measured with `bootctl list`, an entry that has
+    one sorts ahead of every entry that does not, so giving the verbose
+    copy a "later" key would make it the default boot rather than the
+    second line. Filename order already puts the ordinary entry first.
+    """
+    entries = sorted((ctx.target / "boot/loader/entries").glob("*.conf"))
+    if not entries:
+        error("no loader entries to copy; there will be no verbose entry")
+        return
+
+    for entry in entries:
+        # skip what this already wrote, or a re-run copies the copy
+        if entry.stem.endswith("-verbose"):
+            continue
+        target = entry.with_name(f"{entry.stem}-verbose.conf")
+        if target.exists():
+            continue
+        rewritten = []
+        for line in entry.read_text().splitlines():
+            if line.startswith("title"):
+                rewritten.append(f"{line} (verbose, for diagnosing a failed boot)")
+            elif line.startswith("options"):
+                words = [w for w in line.split() if w not in ("quiet", "splash")]
+                words.append("console=tty0")
+                words.append("console=ttyS0,115200")
+                rewritten.append(" ".join(words))
+            else:
+                rewritten.append(line)
+        target.write_text("\n".join(rewritten) + "\n")
+    info("› boot entries: a verbose one beside each, for a boot that fails")
+
+
 def configure_splash(ctx: InstallContext) -> None:
     """Select the theme and make sure the initramfs carries it.
 
@@ -770,6 +818,8 @@ def configure_splash(ctx: InstallContext) -> None:
     )
     use_plymouth_initramfs(ctx)
     add_splash_cmdline(ctx)
+    # after the flags are on, so the copy is of the final entry
+    add_verbose_entry(ctx)
     # Unconditional: the hook edit above may be a no-op on a re-run, but
     # the theme change still has to reach the initramfs, and mkinitcpio is
     # the only thing that puts it there.
