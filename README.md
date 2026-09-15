@@ -407,14 +407,25 @@ Neither is preinstalled and neither does anything until you configure it:
 mail is personal, and a client that opens onto nothing is worse than no
 client.
 
-`calcurse` **is** installed — it has a keybind and a daemon — and
-Settings → **Calendar** points it at a CalDAV server. Nextcloud, Google,
-Fastmail, iCloud, mailbox.org, Posteo and Zoho are offered — the
-password-based ones with their hostnames and paths prefilled — and "Other
-CalDAV server" is a first-class option. The first sync
-is a dry run you read before anything is written, and the three
-initialisation modes are described by what they delete rather than by
-name.
+[`khal`](https://khal.readthedocs.io) **is** installed — it has a keybind
+— and Settings → **Calendar** points
+[`vdirsyncer`](https://vdirsyncer.pimutils.org) at a CalDAV server.
+khal reads a directory of `.ics` files; vdirsyncer is what fills it, on a
+timer. A local calendar exists before any of that, so a machine with no
+account still has somewhere to put an appointment.
+
+Nextcloud, Fastmail, iCloud, mailbox.org, Posteo and Zoho are offered with
+their URLs prefilled, and "Other CalDAV server" is a first-class option.
+vdirsyncer refuses a sync that would empty both sides rather than doing
+it, and the conflict question is asked as *which copy wins* rather than in
+vdirsyncer's own "a wins"/"b wins" terms.
+
+**Google is not offered as a preset.** vdirsyncer needs an OAuth client id
+and secret you register yourself in a Google Cloud project — not a
+password — and whether we may ship our own is [#55]. `calcurse` was here
+until 2026-09-15 and could reach Google even less: its OAuth path is built
+on `python-oauth2client`, which Google archived, sends no PKCE, and wants
+a client secret in a config file.
 
 **Outlook calendar is not supported.** Microsoft retired CalDAV for
 Outlook.com and the replacement is Microsoft Graph, which nothing here

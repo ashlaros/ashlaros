@@ -1,0 +1,9 @@
+[Unit]
+Description=Announce upcoming calendar events
+# Replaces calcurse-daemon: khal is a viewer over files with no resident
+# process, so the reminders calcurse gave us come from a timer instead.
+PartOf=sway-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/share/sway/scripts/calendar-notify.sh

@@ -121,7 +121,7 @@ set $pulseaudio $script_path/once.sh $term_float pulsemixer
 set $help $script_path/help.sh --toggle
 
 # Calendar application
-set $calendar $script_path/once.sh $term_float calcurse
+set $calendar $script_path/once.sh $term_float khal interactive
 
 # Notes. Defined beside the calendar and, like it, not bound to a chord:
 # both are launcher entries. The keybind space is dense enough that a

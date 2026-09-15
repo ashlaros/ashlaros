@@ -20,7 +20,7 @@
 - name: tiling
   description: windows splitting both ways, which is what the wm is for
   commands:
-    - footclient calcurse
+    - footclient khal interactive
     - swaymsg splitv
     - footclient sh -c 'pacman -Q | tail -24; exec zsh'
     - swaymsg splith

@@ -614,10 +614,10 @@ AERC_ACCOUNTS="${XDG_CONFIG_HOME:-$HOME/.config}/aerc/accounts.conf"
 # mail too if the Gmail scope is added to it.
 #
 # The refresh token is what has to be obtained once, and Google only hands
-# one back through the same authorization-code flow the calendar entry
-# runs. calcurse-caldav already implements that flow, but for a different
-# scope, so this asks for the token rather than pretending to fetch it -
-# an entry that half-works is worse than one that says what it needs.
+# one back through an authorization-code flow. Nothing we ship implements
+# that flow for this scope, so this asks for the token rather than
+# pretending to fetch it - an entry that half-works is worse than one that
+# says what it needs.
 gmail_account() {
   local name=$1 email=$2
 
@@ -836,180 +836,53 @@ mail_entry() {
 
 # 10. CALENDAR
 #
-# calcurse is a hard dependency with a keybind, an autostarted daemon and
-# a place in our screenshots, and we shipped no configuration for it at
-# all: it opened onto an empty local calendar. This writes
-# calcurse-caldav's config, which works today against Nextcloud,
-# Fastmail, Radicale, Baikal and any other CalDAV server.
+# khal views a directory of .ics files; vdirsyncer fills that directory
+# from a CalDAV server. This writes vdirsyncer's config.
 #
-# Google is deliberately not offered as a preset. calcurse-caldav's OAuth
-# path needs python-oauth2client, which Google archived years ago and
-# which predates PKCE being standard; claiming support we have not proven
-# would be worse than saying where the limit is.
-CALDAV_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/calcurse/caldav/config"
-
-# Google is the one provider that cannot be a row in the table above: it
-# wants OAuth2 rather than a password, and the credentials are the user's
-# own. We do not ship a client ID. vdirsyncer - a mature project that has
-# read the same terms - makes every user register their own Cloud project
-# because Google's ToS, section "Confidential Matters", is read as
-# forbidding hardcoded credentials in open-source software (#55). Until
-# that reading is settled with Google rather than guessed at, asking the
-# user for their own is the only version of this that is certainly
-# allowed, and it is also exactly the config a shipped client ID would
-# later fill in.
+# Replaced calcurse, which is still a fine calendar but could not reach
+# Google: calcurse-caldav's OAuth path imports python-oauth2client, which
+# Google archived years ago, sends no PKCE, and requires a client secret
+# in a config file. vdirsyncer's Google support lives in a maintained
+# library instead (#53). Measured before switching: vdirsyncer discovers a
+# real Radicale collection, pushes an event to it, and khal renders what
+# lands.
 #
-# calcurse-caldav has a complete OAuth2 path of its own, so this stays on
-# one sync engine. python-oauth2client is unmaintained upstream but is in
-# Arch's repositories and the flow works; the alternative was vdirsyncer
-# plus a manual import step, because calcurse can only import iCal
-# one-way and would not see a vdir at all.
-google_calendar() {
-  screen "Google calendar"
-
-  if ! pacman -Qq python-oauth2client >/dev/null 2>&1; then
-    say "Google needs python-oauth2client for the OAuth2 flow."
-    gum confirm --affirmative "Install" --negative "Back" "Install it?" || return 1
-    root_run pacman -S --noconfirm --needed python-oauth2client || { pause; return 1; }
-  fi
-
-  screen "Google calendar"
-  say "Google does not let us ship credentials for this, so the first step"
-  say "is creating your own - once, free, about five minutes:"
-  echo
-  say "  1. console.cloud.google.com -> create a project"
-  # The trap vdirsyncer documents: the Calendar API is a different API and
-  # syncing silently gets nowhere with it enabled instead.
-  say "  2. APIs & Services -> Library -> enable CalDAV API"
-  say "     (the CalDAV API, not the Calendar API - they are different)"
-  say "  3. Credentials -> Create credentials -> OAuth client ID"
-  say "  4. Application type: Desktop app"
-  echo
-  gum confirm --affirmative "I have them" --negative "Back" \
-    "Ready to paste the client ID and secret?" || return 1
-
-  local client_id client_secret email
-  client_id=$(gum input --prompt "Client ID: ") || return 1
-  [[ -n $client_id ]] || return 1
-  client_secret=$(gum input --password --prompt "Client secret: ") || return 1
-  email=$(gum input --prompt "Google account (email): ") || return 1
-  [[ -n $email ]] || return 1
-
-  private_file "$CALDAV_CONFIG"
-  {
-    echo "# written by ashlaros-settings-tui"
-    echo "[General]"
-    echo "Binary = calcurse"
-    echo "Hostname = apidata.googleusercontent.com"
-    # the account's own CalDAV collection, percent-encoded: the @ would
-    # otherwise end the path segment
-    echo "Path = /caldav/v2/$(url_escape "$email")/events/"
-    echo "HTTPS = Yes"
-    echo "AuthMethod = oauth2"
-    echo "DryRun = Yes"
-    echo "SyncFilter = cal,todo"
-    echo
-    echo "[OAuth2]"
-    echo "ClientID = $client_id"
-    echo "ClientSecret = $client_secret"
-    echo "Scope = https://www.googleapis.com/auth/calendar"
-    # loopback, so nothing of ours is in the exchange; the code comes back
-    # in the browser's address bar and the user pastes it
-    echo "RedirectURI = http://127.0.0.1"
-  } > "$CALDAV_CONFIG"
-  chmod 600 "$CALDAV_CONFIG"
-
-  screen "Google calendar"
-  say "Written to $CALDAV_CONFIG"
-  echo
-  say "A browser will open for you to authorize this. Google then shows a"
-  say "URL containing code=... - copy what follows code= and paste it here."
-  echo
-  pause
-
-  # First run opens the browser and exits without a code by design, so its
-  # failure is expected rather than an error worth showing.
-  calcurse-caldav --init=two-way >/dev/null 2>&1
-
-  local authcode
-  authcode=$(gum input --prompt "Auth code: ") || return 1
-  if [[ -z $authcode ]]; then
-    warn "No code, so nothing was authorized. The config is written; this"
-    warn "entry's \"Reconfigure\" picks it up again."
-    pause
-    return 1
-  fi
-
-  screen "Google calendar"
-  say "Trial run - DryRun is still on, so nothing is written anywhere:"
-  echo
-  # still DryRun = Yes here, same as the password path.
-  #
-  # --authcode puts the code in this process's argv, where any user on the
-  # machine can read it out of /proc for as long as the exchange runs.
-  # calcurse-caldav offers no other way in - not stdin, not a file - so the
-  # exposure is upstream's interface, not a choice here. It is bounded:
-  # an authorization code is single-use and short-lived, it is spent by the
-  # exchange on the next line, and it is worthless without the client
-  # secret, which is in a 600 config rather than on a command line.
-  calcurse-caldav --init=two-way --authcode "$authcode" 2>&1 |
-    sed 's/^/  /' | head -40
-  echo
-
-  if gum confirm --affirmative "Sync for real" --negative "Leave it in dry-run mode" \
-    "Does that look right?"; then
-    sed -i 's/^DryRun = Yes/DryRun = No/' "$CALDAV_CONFIG"
-    # the token is stored now, so no code is needed again
-    calcurse-caldav 2>&1 | sed 's/^/  /' | head -40
-    say "Synced. Later syncs are this entry's \"Sync now\"."
-  else
-    say "Left as DryRun = Yes. Nothing will be written until you change it."
-  fi
-  pause
-}
+# Google is still not offered as a preset here. vdirsyncer needs an OAuth
+# client id and secret the user registers themselves, which is a Cloud
+# console project rather than a password - #55 has the question of whether
+# we may ship our own. Saying where the limit is beats a preset that fails
+# at sync time.
+VDIRSYNCER_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/vdirsyncer/config"
+VDIR_ROOT="$HOME/.calendars/synced"
 
 calendar_entry() {
   screen "Calendar"
 
-  if [[ -f $CALDAV_CONFIG ]]; then
-    say "Configured: $(sed -n 's/^Hostname *= *//p' "$CALDAV_CONFIG" | head -1)"
+  if [[ -f $VDIRSYNCER_CONFIG ]]; then
+    local server
+    server=$(sed -n 's/^ *url *= *"\(.*\)"/\1/p' "$VDIRSYNCER_CONFIG" | head -1)
+    say "Configured: ${server:-a CalDAV server}"
     echo
     local existing
-    existing=$(gum choose --header "calcurse CalDAV" \
-      "Sync now (dry run)" "Sync now" "Reconfigure" "Back") || return 0
+    existing=$(gum choose --header "Calendar sync" \
+      "Sync now" "Open the calendar" "Reconfigure" "Back") || return 0
     case $existing in
-      "Sync now (dry run)")
-        # calcurse-caldav has no --dry-run flag: DryRun is a config key,
-        # so a trial run means a temporary config with it turned back on
-        local trial
-        trial=$(mktemp)
-        sed 's/^DryRun = No/DryRun = Yes/' "$CALDAV_CONFIG" > "$trial"
-        calcurse-caldav --config "$trial" 2>&1 | sed 's/^/  /' | head -40
-        rm -f "$trial"
-        pause; return 0 ;;
       "Sync now")
-        calcurse-caldav 2>&1 | sed 's/^/  /' | head -40
+        # --force-delete is deliberately absent: without it vdirsyncer
+        # aborts rather than emptying both sides, which is the accident
+        # worth refusing
+        vdirsyncer sync 2>&1 | sed 's/^/  /' | head -40
         pause; return 0 ;;
+      "Open the calendar") khal interactive; return 0 ;;
       "Reconfigure") ;;
       *) return 0 ;;
     esac
   fi
 
-  local -a missing=()
-  local pkg
-  for pkg in python python-httplib2 python-pyparsing; do
-    pacman -Qq "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
-  done
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    say "calcurse-caldav needs: ${missing[*]}"
-    gum confirm --affirmative "Install" --negative "Back" "Install them?" || return 0
-    root_run pacman -S --noconfirm --needed "${missing[@]}" || { pause; return 1; }
-  fi
-
   # A table rather than a branch per provider: the common failure is not
-  # knowing the CalDAV URL, and the URL is data. Every host and path below
-  # was probed and answers 401 - the endpoint exists and wants credentials
-  # - rather than being copied from documentation (#55).
+  # knowing the CalDAV URL, and the URL is data. Every host below was
+  # probed and answers 401 - the endpoint exists and wants credentials -
+  # rather than being copied from documentation (#55).
   #
   # Outlook is deliberately absent: Microsoft retired CalDAV for
   # Outlook.com and the replacement is Graph, a REST API that nothing here
@@ -1017,7 +890,6 @@ calendar_entry() {
   local provider
   provider=$(gum choose --header "Where is the calendar?" \
     "Nextcloud (self-hosted)" \
-    "Google" \
     "Fastmail" \
     "iCloud" \
     "mailbox.org" \
@@ -1025,34 +897,28 @@ calendar_entry() {
     "Zoho" \
     "Other CalDAV server") || return 0
 
-  local host="" path="" note=""
+  local url="" note=""
   case $provider in
     "Fastmail")
-      host=caldav.fastmail.com; path=/dav/calendars/user/USERNAME/CALENDAR/
+      url=https://caldav.fastmail.com/dav/calendars
       note="Fastmail needs an app password: Settings -> Privacy & Security -> Integrations." ;;
     "iCloud")
-      host=caldav.icloud.com; path=/
+      url=https://caldav.icloud.com/
       note="iCloud needs an app-specific password from appleid.apple.com, not your Apple ID password." ;;
     "mailbox.org")
-      host=dav.mailbox.org; path=/caldav/ ;;
+      url=https://dav.mailbox.org/caldav/ ;;
     "Posteo")
-      host=posteo.de:8443; path=/calendars/USERNAME/default/ ;;
+      url=https://posteo.de:8443/calendars/ ;;
     "Zoho")
-      host=calendar.zoho.com; path=/caldav/USERNAME/events/
+      url=https://calendar.zoho.com/caldav/
       note="Zoho needs an application-specific password when two-factor is on." ;;
     "Nextcloud (self-hosted)")
-      path=/remote.php/dav/calendars/USERNAME/personal/ ;;
+      note="The URL is your server plus /remote.php/dav/, e.g. https://cloud.example.org/remote.php/dav/" ;;
   esac
 
-  if [[ $provider == Google ]]; then
-    google_calendar || return 0
-    return 0
-  fi
-
   local user
-  host=$(gum input --prompt "Server: " --value "$host") || return 0
-  [[ -n $host ]] || return 0
-  path=$(gum input --prompt "Calendar path: " --value "$path") || return 0
+  url=$(gum input --prompt "CalDAV URL: " --value "$url") || return 0
+  [[ -n $url ]] || return 0
   user=$(gum input --prompt "Username: ") || return 0
 
   # Said before the password prompt, not after a failure: an app password
@@ -1063,81 +929,86 @@ calendar_entry() {
     echo
   fi
 
-  # PasswordCommand before Password: with gnome-keyring unlocked at login
-  # (it is, since f0b5cc7) secret-tool needs no extra package and keeps
-  # the password out of a plaintext config
+  # password.fetch before a plaintext password: with gnome-keyring
+  # unlocked at login (since f0b5cc7) secret-tool needs no extra package
+  # and keeps the credential out of the config file
   local secret_cmd="" password=""
   if command -v secret-tool >/dev/null &&
     gum confirm --affirmative "Keyring" --negative "Config file" \
       "Store the password in the login keyring?"; then
     password=$(gum input --password --prompt "Password: ") || return 0
     printf '%s' "$password" |
-      secret-tool store --label="calcurse CalDAV" service calcurse-caldav username "$user" ||
+      secret-tool store --label="CalDAV" service vdirsyncer username "$user" ||
       { oops "Could not store the password."; pause; return 1; }
-    secret_cmd="secret-tool lookup service calcurse-caldav username $user"
+    secret_cmd="secret-tool lookup service vdirsyncer username $user"
     password=""
   else
     password=$(gum input --password --prompt "Password: ") || return 0
   fi
 
-  private_file "$CALDAV_CONFIG"
-  {
-    echo "# written by ashlaros-settings-tui"
-    echo "[General]"
-    echo "Binary = calcurse"
-    echo "Hostname = $host"
-    echo "Path = $path"
-    echo "HTTPS = Yes"
-    echo "AuthMethod = basic"
-    # calcurse ships DryRun = Yes and its own README calls the script
-    # alpha software that wants backups. It stays on until a dry run has
-    # been read and the user turns it off below.
-    echo "DryRun = Yes"
-    echo "SyncFilter = cal,todo"
-    echo
-    echo "[Auth]"
-    echo "Username = $user"
-    if [[ -n $secret_cmd ]]; then
-      echo "PasswordCommand = $secret_cmd"
-    else
-      echo "Password = $password"
-    fi
-  } > "$CALDAV_CONFIG"
-  chmod 600 "$CALDAV_CONFIG"
-
-  screen "Calendar"
-  say "Written to $CALDAV_CONFIG"
-  echo
-  say "First sync, as a dry run - nothing is written anywhere:"
-  echo
-
-  # --init is required on a first sync, and the three modes differ by what
-  # they DELETE. Named by consequence, never by name alone.
-  local mode init
-  mode=$(gum choose --header "This calendar has never synced. What should happen?" \
-    "Copy both ways, delete nothing" \
-    "Take the server's copy, DELETE local calcurse items" \
-    "Take the local copy, DELETE everything on the server") || return 0
-  case $mode in
-    "Copy both ways"*) init=two-way ;;
-    "Take the server's"*) init=keep-remote ;;
-    *) init=keep-local ;;
+  # What happens when the same event differs on both sides. Named by
+  # consequence: "a wins" and "b wins" are vdirsyncer's words and say
+  # nothing about which is the server.
+  local conflict resolution
+  conflict=$(gum choose --header "If the same event was changed in both places, which wins?" \
+    "The server's copy" \
+    "This machine's copy") || return 0
+  case $conflict in
+    "The server's"*) resolution='"b wins"' ;;
+    *) resolution='"a wins"' ;;
   esac
 
-  # the config still carries DryRun = Yes at this point, which is what
-  # makes this a trial rather than the flag calcurse-caldav does not have
-  calcurse-caldav --init=$init 2>&1 | sed 's/^/  /' | head -40
-  echo
-  say "That was a dry run. Nothing changed."
+  mkdir -p "$VDIR_ROOT"
+  private_file "$VDIRSYNCER_CONFIG"
+  {
+    echo "# written by ashlaros-settings-tui"
+    echo "[general]"
+    echo "status_path = \"~/.local/share/vdirsyncer/status/\""
+    echo
+    echo "[pair calendar]"
+    echo "a = \"local\""
+    echo "b = \"remote\""
+    echo "collections = [\"from a\", \"from b\"]"
+    echo "conflict_resolution = $resolution"
+    echo
+    echo "[storage local]"
+    echo "type = \"filesystem\""
+    echo "path = \"$VDIR_ROOT\""
+    echo "fileext = \".ics\""
+    echo
+    echo "[storage remote]"
+    echo "type = \"caldav\""
+    echo "url = \"$url\""
+    echo "username = \"$user\""
+    if [[ -n $secret_cmd ]]; then
+      echo "password.fetch = [\"command\", \"sh\", \"-c\", \"$secret_cmd\"]"
+    else
+      echo "password = \"$password\""
+    fi
+  } > "$VDIRSYNCER_CONFIG"
+  chmod 600 "$VDIRSYNCER_CONFIG"
+
+  screen "Calendar"
+  say "Written to $VDIRSYNCER_CONFIG"
   echo
 
-  if gum confirm --affirmative "Sync for real" --negative "Leave it in dry-run mode" \
-    "Does that look right?"; then
-    sed -i 's/^DryRun = Yes/DryRun = No/' "$CALDAV_CONFIG"
-    calcurse-caldav --init=$init 2>&1 | sed 's/^/  /' | head -40
-    say "Synced. Later syncs are this entry's \"Sync now\"."
+  # discover asks before creating anything, and its questions are about
+  # collections rather than deletions; sync is where data moves.
+  say "Looking for calendars on the server:"
+  echo
+  yes | vdirsyncer discover 2>&1 | sed 's/^/  /' | head -30
+  echo
+
+  if gum confirm --affirmative "Sync now" --negative "Later" \
+    "Sync these calendars?"; then
+    # no --force-delete: vdirsyncer refuses a sync that would empty both
+    # sides rather than doing it, which is the protection calcurse's
+    # DryRun flag was standing in for
+    vdirsyncer sync 2>&1 | sed 's/^/  /' | head -40
+    echo
+    say "Synced. khal reads these; the timer syncs every 15 minutes."
   else
-    say "Left as DryRun = Yes. Nothing will be written until you change it."
+    say "Nothing synced yet. This entry's \"Sync now\" does it."
   fi
   pause
 }
@@ -2293,7 +2164,7 @@ main() {
     [[ -n $(pacman -Qtdq 2>/dev/null) ]] && entries+=("Unneeded packages")
     command -v zk >/dev/null && entries+=("Notes")
     command -v aerc >/dev/null && entries+=("Mail")
-    command -v calcurse-caldav >/dev/null && entries+=("Calendar")
+    command -v vdirsyncer >/dev/null && entries+=("Calendar")
     entries+=("Background")
     command -v firefoxpwa >/dev/null && entries+=("Web apps")
     command -v aichat >/dev/null && entries+=("Model")

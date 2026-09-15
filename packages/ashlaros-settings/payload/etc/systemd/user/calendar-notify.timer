@@ -1,0 +1,15 @@
+[Unit]
+Description=Check for upcoming calendar events
+PartOf=sway-session.target
+
+[Timer]
+# Five minutes, against the script's fifteen-minute lookahead: an event
+# gets its reminder with time to walk to it, and the overlap is what makes
+# a missed tick harmless. The script announces each event once, so the
+# overlap costs nothing.
+OnStartupSec=1m
+OnUnitActiveSec=5m
+AccuracySec=1m
+
+[Install]
+WantedBy=sway-session.target

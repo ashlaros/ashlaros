@@ -34,7 +34,7 @@
     # renders the build machine's CPU model, real memory, and a process
     # list naming the capture script and docker. A published picture should
     # not contain the host that made it.
-    - footclient calcurse
+    - footclient khal interactive
     # the split runs between launches: sway applies it to what is focused,
     # so stacking all three first and arranging afterwards cannot work.
     # This puts the second beside the first and the third below it, which

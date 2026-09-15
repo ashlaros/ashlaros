@@ -59,7 +59,12 @@ depends=(
     'bc'                      # arithmetic for the bar scripts
     'inotify-tools'           # file watchers
     'lm_sensors'              # sensor readings for the bar
-    'calcurse'                # tui calendar application
+    # Calendar: khal views a vdir, vdirsyncer fills it. calcurse was here
+    # and could not reach Google - its OAuth path is built on
+    # python-oauth2client, which Google archived, sends no PKCE and wants
+    # a client secret in a config file (#53).
+    'khal'                    # tui calendar over a directory of .ics files
+    'vdirsyncer'              # caldav sync into that directory
     # notes, as plain Markdown in a directory: nothing to export and
     # nothing to sync, so git persistence is `git init` and no more
     'zk'                      # plain-text notes with an index and an LSP

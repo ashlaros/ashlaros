@@ -1,0 +1,43 @@
+# khal reads a vdir - a directory of .ics files - and nothing else. What
+# fills that directory is vdirsyncer, configured by Settings -> Calendar.
+#
+# Both halves ship unconfigured on purpose: with no calendar set up, khal
+# opens onto the local one below, which is a real calendar you can add
+# events to without any server existing.
+#
+# Replaced calcurse, which could not reach Google: calcurse-caldav's OAuth
+# path is built on python-oauth2client, archived by Google years ago, and
+# it sends no PKCE and requires a client secret in a config file (#53).
+
+[calendars]
+
+# The one that always exists. vdirsyncer never touches it, so a machine
+# with no account still has somewhere to put an appointment.
+[[local]]
+path = ~/.calendars/local
+type = calendar
+color = light gray
+
+# Everything Settings -> Calendar sets up lands under ~/.calendars/synced/
+# and is discovered from there, so accounts appear without this file being
+# rewritten per account.
+#
+# Under ~/.calendars/ directly rather than a subdirectory, the glob would
+# also match `local` above and khal would list it twice - measured: it
+# showed as both "local" and "local1".
+[[synced]]
+path = ~/.calendars/synced/*
+type = discover
+
+[locale]
+timeformat = %H:%M
+dateformat = %Y-%m-%d
+longdateformat = %Y-%m-%d
+datetimeformat = %Y-%m-%d %H:%M
+longdatetimeformat = %Y-%m-%d %H:%M
+# Monday, because the default locale here is en_US with a de keymap and
+# the calendar should match the week the user actually lives in
+firstweekday = 0
+
+[default]
+default_calendar = local
