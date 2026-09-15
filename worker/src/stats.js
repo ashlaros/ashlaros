@@ -60,10 +60,11 @@ export function record(env, key, status, method) {
   const cut = key.indexOf('/');
   const prefix = cut === -1 ? '' : key.slice(0, cut);
   const name = cut === -1 ? key : key.slice(cut + 1);
-  // latest/ carries no version in its key, and resolving it would cost a
-  // bucket call on the hot path for every download. It is recorded as its
-  // own bucket instead - see README: "latest" is a choice, not a version.
-  const alias = prefix === 'latest' ? 'latest' : 'version';
+  // latest/ is an alias, not a version: every download through it redirects
+  // to the versioned path and is counted there. Recording it separately
+  // would double-count and produce a meaningless "latest (unpinned)" row.
+  if (prefix === 'latest') return;
+  const alias = 'version';
 
   try {
     env.ANALYTICS_ENGINE.writeDataPoint({
@@ -101,14 +102,13 @@ async function query(env, sql) {
 export async function liveTotals(env) {
   const rows = await query(
     env,
-    `SELECT blob1 AS version, blob3 AS alias, SUM(_sample_interval) AS downloads
+    `SELECT blob1 AS version, SUM(_sample_interval) AS downloads
      FROM "${DATASET}"
-     GROUP BY version, alias
+     GROUP BY version
      ORDER BY downloads DESC`,
   );
   return rows.map((row) => ({
     version: row.version,
-    alias: row.alias,
     downloads: Number(row.downloads),
   }));
 }

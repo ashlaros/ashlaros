@@ -165,8 +165,8 @@ export function renderStats({ configured, archive, versions, files, version }) {
         ? `<table>${versions
             .map((row) =>
               countRow(
-                row.alias === 'latest' ? 'latest (unpinned)' : row.version,
-                row.alias === 'latest' ? null : `/stats?version=${encodeURIComponent(row.version)}`,
+                row.version,
+                `/stats?version=${encodeURIComponent(row.version)}`,
                 row.downloads,
               ),
             )
@@ -195,11 +195,9 @@ export function renderStats({ configured, archive, versions, files, version }) {
   }
 
   parts.push(
-    '<p>A download is one whole-image GET that transferred.' +
+      'A download is one whole-image GET that transferred.' +
       ' Resumed downloads and revalidations are not counted, and neither is' +
-      ' <code>SHA256SUMS</code>. Images taken from <code>/latest/</code> carry no' +
-      ' version in their URL, so they are counted as their own row rather than' +
-      ' attributed to whichever image was newest.' +
+      ' <code>SHA256SUMS</code>.' +
       ' <a class="link" href="/stats.json">stats.json</a></p>',
   );
 
