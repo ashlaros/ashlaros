@@ -1186,24 +1186,37 @@ def configure_mdns(ctx: InstallContext) -> None:
 
 
 def run_hardware_detection(ctx: InstallContext) -> None:
-    """Let chwd pick the graphics driver for this machine.
+    """Let chwd configure this machine's hardware - all of it, not the GPU.
 
-    0300 is the PCI class for a display controller; -a takes it as its one
-    optional argument. chwd used to spell this "-a pci free 0300", which
-    1.24 rejects outright - "unexpected argument 'free' found" - so every
-    install was silently getting no driver profile at all. A machine chwd
-    has no profile for is still not a failure: the kernel's built-in
-    drivers bring up a display.
+    This asked for `-a 0300`, PCI class 0300, display controllers. chwd
+    ships six profile sets and that used one of them: network_drivers
+    (Broadcom wireless, with an exact device-id list, a module blacklist
+    and an initramfs rebuild), t2-macbook, power_management, handhelds,
+    and profiles/usb/fprint were all being discarded (#66).
+
+    `-a` takes the class id as an OPTIONAL argument - `[<classid>]` in
+    --help, checked against the shipped 1.24.1 rather than inferred - and
+    bare it means "any", which walks every PCI and USB device that has a
+    profile. ai_sdk is gated behind its own --ai_sdk flag, so widening
+    does not pull in an AI toolchain.
+
+    It also gets quieter, not noisier: with a specific class id a device
+    with no profile logs "No config found for device"; under any that is
+    deliberately suppressed.
+
+    A machine chwd has no profile for is still not a failure - the
+    kernel's built-in drivers bring up a display - which is why this
+    reports and returns rather than raising.
     """
     result = subprocess.run(
-        ["arch-chroot", str(ctx.target), "chwd", "-a", "0300"],
+        ["arch-chroot", str(ctx.target), "chwd", "-a"],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
         error(f"chwd found no profile to install: {result.stderr.strip()}")
         return
-    info("› chwd installed the detected graphics profile")
+    info("› chwd configured the hardware it recognised")
 
 
 def lock_boot_editor(ctx: InstallContext) -> None:

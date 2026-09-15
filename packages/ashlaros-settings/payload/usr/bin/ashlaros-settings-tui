@@ -400,29 +400,120 @@ time_menu() {
 
 # 7. HARDWARE
 #
-# The installer runs chwd for graphics only, and deliberately takes the
-# free driver. Non-free is the reason to come here.
+# chwd is the re-detect mechanism, not something to build one beside:
+# upstream lists "reinstalling drivers when swapping GPUs" as a feature,
+# and it verifies hardware presence through libpci before applying
+# anything. This is a front-end over its own listing and install modes.
+#
+# Every action here was checked against the shipped chwd 1.24.1. The
+# previous version of this menu called `chwd -l`, `chwd -a 0300 --nonfree`
+# and `chwd -a nonfree 0300`; all three are rejected outright by that
+# release, so every entry in it failed (#66). The flags that exist are
+# --list, --list-installed, --list-all, -i, -r, -d and -a.
+# Profile names out of a chwd listing.
+#
+# chwd draws a box table - "│ amd      ┆ 4        │" - not a bare list, so
+# the name is the first cell. Read off the real 1.24.1 output rather than
+# guessed: a sed written for bare names returned nothing at all, which
+# would have made "install a specific profile" claim this machine supports
+# none.
+chwd_names() {
+  # Two different box characters: │ frames the row and ┆ separates the
+  # cells. Splitting on the frame alone left "amd┆4" as one field, so both
+  # are separators here.
+  chwd "$@" 2>/dev/null |
+    awk -F'[│┆]' '/│/ && !/Name/ { gsub(/[ \t]/, "", $2); if ($2 != "") print $2 }' |
+    sort -u
+}
+
 hardware_menu() {
   local choice
   while true; do
     screen "Hardware profiles"
+
+    # What is applied now, before offering to change it. chwd prints
+    # nothing when no profile is installed, which is a real answer rather
+    # than an error - most machines run on in-kernel drivers.
+    local installed
+    installed=$(chwd_names --list-installed | head -8)
+    if [[ -n $installed ]]; then
+      say "Installed:"
+      printf '%s\n' "$installed" | sed 's/^/    /'
+    else
+      say "No chwd profile is installed; the kernel's own drivers are in use."
+    fi
+    echo
+
     choice=$(gum choose --header "chwd" \
-      "List profiles" "Install the detected free profile" \
-      "Install the detected non-free profile" "Back") || return 0
+      "What this hardware supports" \
+      "Everything chwd knows about" \
+      "Re-detect and install" \
+      "Install a specific profile" \
+      "Remove a profile" \
+      "Back") || return 0
+
     case $choice in
-      "List profiles")
+      "What this hardware supports")
         screen "Hardware profiles"
-        chwd -l 2>&1 | sed "s/^/  /"
+        say "Profiles matching the devices in this machine:"
+        echo
+        chwd --list --detail 2>&1 | sed "s/^/  /" | head -40
         pause
         ;;
-      "Install the detected free profile")
-        root_run chwd -a 0300 && pause
+      "Everything chwd knows about")
+        screen "Hardware profiles"
+        chwd --list-all 2>&1 | sed "s/^/  /" | head -40
+        pause
         ;;
-      "Install the detected non-free profile")
-        gum confirm --affirmative "Install" --negative "Cancel" \
-          "Non-free drivers are not covered by the distribution's licence." || continue
-        root_run chwd -a 0300 --nonfree 2>/dev/null ||
-          root_run chwd -a nonfree 0300
+      "Re-detect and install")
+        screen "Hardware profiles"
+        # Bare -a, not -a 0300: the class id is optional and omitting it
+        # means "any", which covers network, T2, power management,
+        # handhelds and the USB fingerprint profiles as well as graphics.
+        # This is the same call the installer makes, so a machine that
+        # gained hardware gets what a fresh install would have given it.
+        say "Asking chwd what this machine needs now."
+        say "Useful after swapping a GPU, or adding a card or a dock."
+        echo
+        root_run chwd -a
+        pause
+        ;;
+      "Install a specific profile")
+        local available profile
+        available=$(chwd_names --list)
+        if [[ -z $available ]]; then
+          screen "Hardware profiles"
+          warn "chwd lists no profile for this hardware."
+          pause
+          continue
+        fi
+        # shellcheck disable=SC2086
+        # word splitting is the point: one choice per profile
+        profile=$(gum choose --header "Install" $available "Cancel") || continue
+        [[ $profile == Cancel ]] && continue
+        screen "Hardware profiles"
+        root_run chwd -i "$profile"
+        pause
+        ;;
+      "Remove a profile")
+        local present profile
+        present=$(chwd_names --list-installed)
+        if [[ -z $present ]]; then
+          screen "Hardware profiles"
+          say "Nothing to remove: no chwd profile is installed."
+          pause
+          continue
+        fi
+        # shellcheck disable=SC2086
+        profile=$(gum choose --header "Remove" $present "Cancel") || continue
+        [[ $profile == Cancel ]] && continue
+        # A profile's post_remove undoes what its post_install did - a
+        # module blacklist, an initramfs rebuild - so removing one is a
+        # real change to how the machine boots, not just a package.
+        gum confirm --affirmative "Remove" --negative "Cancel" \
+          "Remove $profile? This reverses its driver and initramfs changes." || continue
+        screen "Hardware profiles"
+        root_run chwd -r "$profile"
         pause
         ;;
       "Back") return 0 ;;
