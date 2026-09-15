@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AshlarOS — Terms of Service</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <style>
+      /* Same design language as index.html and privacy.html, and a copy for
+         the same reason: static assets with no build step, where one more
+         file to fetch is worse than a few repeated rules. */
+      * {
+        color: #eee;
+        text-decoration: none;
+      }
+
+      body {
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        background-size: cover;
+        background-position: center right;
+        margin: 0;
+        font-family: Roboto, Helvetica, Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        background-image: url("background.svg");
+        background-color: #282828;
+      }
+
+      h1 {
+        background: #141a1b;
+        color: #8a8f98;
+        font-size: 0.8rem;
+        font-weight: 500;
+        line-height: 30px;
+        padding: 0 20px;
+        margin: 0;
+      }
+
+      h2 {
+        color: #8a8f98;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin: 2rem 0 0.4rem;
+      }
+
+      #content {
+        margin: 20px;
+        max-width: 46rem;
+      }
+
+      a.link {
+        font-family: monospace;
+        text-shadow: 2px 2px #282828;
+      }
+
+      a.link:hover {
+        color: #c9ccd1;
+      }
+
+      p {
+        line-height: 1.6;
+        max-width: 40rem;
+      }
+
+      pre,
+      code {
+        color: #c9ccd1;
+      }
+
+      ul {
+        line-height: 1.8;
+        padding-left: 1.2rem;
+        max-width: 40rem;
+      }
+
+      .muted {
+        color: #8a8f98;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AshlarOS — Terms of Service</h1>
+    <main id="content">
+      <p>
+        AshlarOS is free software, published at no charge by volunteers.
+        These terms cover the software and this website. They are short
+        because there is not much to govern: there is no account to hold, no
+        subscription to bill, and no service of ours that your data passes
+        through.
+      </p>
+
+      <h2>The software</h2>
+      <p>
+        AshlarOS is licensed under the
+        <a class="link" href="https://www.gnu.org/licenses/gpl-3.0.html"
+          >GPL-3.0-or-later</a
+        >. That licence is the agreement covering your use of it, and where
+        anything here appears to conflict with it, the licence wins.
+      </p>
+      <p>
+        It includes software from other projects — Arch Linux, CachyOS, sway
+        and many more — each under its own licence. Installing a package
+        means accepting that package's terms, which are carried with it.
+      </p>
+      <p>
+        <strong>There is no warranty.</strong> The GPL says this at length
+        in sections 15 and 16, and it is worth repeating plainly: this is an
+        operating system that formats disks and manages encryption keys. It
+        is provided as is, and you run it at your own risk. Keep backups.
+      </p>
+
+      <h2>This website and the downloads</h2>
+      <ul>
+        <li>
+          <strong>They are offered as they are, when they are.</strong> We do
+          not promise the site, the images, or the package repository will be
+          reachable, current, or complete. They are run by volunteers on
+          donated infrastructure.
+        </li>
+        <li>
+          <strong>Verify what you download.</strong> Every image is published
+          with checksums and every package is signed. Those are the guarantee
+          that a file is ours, not the fact that it arrived over HTTPS.
+        </li>
+        <li>
+          <strong>Do not abuse the infrastructure.</strong> Automated
+          scraping that degrades the service for others, or attempts to
+          disrupt it, may be blocked. Mirroring is welcome — ask, and we will
+          help rather than block you.
+        </li>
+      </ul>
+
+      <h2>The game and its leaderboard</h2>
+      <p>
+        The download page carries a small game with a daily leaderboard. Put
+        any name on it you like; there is no account behind it. Entries that
+        are abusive, or scores produced by tampering rather than playing, may
+        be removed without notice. Nothing of value is at stake, and none of
+        it is a service we owe you.
+      </p>
+
+      <h2>Accounts you connect</h2>
+      <p>
+        Settings can configure the calendar and mail clients on your machine
+        to talk to a provider you choose. Those are agreements between you
+        and that provider, under their terms, and we are not a party to them.
+        We do not receive, store, or relay that data — see the
+        <a class="link" href="/privacy.html">privacy policy</a> for what that
+        means in detail.
+      </p>
+      <p>
+        You are responsible for holding the accounts you connect and for
+        following the terms attached to them.
+      </p>
+
+      <h2>Trademarks</h2>
+      <p>
+        The name AshlarOS and its mark identify this project. The software is
+        yours to modify and redistribute under the GPL; please do not present
+        a modified version in a way that suggests it is the original. Fork
+        freely, and name it something else.
+      </p>
+
+      <h2>Changes</h2>
+      <p>
+        These terms live in the
+        <a class="link" href="https://github.com/ashlaros/ashlaros"
+          >source repository</a
+        >, so every change to them is a public commit you can read. Continued
+        use after a change means the new version applies. Questions belong in
+        an
+        <a class="link" href="https://github.com/ashlaros/ashlaros/issues"
+          >issue</a
+        >, or by mail to
+        <a class="link" href="mailto:build@ashlaros.download"
+          >build@ashlaros.download</a
+        >.
+      </p>
+      <p class="muted">Last updated 15 September 2026.</p>
+      <p><a class="link" href="/">← back</a></p>
+    </main>
+  </body>
+</html>
