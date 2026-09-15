@@ -1920,6 +1920,222 @@ snapshot_pick() {
   awk '{ print $1 }' <<<"$choice"
 }
 
+# 14. DISK UNLOCK
+#
+# The installer enrols the LUKS passphrase into the TPM against PCR 7
+# whenever a TPM is present, and the machine then unlocks silently on
+# every boot. That is a choice about a personal tradeoff, made by
+# hardware detection, and this is where the user makes it instead (#64).
+#
+# Three modes, all legitimate, and the entry says what each defends
+# rather than ranking them. TPM-only is the right answer for a desktop
+# that never leaves the house; it is the wrong answer for a laptop, and
+# the difference is the user's to know.
+#
+# systemd-cryptenroll does all of it on a running system, so nothing here
+# needs a reinstall.
+
+# The encrypted device the root sits on, or empty when the root is not
+# encrypted. Asked of the kernel rather than of crypttab: a machine can
+# have a crypttab entry for something that is not the root.
+root_crypt_device() {
+  local source
+  source=$(findmnt -no SOURCE / 2>/dev/null) || return 1
+  # /dev/mapper/name -> the holder underneath it. lsblk walks the stack
+  # so this works through LVM as well as a plain dm-crypt.
+  local name
+  name=$(lsblk -nso NAME,TYPE "$source" 2>/dev/null |
+    awk '$2 == "crypt" { found = 1; next } found && $2 == "part" { print $1; exit }')
+  [[ -n $name ]] || return 1
+  echo "/dev/$name"
+}
+
+# What is actually enrolled, from the device rather than from crypttab.
+# Real format, measured: a "SLOT TYPE" header then one row per slot, so
+# the types are the second column from line two on.
+enrolled_types() {
+  local device=$1
+  root_run systemd-cryptenroll "$device" 2>/dev/null |
+    awk 'NR > 1 { print $2 }' | sort -u
+}
+
+# Whether the TPM enrolment carries a PIN. systemd-cryptenroll's listing
+# says "tpm2" either way, so the distinction lives in the LUKS token.
+#
+# Read from the exported token rather than from luksDump: measured
+# against a real enrolment on a machine with a TPM, the flag is JSON
+# inside the token - {"type":"systemd-tpm2",...,"tpm2-pin":true,...} -
+# and luksDump's text rendering does not carry it at all. Grepping
+# luksDump for it reports "no PIN" on a device that has one, which is
+# exactly the wrong way to be wrong about someone's disk.
+tpm_has_pin() {
+  local device=$1
+  local id
+  for id in $(root_run cryptsetup luksDump "$device" 2>/dev/null |
+    awk '/^[[:space:]]*[0-9]+: systemd-tpm2/ { sub(":", "", $1); print $1 }'); do
+    root_run cryptsetup token export --token-id "$id" "$device" 2>/dev/null |
+      grep -q '"tpm2-pin"[[:space:]]*:[[:space:]]*true' && return 0
+  done
+  return 1
+}
+
+disk_unlock_entry() {
+  local device types choice
+  while true; do
+    screen "Disk unlock"
+
+    device=$(root_crypt_device) || {
+      say "The root filesystem is not encrypted, so there is nothing to unlock."
+      pause
+      return 1
+    }
+
+    types=$(enrolled_types "$device")
+    say "Encrypted device: $device"
+    echo
+
+    local mode="passphrase"
+    if grep -qx "tpm2" <<<"$types"; then
+      if tpm_has_pin "$device"; then
+        mode="tpm+pin"
+        say "✓ TPM + PIN — a short PIN every boot"
+      else
+        mode="tpm"
+        say "✓ TPM only — this machine unlocks silently at boot"
+      fi
+    else
+      say "✓ Passphrase only — the full passphrase every boot"
+    fi
+    grep -qx "recovery" <<<"$types" && say "  a recovery key is also enrolled"
+    echo
+
+    # The table is the UI, not the documentation. Someone choosing TPM
+    # only should read "laptop theft: no" while they choose it.
+    say "                  boot            defends drive   defends whole"
+    say "                  experience      theft           machine theft"
+    say "  passphrase      full phrase     yes             yes"
+    say "  TPM + PIN       short PIN       yes             yes (rate-limited)"
+    say "  TPM only        silent          yes             NO"
+    echo
+
+    # PCR 7 measures Secure Boot policy, and with Secure Boot off it
+    # holds a stable value that matches whatever boots - including an
+    # attacker's stick. Said here because it changes what TPM-only is
+    # worth on this machine specifically, and most machines running this
+    # distribution have Secure Boot off.
+    # Read from the firmware variable rather than parsing bootctl: the
+    # efivar is the value itself, present on any UEFI machine, and one
+    # byte instead of a text format that can be reworded. Measured on
+    # this hardware: five bytes, the last of which is the flag.
+    local secureboot="off"
+    local sb_var
+    sb_var=$(echo /sys/firmware/efi/efivars/SecureBoot-*)
+    if [[ -r $sb_var ]]; then
+      [[ $(od -An -t u1 "$sb_var" 2>/dev/null | awk '{ print $NF }') == "1" ]] &&
+        secureboot="on"
+    fi
+    case "$secureboot" in
+      on) say "  Secure Boot is on, so the PCR 7 binding means what it says." ;;
+      *)
+        warn "! Secure Boot is off, so PCR 7 holds the same value for any"
+        warn "  boot media. TPM-only unlock protects a removed drive, not"
+        warn "  this machine. A PIN is what closes that."
+        ;;
+    esac
+    echo
+
+    local entries=()
+    [[ $mode != "tpm+pin" ]] && entries+=("Use TPM + PIN")
+    [[ $mode != "tpm" ]] && entries+=("Use TPM only")
+    [[ $mode != "passphrase" ]] && entries+=("Passphrase only")
+    entries+=("Back")
+
+    choice=$(gum choose --header "Disk unlock" "${entries[@]}") || return 0
+    case "$choice" in
+      "Use TPM + PIN")
+        tpm_enroll "$device" yes
+        ;;
+      "Use TPM only")
+        say "This machine will unlock with no prompt at all."
+        [[ $secureboot != "on" ]] &&
+          warn "With Secure Boot off, anything that boots this hardware unlocks it."
+        gum confirm --affirmative "Enrol" --negative "Cancel" \
+          "Unlock silently, defending a removed drive but not a stolen machine?" ||
+          continue
+        tpm_enroll "$device" no
+        ;;
+      "Passphrase only")
+        gum confirm --affirmative "Remove" --negative "Cancel" \
+          "Remove TPM unlock? Every boot will ask for the full passphrase." ||
+          continue
+        # --wipe-slot takes the type, so this removes the TPM enrolment
+        # and leaves the passphrase and any recovery key untouched
+        if root_run systemd-cryptenroll "$device" --wipe-slot=tpm2; then
+          say "TPM unlock removed."
+        else
+          oops "Could not remove the TPM enrolment."
+        fi
+        pause
+        ;;
+      "Back") return 0 ;;
+    esac
+  done
+}
+
+# Enrol the TPM, with or without a PIN. Wipes any existing tpm2 slot
+# first: cryptenroll adds a second one otherwise, and the old silent slot
+# would still unlock the disk, which makes adding a PIN do nothing.
+tpm_enroll() {
+  local device=$1 with_pin=$2
+
+  if [[ ! -e /dev/tpmrm0 && ! -e /dev/tpm0 ]]; then
+    oops "No TPM on this machine."
+    pause
+    return 1
+  fi
+
+  if [[ $with_pin == "yes" ]]; then
+    # The hardware is what makes a short PIN safe - the TPM rate-limits
+    # attempts itself, unlike a passphrase an attacker can try offline.
+    # Report the machine's real policy rather than claiming it.
+    # Measured against a software TPM: the field prints as
+    # "TPM2_PT_MAX_AUTH_FAIL: 0x3", so the value is hex and telling
+    # someone their TPM allows 0x3 attempts helps nobody.
+    local max_fail
+    max_fail=$(root_run tpm2_getcap properties-variable 2>/dev/null |
+      awk '/MAX_AUTH_FAIL/ { print $NF; exit }')
+    [[ $max_fail == 0x* ]] && max_fail=$((max_fail))
+    if [[ -n $max_fail ]]; then
+      say "This TPM locks out after $max_fail failed attempts, which is what"
+      say "makes a short PIN safe where a short passphrase would not be."
+    fi
+    echo
+  fi
+
+  # The existing passphrase is needed to add any new slot, and
+  # cryptenroll asks for it on the terminal itself.
+  say "You will be asked for the current disk passphrase."
+  [[ $with_pin == "yes" ]] && say "then for a new PIN, twice."
+  echo
+
+  root_run systemd-cryptenroll "$device" --wipe-slot=tpm2 >/dev/null 2>&1 || true
+
+  if root_run systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7 \
+    "--tpm2-with-pin=$with_pin" "$device"; then
+    # crypttab is what makes early boot ask the TPM at all; without it
+    # the enrolment exists and nothing uses it
+    if ! grep -q "tpm2-device=auto" /etc/crypttab 2>/dev/null; then
+      warn "Enrolled, but /etc/crypttab does not ask the TPM at boot."
+      warn "Add tpm2-device=auto to the root entry's options."
+    else
+      say "Enrolled. Test it by rebooting before you rely on it."
+    fi
+  else
+    oops "Enrolment failed. The disk still unlocks with the passphrase."
+  fi
+  pause
+}
+
 wluma_entry() {
   local user_config="${XDG_CONFIG_HOME:-$HOME/.config}/wluma/config.toml"
   local choice
@@ -2067,6 +2283,11 @@ main() {
       powerprofilesctl get >/dev/null 2>&1; then
       entries+=("Power")
     fi
+    # Built only where there is an encrypted root to unlock: an
+    # unencrypted install has no slots and no choice to make.
+    if root_crypt_device >/dev/null 2>&1; then
+      entries+=("Disk unlock")
+    fi
     # only when there is something to say - an entry that always reports
     # "nothing to do" is an entry people stop reading
     # btrfs only: an ext4 install has no snapshots, and the entry would
@@ -2096,6 +2317,7 @@ main() {
       "Adaptive brightness") wluma_entry ;;
       "Snapshots") snapshots_entry ;;
       "Power") power_entry ;;
+    "Disk unlock") disk_unlock_entry ;;
       "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
       "Face unlock") face_entry ;;
