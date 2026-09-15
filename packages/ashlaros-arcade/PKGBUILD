@@ -1,6 +1,10 @@
 # Maintainer: AshlarOS <build@ashlaros.download>
 
-# rebuilt once when source_hash began covering the executable bit
+# Rebuilt once when source_hash began covering the executable bit. A
+# retry at the same version cannot work here: cargo --release is not
+# byte-reproducible, so the guard sees different bytes at a published
+# name and refuses. The version is derived from this directory's
+# commit count, so a commit here is what gives a retry its own name.
 pkgname=ashlaros-arcade
 pkgver=20260914
 pkgrel=1
