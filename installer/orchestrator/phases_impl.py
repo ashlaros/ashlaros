@@ -518,11 +518,16 @@ def x11_layout_for(keymap: str) -> tuple[str, str]:
 
 
 def enroll_tpm(ctx: InstallContext) -> None:
-    """Enrol the LUKS passphrase into the TPM so boots unlock without typing it.
+    """Enrol the LUKS passphrase into the TPM, when that is what was asked for.
 
     New work: omarchy has no TPM handling at all. PCR 7 is the secure-boot
     policy register - it is stable across kernel updates, unlike PCR 4 or 8,
     so an ordinary upgrade does not invalidate the enrolment.
+
+    This used to enrol whenever a TPM was present, which let hardware
+    detection decide a security tradeoff on the user's behalf and left the
+    machine unlocking silently forever (#64). The configurator asks now, and
+    this obeys the answer; the settings TUI changes it later.
 
     No TPM is not an error. A machine without one keeps passphrase unlock,
     which is what an unencrypted-adjacent fallback should be: the disk stays
@@ -530,6 +535,10 @@ def enroll_tpm(ctx: InstallContext) -> None:
     """
     if not ctx.encrypt:
         info("› encryption disabled; nothing to enrol")
+        return
+
+    if ctx.tpm_unlock == "none":
+        info("› passphrase unlock chosen; not enrolling the TPM")
         return
 
     if not tpm_available():
@@ -544,15 +553,29 @@ def enroll_tpm(ctx: InstallContext) -> None:
     if not passphrase:
         raise RuntimeError("encryption is on but no passphrase is in user_credentials.json")
 
-    info(f"› enrolling {device} into the TPM (PCR 7)")
-    # the existing passphrase authorises adding the new keyslot; it is passed
-    # on the environment rather than the command line, where /proc would
-    # expose it to every process on the live system
+    with_pin = ctx.tpm_unlock == "pin"
+    info(f"› enrolling {device} into the TPM (PCR 7{', with a PIN' if with_pin else ''})")
+
+    command = ["systemd-cryptenroll", "--tpm2-device=auto", "--tpm2-pcrs=7"]
+    # the existing passphrase authorises adding the new keyslot; both it and
+    # the PIN travel on the environment rather than the command line, where
+    # /proc would expose them to every process on the live system
+    env = {"PASSWORD": passphrase, "PATH": "/usr/bin:/bin"}
+    if with_pin:
+        pin = ctx.user_credentials.get("tpm_pin")
+        if not pin:
+            raise RuntimeError("TPM+PIN was chosen but no tpm_pin is in user_credentials.json")
+        command.append("--tpm2-with-pin=yes")
+        # systemd reads the new PIN from NEWPIN, which is why this can run
+        # unattended at all - there is no terminal to prompt on here
+        env["NEWPIN"] = pin
+    command.append(str(device))
+
     result = subprocess.run(
-        ["systemd-cryptenroll", "--tpm2-device=auto", "--tpm2-pcrs=7", str(device)],
+        command,
         capture_output=True,
         text=True,
-        env={"PASSWORD": passphrase, "PATH": "/usr/bin:/bin"},
+        env=env,
     )
     if result.returncode != 0:
         # a failed enrolment leaves the passphrase keyslot untouched, so the

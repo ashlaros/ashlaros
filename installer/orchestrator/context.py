@@ -71,6 +71,17 @@ class InstallContext:
         return bool(self.ashlaros_install.get("encrypt"))
 
     @property
+    def tpm_unlock(self) -> str:
+        """How the disk unlocks: "none", "tpm", or "pin".
+
+        The configurator asks; hardware detection no longer decides. An
+        older configuration with no such key predates the question and gets
+        "none", which is the safe direction - a passphrase prompt rather
+        than an enrolment nobody asked for.
+        """
+        return str(self.ashlaros_install.get("tpm_unlock", "none"))
+
+    @property
     def autologin(self) -> bool:
         return bool(self.ashlaros_install.get("autologin"))
 

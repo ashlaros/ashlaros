@@ -172,7 +172,7 @@ encryption_form() {
 
   say "LUKS2 with your user password as the passphrase."
   if tpm_present; then
-    say --foreground 8 "A TPM is present: the passphrase is enrolled into it, so boots unlock without typing it."
+    say --foreground 8 "A TPM is present, so unlocking it without typing the passphrase is an option."
   else
     say --foreground 8 "No TPM found: you will type the passphrase at every boot."
   fi
@@ -183,7 +183,79 @@ encryption_form() {
     encrypt=true
   else
     encrypt=false
+    tpm_unlock=none
+    return
   fi
+
+  tpm_unlock_form
+}
+
+# How the disk unlocks, asked rather than decided by hardware detection.
+#
+# This used to enrol the TPM against PCR 7 whenever one was present, which
+# made a machine unlock silently forever because of a chip it happened to
+# have (#64). The tradeoff is personal - a desktop that never leaves the
+# house and a laptop want different answers - so it is a question, and the
+# table is on screen while it is answered rather than in documentation
+# somebody reads later.
+#
+# Asked once, here, because this is the moment the disk is encrypted. It
+# stays changeable afterwards: the settings TUI has the same three modes.
+tpm_unlock_form() {
+  tpm_present || { tpm_unlock=none; return; }
+
+  step "Disk unlock"
+
+  say "                  boot            defends drive   defends whole"
+  say "                  experience      theft           machine theft"
+  say "  passphrase      full phrase     yes             yes"
+  say "  TPM + PIN       short PIN       yes             yes (rate-limited)"
+  say "  TPM only        silent          yes             NO"
+  echo
+
+  # PCR 7 measures Secure Boot policy. With Secure Boot off - the normal
+  # state for a distribution Microsoft has not signed - it holds the same
+  # value for any boot media, so TPM-only defends a removed drive and not
+  # this machine. Said here because it changes what the silent option is
+  # worth on the hardware in front of the user.
+  if ! secure_boot_on; then
+    say --foreground 3 "Secure Boot is off on this machine, so a TPM-only unlock protects"
+    say --foreground 3 "a removed drive but not this laptop or desktop. A PIN closes that."
+    echo
+  fi
+
+  local choice
+  choice=$(gum choose --header "How should this disk unlock?" \
+    "Passphrase only - type it every boot" \
+    "TPM + PIN - a short PIN every boot" \
+    "TPM only - unlock silently")
+  case "$choice" in
+    "TPM + PIN"*) tpm_unlock=pin ;;
+    "TPM only"*) tpm_unlock=tpm ;;
+    *) tpm_unlock=none ;;
+  esac
+
+  if [[ $tpm_unlock == pin ]]; then
+    local pin confirm
+    while true; do
+      pin=$(gum input --password --placeholder "PIN" --header "A PIN for unlocking at boot") || continue
+      [[ -n $pin ]] || continue
+      confirm=$(gum input --password --placeholder "PIN again" --header "Confirm") || continue
+      [[ $pin == "$confirm" ]] && break
+      say --foreground 1 "Those did not match."
+    done
+    tpm_pin=$pin
+  fi
+}
+
+# Read from the firmware variable rather than parsed out of bootctl: the
+# efivar is the value itself, one byte, present on any UEFI machine. When
+# it cannot be read this answers "off", which warns rather than reassures.
+secure_boot_on() {
+  local var
+  var=$(echo /sys/firmware/efi/efivars/SecureBoot-*)
+  [[ -r $var ]] || return 1
+  [[ $(od -An -t u1 "$var" 2>/dev/null | awk '{ print $NF }') == "1" ]]
 }
 
 tpm_present() {
@@ -249,12 +321,23 @@ root_disk_of() {
 
 # CONFIRM
 
+# What the summary line says, from the choice rather than from whether a
+# TPM happens to be in the machine.
+encryption_summary() {
+  [[ $encrypt == true ]] || { echo "none"; return; }
+  case "$tpm_unlock" in
+    pin) echo "LUKS2 + TPM and a PIN" ;;
+    tpm) echo "LUKS2 + TPM, unlocks silently" ;;
+    *) echo "LUKS2, passphrase every boot" ;;
+  esac
+}
+
 confirm_form() {
   clear_logo
   echo
   printf 'Field,Value\nUser,%s\nHostname,%s\nAutologin,%s\nLocale,%s\nKeymap,%s\nTimezone,%s\nDisk,%s\nLayout,%s\nEncryption,%s\n' \
     "$username" "$hostname" "$autologin" "$locale" "$keymap" "$timezone" \
-    "$disk" "$filesystem" "$([[ $encrypt == true ]] && echo "LUKS2$(tpm_present && echo " + TPM")" || echo "none")" |
+    "$disk" "$filesystem" "$(encryption_summary)" |
     gum table -s "," -p | sed "s/^/${PADDING_LEFT_SPACES}/"
   echo
   say --foreground 1 "Everything on $disk will be erased. There is no recovery."
@@ -332,6 +415,7 @@ write_config() {
 	        "autologin": $autologin,
 	        "username": "$username",
 	        "encrypt": $encrypt,
+	        "tpm_unlock": "$tpm_unlock",
 	        "filesystem": "$filesystem",
 	        "root_obj_id": "$ROOT_OBJ_ID",
 	        "boot": { "esp_mount": "/boot" }
@@ -448,7 +532,7 @@ write_config() {
 	            "groups": ["input"],
 	            "sudo": true
 	        }
-	    ]$([[ $encrypt == true ]] && printf ',\n    "encryption_password": %s' "$password_json")
+	    ]$([[ $encrypt == true ]] && printf ',\n    "encryption_password": %s' "$password_json")$([[ -n $tpm_pin ]] && printf ',\n    "tpm_pin": %s' "$(printf '%s' "$tpm_pin" | jq -Rsa .)")
 	}
 	EOF
 
@@ -460,6 +544,10 @@ write_config() {
 username=""
 autologin=true
 encrypt=true
+# asked in tpm_unlock_form; none means the passphrase is the only key, and
+# it is what a machine with no TPM gets without being asked
+tpm_unlock=none
+tpm_pin=""
 filesystem="btrfs"
 
 while true; do
