@@ -39,6 +39,11 @@ ashlaros-keyring
 cachyos-keyring
 ashlaros-mirrorlist
 ashlaros-release
+# Rollback is a rescue-media procedure, so the command has to be ON the
+# rescue media. It lives in its own package rather than in
+# ashlaros-settings precisely so the live system can carry it without
+# pulling a desktop: `rollback` uses btrfs and findmnt, not snapper.
+ashlaros-snapshot
 
 # installer
 # extra/, not the v3 rebuild: cachyos-extra-v3 carried python-pydantic-core

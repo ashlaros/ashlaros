@@ -10,6 +10,9 @@ url="https://github.com/ashlaros/ashlaros"
 license=('GPL-3.0-or-later')
 groups=('ashlaros')
 depends=(
+    # the snapshot tool moved to its own package so the ISO can carry it
+    # for rescue-media rollback; the desktop still gets it through this
+    'ashlaros-snapshot'
     'sway'                    # window manager
     'swaybg'                  # wallpaper setter
     'swayidle'                # idle management daemon

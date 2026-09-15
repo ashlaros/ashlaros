@@ -1,0 +1,30 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+# Its own package, not part of ashlaros-settings, for one reason: the
+# `rollback` subcommand is a RESCUE-MEDIA procedure and must exist on the
+# rescue media. The ISO deliberately leaves ashlaros-settings out - the
+# live system is the installer plus a rescue environment, not a desktop -
+# so a rollback command shipped inside it was a command that could not be
+# run where it is needed. Found by booting the ISO against a real
+# installed disk: `zsh: command not found: ashlaros-snapshot`.
+#
+# Nothing here is desktop-specific. `rollback` deliberately does not use
+# snapper at all, only btrfs and findmnt, both already on the ISO.
+pkgname=ashlaros-snapshot
+pkgver=1
+pkgrel=1
+pkgdesc="Snapshots of the root subvolume, and the rollback that recovers one"
+arch=('any')
+url="https://github.com/ashlaros/ashlaros"
+license=('GPL-3.0-or-later')
+# btrfs-progs for rollback, util-linux for findmnt. snapper is an
+# optdepend rather than a dependency: create/list need it, rollback does
+# not, and the ISO carries no snapper.
+depends=('btrfs-progs' 'util-linux')
+optdepends=('snapper: taking and listing snapshots on an installed system')
+source=("ashlaros-snapshot")
+b2sums=('b23eea9833e7f1d2190656c8d8c4812b04517ea5a0ec433a2db2969cef4cd3d206b268b761bedcab4b6df0ec3f3a60315472be413c9983f72cbef618fb9cad17')
+
+package() {
+    install -Dm755 "$srcdir/ashlaros-snapshot" "$pkgdir/usr/bin/ashlaros-snapshot"
+}

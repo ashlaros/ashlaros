@@ -36,6 +36,8 @@ packages:
     arch: any
   ashlaros-mirrorlist:
     arch: any
+  ashlaros-snapshot:
+    arch: any
   ashlaros-release:
     arch: any
   ashlaros-settings:
