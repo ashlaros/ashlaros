@@ -1587,6 +1587,103 @@ network_entry() {
 # Nothing here writes /etc/xdg: that path is package-owned and a user edit
 # there is a .pacnew conflict on the next upgrade. Overrides go to the
 # user's own config, which replaces the shipped one wholesale.
+# 12. POWER PROFILES
+#
+# power-profiles-daemon is installed and its service enabled, and until now
+# nothing offered it: GNOME and KDE ship switchers, sway does not, so the
+# only way in was powerprofilesctl from a shell (#67).
+#
+# The list is read from the daemon rather than hardcoded. Which profiles
+# exist is hardware-dependent - `performance` is absent on some machines -
+# and a profile can be present but degraded, with a reason like lap-detect
+# or a thermal limit. That difference is the point: "unavailable" and
+# "silently doing nothing" look identical from a menu that assumes three.
+#
+# No root_run anywhere here: switching goes over D-Bus through polkit,
+# which the desktop session already satisfies.
+power_entry() {
+  local choice
+  while true; do
+    screen "Power"
+
+    local active
+    active=$(powerprofilesctl get 2>/dev/null)
+    if [[ -z $active ]]; then
+      oops "power-profiles-daemon is not answering."
+      say "  systemctl status power-profiles-daemon"
+      pause
+      return 0
+    fi
+    say "Active: $active"
+
+    # `powerprofilesctl list` prints a block per profile: the name ends
+    # with a colon, the active one is marked with a leading *, and a
+    # Degraded: line carries "no" or the reason. Parsed in one pass.
+    local -a entries=()
+    local name="" reason="" line
+    while IFS= read -r line; do
+      case $line in
+        *:)
+          # flush the previous block before starting another
+          if [[ -n $name ]]; then
+            if [[ -n $reason ]]; then
+              entries+=("$name - degraded: $reason")
+            else
+              entries+=("$name")
+            fi
+          fi
+          name=${line%:}
+          name=${name#\*}
+          name=${name// /}
+          reason=""
+          ;;
+        *Degraded:*)
+          # the value is separated by whitespace that is tabs as often as
+          # spaces, so trimming one leading space left "  no" in place and
+          # every healthy profile was labelled degraded
+          reason=${line#*Degraded:}
+          reason=${reason//[$' \t']/}
+          [[ $reason == "no" ]] && reason=""
+          ;;
+      esac
+    done < <(powerprofilesctl list 2>/dev/null)
+
+    # the last block has no successor to flush it
+    if [[ -n $name ]]; then
+      if [[ -n $reason ]]; then
+        entries+=("$name - degraded: $reason")
+      else
+        entries+=("$name")
+      fi
+    fi
+
+    if ((${#entries[@]} == 0)); then
+      oops "The daemon listed no profiles."
+      pause
+      return 0
+    fi
+
+    echo
+    entries+=("Back")
+    choice=$(gum choose --header "Power profile" "${entries[@]}") || return 0
+    [[ $choice == "Back" ]] && return 0
+
+    # the label may carry a degraded reason; the profile is the first word
+    local target=${choice%% *}
+    [[ $target == "$active" ]] && continue
+
+    local out
+    if out=$(powerprofilesctl set "$target" 2>&1); then
+      # the bar reads the same daemon, so tell it to look now rather than
+      # leaving the user watching a stale profile until the next poll
+      waybar-signal power >/dev/null 2>&1 || true
+    else
+      oops "${out:-could not set $target}"
+      pause
+    fi
+  done
+}
+
 wluma_entry() {
   local user_config="${XDG_CONFIG_HOME:-$HOME/.config}/wluma/config.toml"
   local choice
@@ -1725,6 +1822,15 @@ main() {
       [[ -n $(ls -A /sys/class/backlight 2>/dev/null) ]]; then
       entries+=("Adaptive brightness")
     fi
+    # Built only where the daemon answers. power-profiles-daemon is
+    # installed on every desktop, so the binary existing proves nothing;
+    # asking it is what distinguishes a machine it can drive from one it
+    # cannot. Not gated on a backlight or a battery - profiles are neither
+    # laptop- nor battery-specific, and a desktop can switch them too.
+    if command -v powerprofilesctl >/dev/null &&
+      powerprofilesctl get >/dev/null 2>&1; then
+      entries+=("Power")
+    fi
     # only when there is something to say - an entry that always reports
     # "nothing to do" is an entry people stop reading
     [[ -n $(pacman -Qtdq 2>/dev/null) ]] && entries+=("Unneeded packages")
@@ -1749,6 +1855,7 @@ main() {
       "Time and date") time_menu ;;
       "Hardware profiles") hardware_menu ;;
       "Adaptive brightness") wluma_entry ;;
+      "Power") power_entry ;;
       "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
       "Face unlock") face_entry ;;

@@ -22,6 +22,7 @@ signal[pacman]=14
 signal[idle]=15
 signal[weather]=16
 signal[theme]=17
+signal[power]=18
 
 number=${signal[${1}]}
 

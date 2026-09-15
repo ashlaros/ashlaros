@@ -33,6 +33,7 @@
         // "temperature",
         // "memory",
         "battery",
+        "custom/power-profile",
         // connecting
         "network",
         "bluetooth",
@@ -323,6 +324,27 @@
         "on-click-right": "/usr/share/sway/scripts/dnd.sh restore",
         "exec": "/usr/share/sway/scripts/dnd.sh status",
         "signal": 11
+    },
+    "custom/power-profile": {
+        // power-profiles-daemon was installed and enabled with nothing
+        // offering it (#67). exec-if hides the module on a machine the
+        // daemon cannot drive, which is the same predicate the settings
+        // entry uses - so the bar and the menu agree about whether this
+        // machine has profiles at all.
+        "interval": "once",
+        "tooltip": true,
+        "return-type": "json",
+        "format": "{icon}",
+        "format-icons": {
+            "power-saver": "󰛅",
+            "balanced": "󰉁",
+            "performance": "󰸧"
+        },
+        "exec": "/usr/share/sway/scripts/power-profile.sh status",
+        "exec-if": "/usr/share/sway/scripts/power-profile.sh check",
+        "on-click": "/usr/share/sway/scripts/power-profile.sh toggle",
+        "on-click-right": "swaymsg exec \\$settings",
+        "signal": 18
     },
     "custom/adaptive-light": {
         "interval": "once",
