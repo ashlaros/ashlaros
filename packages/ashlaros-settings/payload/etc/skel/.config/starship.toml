@@ -1,0 +1,107 @@
+# The prompt. starship is a hard dependency and .zshrc already runs
+# `starship init zsh`, so until now every installed system got starship's
+# stock prompt and no mark at all (#70).
+#
+# manjaro-sway drew this with powerlevel10k's os_icon, a single Nerd Font
+# codepoint somebody upstreamed for Manjaro. We have no such codepoint and
+# p10k is AUR-only and unmaintained by its own README, so the vehicle is
+# starship and the mark is written out here.
+#
+# Why three glyphs and not the logo: branding/logo.txt is 40 columns wide
+# and its offset joints are 5% of that. Downscaled to a single cell every
+# course comes out solid, and a one-cell mark is a filled rectangle - a
+# block, not our logo.
+#
+# The mark is U+2584 U+2588 U+2580 (lower half, full, upper half): a solid
+# centre course with the one below stepping down and the one above
+# stepping up. That is the offset joint the logo is built from, at the one
+# size a prompt has room for.
+#
+# Not U+259E, which is the obvious pick and looks right in a table: in
+# ttf-jetbrains-mono-nerd the quadrant is drawn as two SMALL offset
+# squares that do not fill the cell, so at prompt size it reads as two
+# specks or a rendering glitch rather than as stone. Rendered at 28px
+# against the real font before choosing, which is the only way to tell -
+# every candidate looks equally plausible written down.
+#
+# Sextants (U+1FB00-1FB3B) would draw the real three-course mark, and they
+# are not in ttf-jetbrains-mono-nerd nor in any font we ship - checked with
+# fc-list against the whole set, there is no fallback either. Using them
+# would mean patching a font in the build pipeline for one glyph.
+#
+# Deliberately NOT the [os] module. It is disabled by default, and with
+# our ID=ashlaros it resolves to the Linux arm - os_info has no match for
+# us and falls back - so the key to override would be `Linux`, not the
+# `Unknown` everyone guesses. It also costs an OS probe per prompt to
+# produce a constant, since only one distro ever reads this file.
+#
+# starship needs SIX-digit hex. It accepts a 3-digit #eee without
+# complaint and then silently drops the entire style string it appears in,
+# so the mark renders unstyled - measured, not guessed. palette.conf spells
+# the foreground #eee, so anything copying it verbatim breaks this way.
+#
+# Colours are branding/palette.conf. This file is regenerated on a theme
+# switch by generate-starship-config.sh, so edits here are overwritten -
+# put your own in ~/.config/starship.toml after disabling the theme hook,
+# or accept that the prompt follows the theme.
+
+format = """
+[▄█▀ ](fg:#eeeeee bg:#282828)\
+[](fg:#282828 bg:#141a1b)\
+[ $directory](bg:#141a1b)\
+[](fg:#141a1b)\
+$git_branch\
+$git_status\
+$fill\
+$cmd_duration\
+$line_break\
+$character"""
+
+# starship truncates to 3 components by default and silently drops the
+# repo name with it; truncate_to_repo keeps the root visible, which is the
+# part that says which project this is
+[directory]
+style = "fg:#eeeeee bg:#141a1b"
+format = "[$path]($style)[$read_only]($read_only_style)"
+truncation_length = 3
+truncate_to_repo = true
+read_only = " ro"
+read_only_style = "fg:#8a8f98 bg:#141a1b"
+
+[git_branch]
+symbol = " "
+style = "fg:#8a8f98"
+format = " [$symbol$branch]($style)"
+
+# The default git_status runs several git calls per prompt; these are the
+# states worth a glyph in a prompt that has to render before you type.
+[git_status]
+style = "fg:#8a8f98"
+format = " [$all_status$ahead_behind]($style)"
+conflicted = "!"
+untracked = "?"
+modified = "*"
+staged = "+"
+renamed = "»"
+deleted = "x"
+stashed = "$"
+ahead = "^${count}"
+behind = "v${count}"
+diverged = "^${ahead_count}v${behind_count}"
+
+# pushes the duration to the right edge, which is where a number you only
+# glance at belongs
+[fill]
+symbol = " "
+
+[cmd_duration]
+min_time = 2000
+style = "fg:#8a8f98"
+format = "[$duration]($style)"
+
+# The prompt character carries success/failure, so a command that failed
+# says so on the line you are about to type on rather than in $?.
+[character]
+success_symbol = "[❯](fg:#8a8f98)"
+error_symbol = "[❯](fg:#eeeeee)"
+vimcmd_symbol = "[❮](fg:#8a8f98)"

@@ -45,6 +45,9 @@ set $generate_waybar_style $script_path/generate-waybar-style.sh "$background-co
 # aerc is an optdepend, so this writes a styleset for a client that may not
 # be installed - cheap, and it means mail is themed the moment it is
 set $generate_aerc_styleset $script_path/generate-aerc-styleset.sh "$background-color" "$text-color" "$accent-color" "$color8" "$color9"
+# starship re-reads its config every prompt, so this is the one generator
+# whose output reaches a shell that is already open
+set $generate_starship_config $script_path/generate-starship-config.sh "$background-color" "$text-color" "$accent-color" "$color8"
 set $apply_kvantum_theme kvantummanager --set "$kvantum-theme"
 
 # Terminal emulator
