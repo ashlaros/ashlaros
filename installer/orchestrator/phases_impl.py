@@ -660,6 +660,20 @@ def use_systemd_initramfs(ctx: InstallContext) -> None:
 
     udev/keymap/consolefont have systemd equivalents; the whole set has to
     move together, because sd-encrypt requires systemd to have run.
+
+    `autodetect` goes too, and that one is not cosmetic. It prunes the
+    initramfs to the modules the machine running mkinitcpio is using - and
+    mkinitcpio runs under arch-chroot on the live ISO, so the pruning is
+    against the INSTALLER's hardware, not the target's. Measured on a real
+    install: the initramfs carried exactly one DRM driver, bochs.ko, which
+    is what the ISO's own -vga std adapter uses. A machine that boots on
+    anything else (virtio_gpu under Gnome Boxes, i915, amdgpu) gets an
+    initramfs with no driver for its display, and early KMS has nothing to
+    bring up - which is a black screen with quiet+splash on.
+
+    The cost is a larger initramfs, since every module ships rather than
+    the detected subset. That is the right trade for an image built on one
+    machine and booted on another.
     """
     conf = ctx.target / "etc/mkinitcpio.conf"
     replacements = {
@@ -667,7 +681,9 @@ def use_systemd_initramfs(ctx: InstallContext) -> None:
         "keymap": "sd-vconsole",
         "encrypt": "sd-encrypt",
     }
-    dropped = {"consolefont"}  # sd-vconsole covers both font and keymap
+    # sd-vconsole covers both font and keymap; autodetect is wrong here
+    # because this runs on the installer's hardware, not the target's
+    dropped = {"consolefont", "autodetect"}
 
     lines = []
     for line in conf.read_text().splitlines():
