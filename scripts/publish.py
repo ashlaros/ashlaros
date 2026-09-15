@@ -22,6 +22,7 @@ import glob
 import hashlib
 import os
 import subprocess
+import tarfile
 import sys
 
 import boto3
@@ -110,6 +111,30 @@ def download_databases(s3, bucket: str, prefix: str, pkg_dir: str) -> None:
             log(f"no {name} yet; repo-add will create one")
 
 
+def referenced_by(db_path: str) -> set[str]:
+    """The package filenames the published database points readers at.
+
+    Read before repo-add rewrites it. An object in the bucket that this
+    set does not contain has never been handed to a client: nothing links
+    it, so nothing has cached it, and replacing it cannot corrupt anything
+    somebody holds.
+    """
+    names: set[str] = set()
+    if not os.path.exists(db_path):
+        return names
+    with tarfile.open(db_path) as archive:
+        for member in archive:
+            if not member.name.endswith("/desc"):
+                continue
+            handle = archive.extractfile(member)
+            if handle is None:
+                continue
+            body = handle.read().decode("utf-8", "replace").splitlines()
+            if "%FILENAME%" in body:
+                names.add(body[body.index("%FILENAME%") + 1].strip())
+    return names
+
+
 def prune_superseded(s3, bucket: str, prefix: str, published: list[str]) -> None:
     """Drop older versions of the packages just published.
 
@@ -193,6 +218,9 @@ def publish(s3, bucket: str, arch: str, pkg_dir: str, packages: list[str], key: 
     db_file = os.path.join(pkg_dir, f"{DB_NAME}.db.tar.gz")
 
     download_databases(s3, bucket, prefix, pkg_dir)
+    # Read before repo-add rewrites it: these are the filenames the LIVE
+    # database points readers at.
+    live = referenced_by(db_file)
 
     # --include-sigs records each package's signature in the database, as
     # every Arch repository does: tooling expects the field, and pacman -Si
@@ -206,7 +234,15 @@ def publish(s3, bucket: str, arch: str, pkg_dir: str, packages: list[str], key: 
 
     for package in packages:
         name = os.path.basename(package)
-        refuse_overwrite(s3, bucket, prefix + name, package)
+        # Only what the live database actually names. A previous run that
+        # uploaded objects and then died before the database left them
+        # orphaned - nothing links them, no client has ever been handed
+        # one - and refusing to replace those made every retry fail on
+        # whatever the last attempt got through, one package per run. The
+        # guard exists for objects readers cache as immutable, which is
+        # exactly the set the database references.
+        if name in live:
+            refuse_overwrite(s3, bucket, prefix + name, package)
         s3.upload_file(package, bucket, prefix + name, Config=SINGLE_PART)
         log(f"{arch}: uploaded {name}")
         signature = package + ".sig"
