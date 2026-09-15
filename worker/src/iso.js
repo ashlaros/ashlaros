@@ -315,11 +315,24 @@ export const site = {
   },
 
   listing: async (bucket) => {
-    const listed = await bucket.list({ limit: 1000 });
+    // Paginated, because a single list() caps at 1000 keys and answers
+    // truncated without saying so. Every release adds an image, a
+    // checksum and a signature, so the cap is reached by accumulation
+    // rather than by anything going wrong - and R2 lists lexically, so
+    // `latest/` sorts last and would be the first thing to vanish from
+    // the page, taking the screenshots and the tour with it.
+    const objects = [];
+    let cursor;
+    do {
+      const page = await bucket.list({ limit: 1000, cursor });
+      objects.push(...page.objects);
+      cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor);
+
     const byVersion = new Map();
     const shots = [];
     let tour = null;
-    for (const object of listed.objects) {
+    for (const object of objects) {
       const version = versionOf(object.key);
       if (!version) continue;
       // latest/ is an alias of an image already listed under its version,

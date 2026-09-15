@@ -188,3 +188,45 @@ test('a ranged request reports which bytes it answered with', async () => {
   assert.equal(res.headers.get('content-range'), 'bytes 100-199/334986');
   assert.equal(res.headers.get('content-length'), '100');
 });
+
+test('a resumed download across a new release restarts instead of splicing', async () => {
+  // `latest/` is a real object repointed at every release, so a client
+  // that resumes across one holds a validator for an image that is no
+  // longer there. Answering 206 would hand it the tail of a DIFFERENT
+  // ISO to append to the head it already has: a file that fails its
+  // checksum and looks like a corrupt download rather than a moved target.
+  const stale = new Request('https://iso.ashlaros.download/latest/ashlaros.iso', {
+    headers: { range: 'bytes=1000-2000', 'if-range': '"an-older-release"' },
+  });
+  const res = await worker.fetch(stale, env());
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-range'), null);
+});
+
+test('a resumed download of an unchanged object still resumes', async () => {
+  const current = new Request('https://iso.ashlaros.download/latest/ashlaros.iso', {
+    headers: { range: 'bytes=1000-2000', 'if-range': '"e"' },
+  });
+  const res = await worker.fetch(current, env());
+  assert.equal(res.status, 206);
+  assert.match(res.headers.get('content-range'), /^bytes 1000-2000\//);
+});
+
+test('the index lists every version, not just the first page', async () => {
+  // R2 caps a list at 1000 keys and lists lexically, so `latest/` sorts
+  // last: without pagination the screenshots and the tour are the first
+  // things to disappear, then the newest releases.
+  const many = [];
+  for (let i = 0; i < 400; i += 1) {
+    const v = `2026.01.${String(i).padStart(3, '0')}`;
+    many.push(`${v}/ashlaros-${v}-x86_64.iso`, `${v}/SHA256SUMS`, `${v}/SHA256SUMS.sig`);
+  }
+  many.push('latest/ashlaros.iso', 'latest/screenshots/desktop.png');
+
+  const bucket = bucketOf(many);
+  const res = await worker.fetch(req(''), { PACKAGES: bucketOf([]), ISO: bucket });
+  const body = await res.text();
+  // the last version lexically, which is exactly what a truncated listing loses
+  assert.match(body, /2026\.01\.399/);
+  assert.match(body, /screenshots\/desktop\.png/);
+});

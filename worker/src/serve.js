@@ -128,8 +128,30 @@ export const notFound = () => new Response('not found', { status: 404 });
  * a resumed 1.7 GB ISO download depends on both.
  */
 export async function serveObject(request, bucket, key, extraHeaders = {}) {
+  // If-Range decides whether a resumed download may continue, and R2 does
+  // not apply it: a stale validator still came back 206. That is the
+  // dangerous answer for `latest/`, which is a real object repointed at
+  // every release - a client resuming across one would splice bytes from
+  // two different ISOs into a file that fails its checksum and looks like
+  // a corrupt download rather than a moved target.
+  //
+  // So it is evaluated here: a validator that no longer matches drops the
+  // range and serves the whole current object, which is what RFC 9110
+  // asks for and what makes the client start over instead of stitching.
+  const ifRange = request.headers.get('if-range');
+  let wanted = request.headers;
+  if (ifRange && request.headers.get('range')) {
+    const current = await bucket.head(key);
+    if (!current) return notFound();
+    // an entity-tag comparison; a weak tag never matches for a range
+    if (ifRange.trim() !== current.httpEtag) {
+      wanted = new Headers(request.headers);
+      wanted.delete('range');
+    }
+  }
+
   const object = await bucket.get(key, {
-    range: request.headers,
+    range: wanted,
     onlyIf: request.headers,
   });
   if (!object) return notFound();
@@ -154,7 +176,10 @@ export async function serveObject(request, bucket, key, extraHeaders = {}) {
   }
   for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
 
-  const status = object.body ? (request.headers.get('range') ? 206 : 200) : 304;
+  // `ranged`, not the request header: a range dropped by the If-Range
+  // check above must be answered 200 with the whole object, and saying
+  // 206 there would tell the client its stale offsets were honoured.
+  const status = object.body ? (ranged ? 206 : 200) : 304;
   return new Response(request.method === 'HEAD' ? null : object.body, { status, headers });
 }
 
