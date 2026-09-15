@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AshlarOS — Privacy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <style>
+      /* Same design language as index.html, and deliberately a second copy
+         rather than a shared stylesheet: both pages ship as static assets
+         with no build step, and one extra file to fetch is worse than a
+         few duplicated rules. */
+      * {
+        color: #eee;
+        text-decoration: none;
+      }
+
+      body {
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        background-size: cover;
+        background-position: center right;
+        margin: 0;
+        font-family: Roboto, Helvetica, Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        background-image: url("background.svg");
+        background-color: #282828;
+      }
+
+      h1 {
+        background: #141a1b;
+        color: #8a8f98;
+        font-size: 0.8rem;
+        font-weight: 500;
+        line-height: 30px;
+        padding: 0 20px;
+        margin: 0;
+      }
+
+      h2 {
+        color: #8a8f98;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin: 2rem 0 0.4rem;
+      }
+
+      #content {
+        margin: 20px;
+        max-width: 46rem;
+      }
+
+      a.link {
+        font-family: monospace;
+        text-shadow: 2px 2px #282828;
+      }
+
+      a.link:hover {
+        color: #c9ccd1;
+      }
+
+      p {
+        line-height: 1.6;
+        max-width: 40rem;
+      }
+
+      pre,
+      code {
+        color: #c9ccd1;
+      }
+
+      ul {
+        line-height: 1.8;
+        padding-left: 1.2rem;
+        max-width: 40rem;
+      }
+
+      .muted {
+        color: #8a8f98;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AshlarOS — Privacy</h1>
+    <main id="content">
+      <p>
+        AshlarOS is a Linux distribution. It runs on your machine, and the
+        parts of it that touch a network do so between your machine and
+        whoever you told them to talk to. There is no AshlarOS account, no
+        telemetry in the installed system, and no server of ours in the
+        middle of anything you connect to.
+      </p>
+
+      <h2>Accounts you connect</h2>
+      <p>
+        Settings → <strong>Calendar</strong> and Settings →
+        <strong>Mail</strong> configure software on your computer
+        (<code>vdirsyncer</code>, <code>khal</code>, <code>aerc</code>) to
+        talk to a provider you choose — your own server, or Fastmail,
+        iCloud, Google and so on.
+      </p>
+      <ul>
+        <li>
+          <strong>Credentials stay on your machine.</strong> Passwords go
+          into your login keyring, or into a file readable only by you. We
+          never receive them.
+        </li>
+        <li>
+          <strong>Calendar and mail data stay on your machine.</strong> They
+          are synced directly between your computer and your provider.
+          Nothing is copied to us, and there is nothing of ours in the path
+          to copy it with.
+        </li>
+        <li>
+          <strong>Where OAuth is used</strong>, the sign-in happens in your
+          browser with the provider. The resulting token is written to a
+          file on your computer and used from there. We do not see it, hold
+          it, or refresh it on your behalf.
+        </li>
+        <li>
+          <strong>Nothing is shared with third parties</strong>, because
+          nothing is collected to share. Your data is not sold, transferred,
+          or used to train anything.
+        </li>
+      </ul>
+      <p class="muted">
+        Your provider has its own privacy policy, and it governs what
+        happens to the data once it reaches them. That relationship is
+        between you and them; we are not a party to it.
+      </p>
+
+      <h2>What this website does record</h2>
+      <p>
+        Two things, both on
+        <code>iso.ashlaros.download</code> and
+        <code>packages.ashlaros.download</code>:
+      </p>
+      <ul>
+        <li>
+          <strong>A count of completed image downloads</strong> — the
+          filename of the image and the number one. No IP address, no
+          browser, no identifier of any kind is recorded with it, so the
+          counts cannot be attributed to anyone.
+        </li>
+        <li>
+          <strong>Leaderboard entries for the game on the download page</strong>
+          — the name you type into it, your score, and the day. Type
+          anything you like; there is no account behind it and nothing links
+          it to you. Pick a pseudonym if you would rather.
+        </li>
+      </ul>
+      <p>
+        The site is served by Cloudflare, which processes requests on our
+        behalf and keeps its own operational logs. We do not add analytics,
+        advertising, or tracking of any kind on top of that — there are no
+        cookies and no third-party scripts on these pages.
+      </p>
+
+      <h2>The installed system</h2>
+      <p>
+        A fresh installation phones nothing home. It checks for package
+        updates against our repository and the Arch and CachyOS mirrors,
+        which is an ordinary package manager talking to a file server, and
+        it does so because you or your update timer asked it to.
+      </p>
+      <p>
+        Everything else that leaves the machine is something you configured:
+        a calendar account, a mail account, a weather location, a model
+        provider for the Ask key. Each is off until you turn it on, and
+        each talks to the service you named.
+      </p>
+
+      <h2>Changes and contact</h2>
+      <p>
+        This page is part of the
+        <a class="link" href="https://github.com/ashlaros/ashlaros"
+          >source repository</a
+        >, so its history is public and every change to it is a commit you
+        can read. Questions and corrections belong in an
+        <a class="link" href="https://github.com/ashlaros/ashlaros/issues"
+          >issue</a
+        >, or by mail to
+        <a class="link" href="mailto:build@ashlaros.download"
+          >build@ashlaros.download</a
+        >.
+      </p>
+      <p class="muted">Last updated 15 September 2026.</p>
+      <p><a class="link" href="/">← back</a></p>
+    </main>
+  </body>
+</html>
