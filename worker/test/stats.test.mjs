@@ -49,21 +49,21 @@ test('a HEAD is not a download', () => {
   assert.equal(counts('2026.09.11/ashlaros.iso', 200, 'HEAD'), false);
 });
 
-test('an image taken from latest/ is counted apart from a pinned one', () => {
-  // latest/ carries no version in its key, so attributing it to whichever
-  // image is newest would be a guess presented as data
+test('an image taken from latest/ is not counted', () => {
+  // latest/ is an alias, not a version: every download through it redirects
+  // to the versioned path and is counted there
   const env = { ANALYTICS_ENGINE: analytics() };
   record(env, 'latest/ashlaros.iso', 200, 'GET');
   record(env, '2026.09.11/ashlaros-2026.09.11-x86_64.iso', 200, 'GET');
   assert.deepEqual(
     env.ANALYTICS_ENGINE.written.map((p) => p.blobs[2]),
-    ['latest', 'version'],
+    ['version'],
   );
 });
 
 test('serving an iso counts it, serving a package does not', async () => {
-  const isoEnv = { ISO: bucketOf(['latest/ashlaros.iso']), ANALYTICS_ENGINE: analytics() };
-  await worker.fetch(get('iso.ashlaros.download', 'latest/ashlaros.iso'), isoEnv, {});
+  const isoEnv = { ISO: bucketOf(['2026.09.11/ashlaros.iso']), ANALYTICS_ENGINE: analytics() };
+  await worker.fetch(get('iso.ashlaros.download', '2026.09.11/ashlaros.iso'), isoEnv, {});
   assert.equal(isoEnv.ANALYTICS_ENGINE.written.length, 1);
 
   // every `pacman -Sy` is a database fetch; that volume would dwarf the signal
