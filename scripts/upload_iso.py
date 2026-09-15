@@ -15,6 +15,7 @@ and neither can overwrite the other's.
 import argparse
 import glob
 import os
+import re
 import sys
 
 import boto3
@@ -92,26 +93,69 @@ def main() -> int:
         )
         log(f"uploaded {args.version}/{name}")
 
-    # last, and by server-side copy rather than a second upload of the same
-    # bytes: until this points at the new image, latest/ still serves the
-    # previous one whole
+    # Last, and a pointer rather than a copy of the image. This used to be
+    # a server-side copy: 1.7 GB duplicated per release, and worse than
+    # wasteful. `latest/` is repointed every release, so a client resuming
+    # a download across one asked for a byte range of an object that had
+    # been replaced underneath it - serve.js honours If-Range to refuse
+    # exactly that, and the refusal is a restarted download either way.
+    #
+    # The pointer holds the version string and nothing else. The worker
+    # reads it and answers 302 to the versioned object, which is immutable,
+    # so a resume targets a URL that cannot change under it. It also means
+    # this key never needs pruning: it is the same dozen bytes forever.
     for path, _, alias in found:
         name = os.path.basename(path)
-        source = f"{args.version}/{name}"
-        s3.copy_object(
+        s3.put_object(
             Bucket=bucket,
             Key=alias,
-            CopySource={"Bucket": bucket, "Key": source},
+            Body=args.version.encode(),
+            ContentType="text/plain",
+            # the pointer changes every release and is tiny; a cache that
+            # held it would pin the whole site to an old image
+            CacheControl="no-cache",
         )
-        # a copy that returned is not necessarily a copy that landed whole;
-        # the size is the cheapest thing that would catch a truncated one
-        expected = os.path.getsize(path)
-        actual = s3.head_object(Bucket=bucket, Key=alias)["ContentLength"]
-        if actual != expected:
-            raise SystemExit(f"{alias} is {actual} bytes, expected {expected}")
-        log(f"{alias} now points at {source} ({actual} bytes)")
+        log(f"{alias} -> {args.version}/{name}")
+
+    prune_old_versions(s3, bucket, keep=5)
 
     return 0
+
+
+def prune_old_versions(s3, bucket: str, keep: int) -> None:
+    """Delete all but the newest `keep` release prefixes.
+
+    Nothing removed these before, and a daily build publishes an image a
+    day. Versions are YYYY.MM.DD, so lexical order is chronological and
+    the newest `keep` are simply the tail.
+
+    Whole prefixes, not just the images: a version's checksum and
+    signature are worthless once its image is gone, and leaving them
+    behind is how a bucket accumulates files nothing references.
+
+    `latest/` is never a candidate - it is not a version prefix, and it
+    points at the newest release, which is by definition kept.
+    """
+    versions = set()
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Delimiter="/"):
+        for prefix in page.get("CommonPrefixes", []):
+            name = prefix["Prefix"].rstrip("/")
+            # a release prefix and nothing else: latest/, screenshots and
+            # anything added later must not be swept up by this
+            if re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", name):
+                versions.add(name)
+
+    doomed = sorted(versions)[:-keep] if len(versions) > keep else []
+    if not doomed:
+        log(f"{len(versions)} release(s) in the bucket; nothing to prune")
+        return
+
+    for version in doomed:
+        for page in paginator.paginate(Bucket=bucket, Prefix=f"{version}/"):
+            for obj in page.get("Contents", []):
+                s3.delete_object(Bucket=bucket, Key=obj["Key"])
+                log(f"pruned {obj['Key']}")
 
 
 if __name__ == "__main__":

@@ -16,7 +16,9 @@ const KEYS = [
   '2026.09.10/ashlaros-2026.09.10-x86_64.iso',
   '2026.09.10/SHA256SUMS',
   '2026.08.01/ashlaros-2026.08.01-x86_64.iso',
+  '2026.09.10/ashlaros-2026.09.10-aarch64-rpi5.img.xz',
   'latest/ashlaros.iso',
+  'latest/ashlaros-rpi5.img.xz',
   'latest/screenshots/desktop.png',
   'latest/screenshots/tiling.png',
   'latest/video/tour.webm',
@@ -180,33 +182,58 @@ test('a media file carries the length and range support a player needs', async (
 });
 
 test('a ranged request reports which bytes it answered with', async () => {
-  const request = new Request('https://iso.ashlaros.download/latest/ashlaros.iso', {
-    headers: { range: 'bytes=100-199' },
-  });
+  // the versioned key, because latest/ is a pointer now and answers 302
+  const request = new Request(
+    'https://iso.ashlaros.download/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
+    { headers: { range: 'bytes=100-199' } },
+  );
   const res = await worker.fetch(request, env(), {});
   assert.equal(res.status, 206);
   assert.equal(res.headers.get('content-range'), 'bytes 100-199/334986');
   assert.equal(res.headers.get('content-length'), '100');
 });
 
+test('latest is a redirect to the versioned image, not the image', async () => {
+  // It used to be a full server-side copy - 1.7 GB duplicated per release,
+  // and repointed underneath anyone downloading it. A pointer plus a 302
+  // sends the client to an immutable versioned URL instead.
+  const res = await worker.fetch(req('latest/ashlaros.iso'), env());
+  assert.equal(res.status, 302);
+  assert.equal(
+    res.headers.get('location'),
+    '/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
+  );
+  // a cached hop would pin every visitor to whichever release they first saw
+  assert.match(res.headers.get('cache-control'), /no-cache/);
+});
+
+test('the pi alias redirects to its own versioned name, not the iso one', async () => {
+  const res = await worker.fetch(req('latest/ashlaros-rpi5.img.xz'), env());
+  assert.equal(res.status, 302);
+  assert.equal(
+    res.headers.get('location'),
+    '/2026.09.10/ashlaros-2026.09.10-aarch64-rpi5.img.xz',
+  );
+});
+
 test('a resumed download across a new release restarts instead of splicing', async () => {
-  // `latest/` is a real object repointed at every release, so a client
-  // that resumes across one holds a validator for an image that is no
-  // longer there. Answering 206 would hand it the tail of a DIFFERENT
-  // ISO to append to the head it already has: a file that fails its
-  // checksum and looks like a corrupt download rather than a moved target.
-  const stale = new Request('https://iso.ashlaros.download/latest/ashlaros.iso', {
-    headers: { range: 'bytes=1000-2000', 'if-range': '"an-older-release"' },
-  });
+  // The versioned object is immutable, so this is the guarantee that
+  // survives: a validator that no longer matches drops the range rather
+  // than handing back the tail of a different file to append.
+  const stale = new Request(
+    'https://iso.ashlaros.download/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
+    { headers: { range: 'bytes=1000-2000', 'if-range': '"an-older-release"' } },
+  );
   const res = await worker.fetch(stale, env());
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('content-range'), null);
 });
 
 test('a resumed download of an unchanged object still resumes', async () => {
-  const current = new Request('https://iso.ashlaros.download/latest/ashlaros.iso', {
-    headers: { range: 'bytes=1000-2000', 'if-range': '"e"' },
-  });
+  const current = new Request(
+    'https://iso.ashlaros.download/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
+    { headers: { range: 'bytes=1000-2000', 'if-range': '"e"' } },
+  );
   const res = await worker.fetch(current, env());
   assert.equal(res.status, 206);
   assert.match(res.headers.get('content-range'), /^bytes 1000-2000\//);

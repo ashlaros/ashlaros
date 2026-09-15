@@ -225,6 +225,29 @@ export function handler(site) {
     const key = site.resolveKey(requested);
     if (key === null) return notFound();
 
+    // An alias is a pointer holding a version string, not the image. It
+    // is read and redirected rather than served, so a download targets an
+    // immutable versioned URL: `latest/` is repointed every release, and a
+    // resume across one used to ask for a byte range of an object that had
+    // been replaced underneath it.
+    if (site.isAlias?.(key)) {
+      const pointer = await bucket.get(key);
+      if (!pointer) return notFound();
+      const version = (await pointer.text()).trim();
+      // a pointer that is not a version is a broken publish; 404 beats
+      // redirecting somewhere arbitrary
+      if (!/^\d{4}\.\d{2}\.\d{2}$/.test(version)) return notFound();
+      const name = key.slice(key.indexOf('/') + 1);
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: `/${version}/${site.aliasTarget(version, name)}`,
+          // the pointer moves every release, so nothing may cache the hop
+          'cache-control': 'no-cache',
+        },
+      });
+    }
+
     if (site.isListing(key)) return site.listing(bucket, key);
 
     const response = await serveObject(request, bucket, key, site.headers(key));

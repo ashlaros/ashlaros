@@ -78,17 +78,18 @@ test('serving an iso counts it, serving a package does not', async () => {
 });
 
 test('counting never breaks the download it is counting', async () => {
+  // the versioned key: latest/ is a pointer that redirects, and a 302
+  // transfers nothing to count
+  const key = '2026.09.10/ashlaros-2026.09.10-x86_64.iso';
   const env = {
-    ISO: bucketOf(['latest/ashlaros.iso']),
+    ISO: bucketOf([key]),
     ANALYTICS_ENGINE: {
       writeDataPoint: () => {
         throw new Error('analytics is down');
       },
     },
   };
-  const response = await worker.fetch(
-    get('iso.ashlaros.download', 'latest/ashlaros.iso'), env, {},
-  );
+  const response = await worker.fetch(get('iso.ashlaros.download', key), env, {});
   assert.equal(response.status, 200);
 });
 

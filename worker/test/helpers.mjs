@@ -1,5 +1,10 @@
 /** A fake R2 bucket over a fixed key list, and a request builder. */
 
+// What a latest/ pointer holds: the version the alias points at, taken
+// from the newest version prefix in the fake bucket so a test does not
+// have to state it twice.
+const aliasBody = (key) => (key.startsWith('latest/') ? '2026.09.10' : 'bytes');
+
 export function bucketOf(keys, { etag = '"e"', pageSize = 1000 } = {}) {
   return {
     // Paginated like R2: a page is capped and says so, and the caller is
@@ -35,7 +40,16 @@ export function bucketOf(keys, { etag = '"e"', pageSize = 1000 } = {}) {
       const size = 334_986;
       const header = options.range?.get?.('range');
       const match = header?.match(/^bytes=(\d+)-(\d*)$/);
-      const object = { body: 'bytes', size, writeHttpMetadata: () => {}, httpEtag: etag };
+      // text() because latest/ now holds a version string the worker
+      // reads rather than an image it streams; R2 objects carry it and a
+      // fake without it cannot exercise the redirect at all
+      const object = {
+        body: 'bytes',
+        size,
+        writeHttpMetadata: () => {},
+        httpEtag: etag,
+        text: async () => aliasBody(k),
+      };
       if (match) {
         const offset = Number(match[1]);
         const end = match[2] === '' ? size - 1 : Number(match[2]);

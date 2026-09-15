@@ -35,6 +35,30 @@ export function versionOf(key) {
 }
 
 /**
+ * Whether a key is one of the `latest/` pointers upload_iso.py writes.
+ *
+ * Only the image aliases. `latest/screenshots/` and `latest/video/` live
+ * under the same prefix and are real files the page renders, so matching
+ * the whole prefix would turn every screenshot into a broken redirect.
+ */
+export function isAlias(key) {
+  return key === 'latest/ashlaros.iso' || key === 'latest/ashlaros-rpi5.img.xz';
+}
+
+/**
+ * The versioned filename an alias points at.
+ *
+ * The alias is named for the product; the real file carries the version in
+ * its name - ashlaros.iso is ashlaros-2026.09.15-x86_64.iso under that
+ * version's prefix. So the redirect has to build the name rather than
+ * reuse the alias's, or it points at a key that does not exist.
+ */
+export function aliasTarget(version, aliasName) {
+  if (aliasName === 'ashlaros.iso') return `ashlaros-${version}-x86_64.iso`;
+  return `ashlaros-${version}-aarch64-rpi5.img.xz`;
+}
+
+/**
  * The strip of desktop shots above the downloads.
  *
  * A picture of what you are about to download belongs on the page offering
@@ -212,6 +236,10 @@ export const site = {
   // simply misses in the bucket
   resolveKey: (path) => path,
 
+  // latest/ holds a version string, not an image; the handler redirects
+  isAlias,
+  aliasTarget,
+
   // only this site counts: every `pacman -Sy` is a database fetch, and
   // that event volume would dwarf the signal on the packages side
   record,
@@ -334,9 +362,9 @@ export const site = {
     for (const object of objects) {
       const version = versionOf(object.key);
       if (!version) continue;
-      // latest/ is an alias of an image already listed under its version,
-      // so nothing below it becomes a download row - the screenshots there
-      // are shown as pictures instead
+      // latest/ holds a pointer to a version already listed below, not an
+      // image, so nothing under it becomes a download row - the
+      // screenshots there are shown as pictures instead
       if (version === 'latest') {
         if (object.key.startsWith('latest/screenshots/')) shots.push(object.key);
         if (object.key.endsWith('.webm')) tour = object.key;
@@ -350,7 +378,10 @@ export const site = {
 
   headers: (key) => {
     const headers = {
-      // a versioned image never changes; latest/ is repointed every release
+      // A versioned image never changes. Under latest/ this now only
+      // reaches the screenshots and the tour - the image aliases are
+      // pointers the handler redirects before it gets here - and those are
+      // republished in place, so no-cache is still right for them.
       'cache-control':
         versionOf(key) === 'latest'
           ? 'no-cache'
