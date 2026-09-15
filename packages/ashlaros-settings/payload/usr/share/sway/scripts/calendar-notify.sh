@@ -22,7 +22,6 @@ command -v notify-send >/dev/null || exit 0
 
 # khal prints nothing and exits 0 when there is no calendar at all, so an
 # unconfigured machine costs one process every timer tick and says nothing.
-now=$(date +%s)
 until=$(date -d "+${LOOKAHEAD_MINUTES} minutes" "+%Y-%m-%d %H:%M")
 
 # One line per event, machine-readable: the format string is ours, so the
