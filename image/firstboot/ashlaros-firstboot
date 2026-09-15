@@ -31,11 +31,28 @@ grow_root() {
     disk=/dev/$(lsblk -no PKNAME "$src")
     [[ -b $disk ]] || return 1
 
+    # Grow the partition root is ACTUALLY on, never a fixed number. This
+    # used to resize partition 2 of the parent disk whatever root was: an
+    # image written into an existing partition - dd of=/dev/nvme0n1p3 -
+    # would have had parted resize the host's own partition 2 instead,
+    # which is somebody else's filesystem.
+    local part
+    part=$(lsblk -no PARTN "$src" 2>/dev/null)
+    if [[ -z $part ]]; then
+        warn "Root is not on a partition; leaving the filesystem alone."
+        return 1
+    fi
+    if [[ $part != "$ROOT_DEV_PART" ]]; then
+        warn "Root is partition $part, not the image's $ROOT_DEV_PART."
+        warn "This card was not written the way the image expects; not resizing."
+        return 1
+    fi
+
     say "Growing the root filesystem to fill $disk"
     # growpart is not in the image; parted resizes in place and
     # resize2fs follows. Both are idempotent, which matters because a
     # power cut here must not leave a half-grown filesystem.
-    parted -s -f "$disk" resizepart "$ROOT_DEV_PART" 100% || return 1
+    parted -s -f "$disk" resizepart "$part" 100% || return 1
     resize2fs "$src" || return 1
 }
 
@@ -59,17 +76,38 @@ one does. Nothing is reachable before you finish here.
 EOF
 
     while :; do
-        read -rp "Username: " name
+        # A closed stdin returns non-zero forever, and `continue` on that
+        # is an infinite loop spinning against a console nobody is at.
+        if ! read -rp "Username: " name; then
+            warn "No input. Nothing was created; the machine stays locked."
+            exit 1
+        fi
         if [[ ! $name =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
             warn "Letters, digits, - and _; starting with a letter."
+            continue
+        fi
+        # The regex accepts root, daemon, http and every other system
+        # account. Typing `root` made useradd fail and chpasswd carry on,
+        # which replaced the locked root password with the typed one -
+        # measured: the shadow field went from !* to a live hash and the
+        # password then authenticated as root. Four letters defeated the
+        # image's whole "root is locked" posture.
+        if getent passwd "$name" >/dev/null; then
+            warn "That account already exists on this machine."
             continue
         fi
         break
     done
 
     while :; do
-        read -rsp "Password: " password; echo
-        read -rsp "Repeat: " confirm; echo
+        if ! read -rsp "Password: " password; then
+            echo
+            warn "No input. Nothing was created; the machine stays locked."
+            exit 1
+        fi
+        echo
+        read -rsp "Repeat: " confirm || { echo; exit 1; }
+        echo
         if [[ $password != "$confirm" ]]; then
             warn "Those do not match."
             continue
@@ -81,8 +119,16 @@ EOF
         break
     done
 
-    useradd -m -G wheel,video,audio,input -s /bin/zsh "$name"
-    printf '%s:%s\n' "$name" "$password" | chpasswd
+    # Both checked: a useradd that fails must never reach chpasswd, or the
+    # password lands on whatever account already had the name.
+    if ! useradd -m -G wheel,video,audio,input -s /bin/zsh "$name"; then
+        warn "Could not create $name."
+        return 1
+    fi
+    if ! printf '%s:%s\n' "$name" "$password" | chpasswd; then
+        warn "Could not set the password for $name."
+        return 1
+    fi
     # wheel gains sudo here rather than in the image, so an image that
     # never finished firstboot has no path to root at all
     install -Dm440 /dev/stdin /etc/sudoers.d/10-wheel <<'EOF'
