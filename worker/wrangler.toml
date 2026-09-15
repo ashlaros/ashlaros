@@ -23,6 +23,18 @@ routes = [
   { pattern = "iso.ashlaros.download", custom_domain = true },
 ]
 
+# src/game/ashlaros_games.wasm is built, not committed (.gitignore:22), so
+# a checkout does not have it - and Cloudflare's Git integration runs bare
+# `npx wrangler deploy`, which would skip the npm script that produces it.
+# Measured: the first auto-deploy failed with "ENOENT: no such file or
+# directory, open '.../src/game/ashlaros_games.wasm'".
+#
+# wrangler runs this before every deploy, local or remote, so both paths
+# build the same artefact from the same command rather than relying on
+# whoever deploys having run the right script first.
+[build]
+command = "npm run deploy:prepare"
+
 # The landing page, served from the repository rather than copied into a
 # JS module, so the page and its assets have exactly one source. The worker
 # runs first and hands the apex to this binding; the two bucket hostnames
