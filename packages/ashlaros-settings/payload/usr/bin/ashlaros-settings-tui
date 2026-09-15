@@ -178,6 +178,8 @@ kernel_menu() {
   say "where every entry is already listed."
   echo
 
+  # Headers are filtered from the LIST because they are not a kernel to
+  # choose - but they are installed WITH whichever kernel is chosen, below.
   kernels=$(pacman -Sl cachyos 2>/dev/null |
     awk '$2 ~ /^linux-cachyos/ && $2 !~ /-(headers|dbg)$/ {print $2}' | sort -u)
   if [[ -z $kernels ]]; then
@@ -201,7 +203,21 @@ kernel_menu() {
     "Install $choice?" || return 0
 
   screen "Installing $choice"
-  root_run pacman -S --noconfirm --needed "$choice" || { pause; return 0; }
+  # Always with its headers. DKMS rebuilds every registered module when a
+  # headers package lands - that is what the alpm hook triggers on - so a
+  # kernel installed without them gets no ddcci module, makes no attempt,
+  # and reports nothing. Brightness would simply stop working on that
+  # kernel, which is the same class of silent breakage this entry's own
+  # /boot check exists to catch.
+  local headers="$choice-headers"
+  if pacman -Si "$headers" >/dev/null 2>&1; then
+    root_run pacman -S --noconfirm --needed "$choice" "$headers" ||
+      { pause; return 0; }
+  else
+    warn "$headers is not in the repository; installing the kernel alone."
+    warn "DKMS modules will not build for it."
+    root_run pacman -S --noconfirm --needed "$choice" || { pause; return 0; }
+  fi
 
   verify_kernel "$choice"
   pause
@@ -236,7 +252,40 @@ verify_kernel() {
     ok=0
   fi
 
+  verify_dkms "$pkgbase"
+
   ((ok)) || oops "Do not reboot expecting this kernel until the above is fixed."
+}
+
+# Whether the out-of-tree modules exist for a kernel, reported beside the
+# preset and vmlinuz checks because it is the same kind of failure: a DKMS
+# build that fails is a warning inside a pacman transaction that scrolls
+# past, and the user meets it later as "brightness stopped working" - a
+# symptom that points nowhere near a kernel module.
+#
+# Reported, never repaired, like everything else here.
+verify_dkms() {
+  local pkgbase=$1 kver
+  command -v dkms >/dev/null || return 0
+
+  # dkms keys its status on the kernel VERSION, not the package name, and
+  # the package is what was just installed - so the version comes from what
+  # the package put on disk.
+  kver=$(pacman -Ql "$pkgbase" 2>/dev/null |
+    sed -n 's|.*/usr/lib/modules/\([^/]*\)/vmlinuz$|\1|p' | head -1)
+  [[ -n $kver ]] || return 0
+
+  local registered
+  registered=$(dkms status 2>/dev/null | grep -c .) || true
+  ((registered > 0)) || return 0
+
+  if dkms status -k "$kver" 2>/dev/null | grep -q "installed"; then
+    say "✓ dkms modules built for $kver"
+  else
+    oops "✗ no dkms module is installed for $kver"
+    oops "  $(dkms status 2>/dev/null | head -1) is registered but did not build here"
+    oops "  external monitor brightness will not work on this kernel"
+  fi
 }
 
 # 4. PACKAGES - guarded and hidden rather than visible and broken

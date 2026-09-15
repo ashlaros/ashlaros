@@ -116,6 +116,21 @@ DESKTOP_PACKAGES = [
     # i2c-dev and a udev rule tagging display i2c devices uaccess, so the
     # logged-in user reaches them without a group or a sudo rule.
     "ddcutil",
+    # The kernel side of the same problem. ddcci-backlight registers a
+    # /sys/class/backlight device for every monitor that answers DDC, which
+    # is the interface brightnessctl, the waybar module and idle.yaml
+    # already speak - so idle dimming, which has no DDC path at all, starts
+    # working on a desktop (#65). ddcutil stays: the module binds to some
+    # monitors and not others, and ddcutil is both the fallback in
+    # brightness.sh and the tool that says what a monitor supports.
+    "ddcci-driver-linux-dkms",
+    # DKMS and the headers it builds against, together and always. Arch's
+    # dkms ships alpm hooks that rebuild every registered module when
+    # usr/lib/modules/*/build/include/ changes - which IS the headers
+    # package - so a kernel installed without its headers builds no module,
+    # attempts no rebuild, and reports no error at all.
+    "dkms",
+    "linux-cachyos-headers",
     # Printing. cups pulls cups-filters and avahi itself, so neither is
     # listed: cups-pk-helper is what lets a desktop user add a printer
     # without root, and system-config-printer is the dialog that does it.

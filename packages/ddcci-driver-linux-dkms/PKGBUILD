@@ -1,0 +1,97 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+# Contributor: Ewout van Mansom <ewout@vanmansom.name>
+# Contributor: Iwan Timmer <irtimmer@gmail.com>
+
+# A pair of kernel drivers: ddcci speaks DDC/CI to a monitor over its i2c
+# line, and ddcci-backlight registers a /sys/class/backlight device for
+# every monitor that answers. That second one is the point - it is the
+# interface brightnessctl, the waybar module and idle.yaml already speak,
+# and on a desktop that directory is otherwise empty, so idle dimming and
+# the brightness keys do nothing (#65).
+#
+# ddcutil stays: this module binds to some monitors and not others, and
+# ddcutil remains both the fallback in brightness.sh and the tool that
+# says what a monitor actually supports.
+pkgname=ddcci-driver-linux-dkms
+# Pinned to a master COMMIT, not the v0.4.5 tag, and that is not the usual
+# preference for a vendored package. The tag is from 2024-07 and does not
+# build on any kernel we ship: the eight commits after it are each a
+# kernel-API fix - "Actually fix building on Linux 6.8+", "Adjust to
+# backlight changes in Linux 6.10", "Adjust to bus_type changes in 6.11+",
+# a CONFIG_FB_DEVICE guard - and without them ddcci.c fails on
+# I2C_CLASS_SPD and the bus_type match signature while ddcci-backlight
+# fails on backlight_ops.check_fb. Measured against 7.2.6.
+#
+# A commit is pinned rather than the branch tracked, which is the whole
+# objection to the -git package in the AUR: two builds of the same pkgver
+# must be the same code, and for a kernel module that matters more than
+# elsewhere.
+_commit=bbb7553373f815d78e93a4a9f071ce968563694a
+pkgver=0.4.5.r8
+pkgrel=1
+pkgdesc="Kernel drivers for DDC/CI monitors: a real /sys/class/backlight device for an external screen (DKMS)"
+arch=('x86_64' 'aarch64')
+url="https://gitlab.com/ddcci-driver-linux/ddcci-driver-linux/"
+license=('GPL-2.0-only')
+depends=('dkms')
+conflicts=('ddcci-driver-linux' 'ddcci-driver-linux-dkms-git')
+provides=("ddcci-driver-linux-dkms=$pkgver")
+source=(
+  "ddcci-driver-linux-$_commit.tar.gz::$url/-/archive/$_commit/ddcci-driver-linux-$_commit.tar.gz"
+  "0001-use-sysfs_emit.patch"
+  "0002-fix-remove-refcount.patch"
+  "ddcci.conf"
+)
+b2sums=('d1f7f5d31d317b5656d801e582c6b94abd607a63e219d937b5277bc998c9fdfba3291e39c6649690029018eea3677245ece6d786829655e03ca81c404a013725'
+        '385af5a2fc04a839c1ddcc19bc49b8751811d7706eaed9c17c47febc7b2de010dcb271743050fa56d671dc3f2f34c27d9db1a05e2521509bbd9e68783a496cb7'
+        '906ee149f14feba0baec2d3c2433364501c813c533c9a6135f816ed4009d8dd45fb2c8310ab138cbf87a25d6a57ed01ec251bbfd43d60347cc80faec695cc41e'
+        '64cf5258534fc1e9e6e8f89233611c48cb101b7962ce7df33accd3d809d0b1cd8d37410082be0dcac81b2aef7e143f793adb1e0bd9eebacfe446f7869c869add')
+
+prepare() {
+  # Upstream merge request !21, unmerged at the time of writing. Kernel 7.2
+  # removed strncpy() outright - it survives in the headers only as
+  # comments describing its replacements - and all five call sites here are
+  # sysfs show() functions, which the kernel's own documentation says
+  # should use sysfs_emit(). Verified: master alone does not build on
+  # 7.2.6, master with this patch does.
+  #
+  # Carried as a patch rather than a later pin because there is no later
+  # commit to pin: this is not upstream yet.
+  #
+  # !20 fixes the same five call sites with strscpy and is deliberately NOT
+  # taken: its own author says "currently I cannot test it", it leaves the
+  # hand-rolled length arithmetic around each call in place, and !21 - which
+  # upstream's author wrote as "an alternative to !20" - deletes that
+  # arithmetic for the interface the kernel documentation actually mandates
+  # here ("New implementations of show() methods should only use
+  # sysfs_emit()"). Applying both would conflict; this is the one that also
+  # covers capabilities_show and the add_uevent_var calls.
+  cd "ddcci-driver-linux-$_commit"
+  patch -p1 < "$srcdir/0001-use-sysfs_emit.patch"
+
+  # Upstream !19, closing upstream #52. ddcci_remove passes the i2c_client
+  # to bus_find_device, but the helper it hands that pointer to compares
+  # it against dev->parent, which is a struct device - so the comparison
+  # never matches and no device is ever flagged removed. Checked against
+  # the helper in this pinned source rather than taken on the MR's word.
+  #
+  # The symptom is the hotplug case this driver is already known to handle
+  # badly: removing and recreating an i2c device fails with "cannot create
+  # duplicate filename /bus/ddcci/devices/ddcciN", so a monitor unplugged
+  # and plugged back in does not come back.
+  patch -p1 < "$srcdir/0002-fix-remove-refcount.patch"
+}
+
+package() {
+  local destdir="$pkgdir/usr/src/ddcci-$pkgver"
+  install -d "$destdir"
+  cp -rT "ddcci-driver-linux-$_commit" "$destdir"
+
+  # dkms.conf names the version it was built for, and ours is not upstream's
+  sed -i "s/^PACKAGE_VERSION=.*/PACKAGE_VERSION=\"$pkgver\"/" "$destdir/dkms.conf"
+
+  # ddcci is an i2c driver and is not autoloaded by anything - no device
+  # node appears until it is told to look. ddcutil ships the same shape of
+  # file for i2c-dev, which is a prerequisite for this one working at all.
+  install -Dm644 "$srcdir/ddcci.conf" "$pkgdir/usr/lib/modules-load.d/ddcci.conf"
+}

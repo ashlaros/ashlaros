@@ -6,6 +6,11 @@
 # base
 base
 linux-cachyos
+# Always beside the kernel, never separately. DKMS rebuilds a module
+# against each installed kernel and needs that kernel's headers to do it;
+# a kernel without them silently builds nothing and reports no error, so
+# the two travel together everywhere a kernel is installed.
+linux-cachyos-headers
 linux-firmware
 amd-ucode
 intel-ucode

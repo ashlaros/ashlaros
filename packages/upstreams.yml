@@ -77,6 +77,24 @@ packages:
     # which opencv is 112.81 MiB and qt6-base 66.53 MiB - measured, not
     # estimated - for hardware most machines do not have.
     arch: x86_64
+  ddcci-driver-linux-dkms:
+    upstream: https://aur.archlinux.org/ddcci-driver-linux-dkms.git
+    # The 35-vote release package, not the 3-vote -git one, which carries
+    # an epoch that force-wins and pins no revision at all - two builds of
+    # the same pkgver can be different code, which for a kernel module is
+    # the wrong trade.
+    #
+    # Ours diverges from that base in one way worth knowing at merge time:
+    # upstream pins the v0.4.5 tag, and that tag does not build on any
+    # kernel we ship. The eight commits after it are each a kernel-API fix
+    # (6.8, 6.10, 6.11, CONFIG_FB_DEVICE), so ours pins a master commit and
+    # carries two unmerged merge requests as patches. An upstream change
+    # that moves to a newer tag is the one worth taking here.
+    #
+    # x86_64 only for now: the module is more valuable on the Pi, which has
+    # no /sys/class/backlight at all, but the ARM image ships no DKMS
+    # toolchain and the module is untested on that kernel (#65).
+    arch: x86_64
   kvantum-theme-catppuccin:
     upstream: https://aur.archlinux.org/kvantum-theme-catppuccin-git.git
     # rewritten rather than copied: upstream's is a -git package whose

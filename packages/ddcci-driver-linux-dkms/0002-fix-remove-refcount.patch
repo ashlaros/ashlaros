@@ -1,0 +1,13 @@
+diff --git a/ddcci/ddcci.c b/ddcci/ddcci.c
+index 6b41eab567ae9fa55ac8b7f34b934e2b8daf2933..1452d200af9c06e853fc7e180304e8628dc84ea4 100644
+--- a/ddcci/ddcci.c
++++ b/ddcci/ddcci.c
+@@ -1780,7 +1780,7 @@ static int ddcci_remove(struct i2c_client *client)
+ 
+ 	mutex_lock(&drv_data->lock);
+ 	while (1) {
+-		dev = bus_find_device(&ddcci_bus_type, NULL, client,
++		dev = bus_find_device(&ddcci_bus_type, NULL, &client->dev,
+ 				      ddcci_remove_helper);
+ 		if (!dev)
+ 			break;
