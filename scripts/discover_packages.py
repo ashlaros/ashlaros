@@ -227,6 +227,16 @@ def source_trees(directory: Path) -> list[Path]:
     return trees
 
 
+def _ships(path: Path) -> bool:
+    """Whether this file is installed as-is, so its mode is part of it.
+
+    A payload tree is copied into the package with its modes; everything
+    beside it - the PKGBUILD, .install, patches - is read by makepkg and
+    never installed, so its own mode says nothing about the result.
+    """
+    return "payload" in path.parts
+
+
 def source_hash(directory: Path) -> str:
     """A digest of everything a package is built from.
 
@@ -238,11 +248,17 @@ def source_hash(directory: Path) -> str:
     for tree in source_trees(directory):
         for path in sorted(p for p in tree.rglob("*") if p.is_file()):
             digest.update(path.relative_to(tree).as_posix().encode())
-            # The exec bit is part of what ships: a payload script that
-            # gains +x is a different package, and hashing contents alone
-            # left that rebuild unscheduled - the fix would sit in the
-            # tree looking applied while the repository kept the old one.
-            digest.update(b"x" if path.stat().st_mode & 0o111 else b"-")
+            # The exec bit is part of what ships, but only where we ship
+            # the file: a payload script that gains +x is a different
+            # package, and hashing contents alone left that rebuild
+            # unscheduled. A PKGBUILD's own mode is not - it is input to
+            # makepkg, never installed - and hashing it changed the mark
+            # of all 26 vendored packages at once. Those take their
+            # version from upstream and cannot be bumped, so each would
+            # have been rebuilt, refused by the publish guard, and stuck
+            # there with nothing to turn.
+            if _ships(path):
+                digest.update(b"x" if path.stat().st_mode & 0o111 else b"-")
             digest.update(path.read_bytes())
     return digest.hexdigest()[:16]
 
