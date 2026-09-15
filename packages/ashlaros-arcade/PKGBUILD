@@ -1,5 +1,6 @@
 # Maintainer: AshlarOS <build@ashlaros.download>
 
+# rebuilt once when source_hash began covering the executable bit
 pkgname=ashlaros-arcade
 pkgver=20260914
 pkgrel=1
