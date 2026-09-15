@@ -1775,6 +1775,151 @@ power_entry() {
   done
 }
 
+# 13. SNAPSHOTS
+#
+# snap-pac brackets every pacman transaction and configure_snapshots bounds
+# the retention, so snapshots happen without anyone asking. What was
+# missing is any way to look at them, take one deliberately before doing
+# something risky, or see what they cost (#62).
+#
+# The limine half of that issue is deliberately not here: boot-menu
+# rollback means replacing systemd-boot and vendoring two single-maintainer
+# AUR packages into the boot path, one of which builds against a ~300 MB
+# GraalVM. Rollback is `ashlaros-snapshot rollback` from the ISO (#60).
+#
+# Deleting is offered but never of the snapshot the running system came
+# from, and never the whole set: the point of this entry is to make
+# snapshots legible, not to give someone a fast way to have none.
+snapshots_entry() {
+  local choice
+  while true; do
+    screen "Snapshots"
+
+    if [[ $(findmnt -no FSTYPE / 2>/dev/null) != btrfs ]]; then
+      # names what it found rather than asserting ext4: the installer
+      # offers ext4, but a root can be something else again and telling
+      # someone their filesystem is a thing it is not helps nobody
+      say "The root filesystem is $(findmnt -no FSTYPE / 2>/dev/null), not btrfs,"
+      say "so there are no snapshots. snapper needs btrfs subvolumes."
+      pause
+      return 0
+    fi
+    if [[ ! -f /etc/snapper/configs/root ]]; then
+      warn "snapper has no 'root' config, so nothing is being captured."
+      say "  sudo snapper -c root create-config /"
+      pause
+      return 0
+    fi
+
+    local count
+    count=$(snapper -c root list --columns number 2>/dev/null | grep -c '^ *[0-9]')
+    say "$count snapshot(s)"
+
+    # What they cost, which is the question that sends people looking for
+    # this entry. btrfs accounts shared extents once, so this is the real
+    # figure rather than the sum of the subvolume sizes.
+    local used
+    used=$(btrfs filesystem usage -h / 2>/dev/null |
+      awk '/Used:/ { print $2; exit }')
+    [[ -n $used ]] && say "Filesystem used: $used"
+    echo
+
+    choice=$(gum choose --header "Snapshots" \
+      "List them" \
+      "Take one now" \
+      "What changed in one" \
+      "Delete one" \
+      "Rollback (needs the ISO)" \
+      "Back") || return 0
+
+    case $choice in
+      "List them")
+        screen "Snapshots"
+        snapper -c root list 2>&1 | sed "s/^/  /" | head -40
+        pause
+        ;;
+      "Take one now")
+        screen "Snapshots"
+        local description
+        description=$(gum input --prompt "What is this for: " \
+          --value "before manual changes") || continue
+        [[ -n $description ]] || continue
+        # the same tool the update path uses, so one code path takes
+        # snapshots however they are asked for
+        ashlaros-snapshot create "$description" 2>&1 | sed "s/^/  /"
+        pause
+        ;;
+      "What changed in one")
+        local number
+        number=$(snapshot_pick "Show the changes in") || continue
+        screen "Snapshots"
+        say "Files that differ between $number and now:"
+        echo
+        # status needs a range; N..0 is "that snapshot against the live
+        # system", which is the comparison someone asking this wants
+        snapper -c root status "$number..0" 2>&1 | sed "s/^/  /" | head -40
+        pause
+        ;;
+      "Delete one")
+        local number
+        number=$(snapshot_pick "Delete") || continue
+        # The snapshot the running system was rolled back to is the one
+        # thing here that must not go: deleting it is deleting the root
+        # this machine is currently using.
+        if [[ $number == "$(current_snapshot)" ]]; then
+          screen "Snapshots"
+          oops "That is the snapshot this system is running from."
+          say "Deleting it would remove the root filesystem in use."
+          pause
+          continue
+        fi
+        gum confirm --affirmative "Delete" --negative "Cancel" \
+          "Delete snapshot $number? This cannot be undone." || continue
+        root_run snapper -c root delete "$number" && say "Deleted $number."
+        pause
+        ;;
+      "Rollback (needs the ISO)")
+        screen "Snapshots"
+        say "Rollback replaces the root subvolume, which cannot happen"
+        say "while it is mounted - so it is a rescue-media procedure."
+        echo
+        say "  Boot the AshlarOS ISO, then:"
+        say "    cryptsetup open /dev/<disk> root"
+        say "    mount -o subvolid=5 /dev/mapper/root /mnt"
+        say "    ashlaros-snapshot rollback --top-level /mnt"
+        echo
+        say "The command lists the snapshots and asks before changing anything."
+        pause
+        ;;
+      "Back") return 0 ;;
+    esac
+  done
+}
+
+# The snapshot the running root came from, or nothing.
+#
+# After a rollback, @ is a snapshot of one - snapper records the source in
+# the new subvolume's own info. A machine that has never rolled back has
+# no such number, and then nothing here is protected because nothing needs
+# to be.
+current_snapshot() {
+  btrfs subvolume show / 2>/dev/null |
+    awk -F'/' '/Snapshot\(s\)|Parent UUID/ { next } /\.snapshots\/[0-9]+/ {
+      for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+$/) { print $i; exit }
+    }'
+}
+
+# One snapshot, chosen by number and description rather than number alone.
+snapshot_pick() {
+  local header=$1 rows choice
+  rows=$(snapper -c root list --columns number,date,description 2>/dev/null |
+    awk 'NR > 2 && $1 ~ /^[0-9]+$/ { print }' | tail -30)
+  [[ -n $rows ]] || { screen "Snapshots"; warn "No snapshots yet."; pause; return 1; }
+  choice=$(printf '%s\n' "$rows" | gum choose --header "$header") || return 1
+  [[ -n $choice ]] || return 1
+  awk '{ print $1 }' <<<"$choice"
+}
+
 wluma_entry() {
   local user_config="${XDG_CONFIG_HOME:-$HOME/.config}/wluma/config.toml"
   local choice
@@ -1924,6 +2069,9 @@ main() {
     fi
     # only when there is something to say - an entry that always reports
     # "nothing to do" is an entry people stop reading
+    # btrfs only: an ext4 install has no snapshots, and the entry would
+    # open onto an explanation of why it cannot work
+    [[ $(findmnt -no FSTYPE / 2>/dev/null) == btrfs ]] && entries+=("Snapshots")
     [[ -n $(pacman -Qtdq 2>/dev/null) ]] && entries+=("Unneeded packages")
     command -v zk >/dev/null && entries+=("Notes")
     command -v aerc >/dev/null && entries+=("Mail")
@@ -1946,6 +2094,7 @@ main() {
       "Time and date") time_menu ;;
       "Hardware profiles") hardware_menu ;;
       "Adaptive brightness") wluma_entry ;;
+      "Snapshots") snapshots_entry ;;
       "Power") power_entry ;;
       "Share this network") network_entry ;;
       "Fingerprint") fingerprint_entry ;;
