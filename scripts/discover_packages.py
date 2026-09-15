@@ -48,7 +48,13 @@ PACKAGES = ROOT / "packages"
 ARCH_RE = re.compile(r"^arch=\((.*?)\)", re.MULTILINE | re.DOTALL)
 # depends and makedepends both have to exist before the build starts;
 # optdepends do not, so they are deliberately absent here
-DEPENDS_RE = re.compile(r"^(?:make)?depends=\((.*?)\)", re.MULTILINE | re.DOTALL)
+# finditer, not search: depends= and makedepends= are two assignments, and
+# taking only the first dropped every makedepends in the tree - 17 of our
+# packages declare both, so their build order was computed from half their
+# edges. checkdepends counts too: it is installed before makepkg runs.
+DEPENDS_RE = re.compile(
+    r"^(?:make|check)?depends=\((.*?)\)", re.MULTILINE | re.DOTALL
+)
 PKGNAME_RE = re.compile(r"^pkgname=(.+)$", re.MULTILINE)
 PKGVER_RE = re.compile(r"^pkgver=(.+)$", re.MULTILINE)
 PKGREL_RE = re.compile(r"^pkgrel=(.+)$", re.MULTILINE)
@@ -75,12 +81,25 @@ def log(message: str) -> None:
 
 
 def field(pattern: re.Pattern, text: str) -> list[str]:
-    """Every quoted or bare word in the first matching array assignment."""
-    match = pattern.search(text)
-    if not match:
-        return []
-    body = re.sub(r"#.*", "", match.group(1))
-    return re.findall(r"[\w.+-]+", body.replace("'", " ").replace('"', " "))
+    """Every quoted or bare word in EVERY matching array assignment.
+
+    All of them, because depends= and makedepends= are separate lines and
+    a package needs both to be ordered correctly.
+
+    A version constraint is cut at the operator rather than split on it:
+    `sqlite>=3.0` is a dependency on sqlite, and tokenising the whole
+    string invented a second dependency named "3.0" - which howdy-next
+    really did carry, as a phantom edge on "7.85.0".
+    """
+    names = []
+    for match in pattern.finditer(text):
+        body = re.sub(r"#.*", "", match.group(1))
+        for word in body.replace("'", " ").replace('"', " ").split():
+            # strip >=, <=, =, >, < and whatever follows
+            name = re.split(r"[<>=]", word, maxsplit=1)[0]
+            if re.fullmatch(r"[\w.+-]+", name):
+                names.append(name)
+    return names
 
 
 def scalar(pattern: re.Pattern, text: str) -> str | None:
@@ -98,8 +117,20 @@ def scalar(pattern: re.Pattern, text: str) -> str | None:
     if not match:
         return None
     value = match.group(1).strip()
-    # only an unquoted comment: a # inside quotes is part of the value
-    if not value.startswith(("'", '"')):
+    # A # inside quotes is part of the value; a # after the closing quote
+    # is a comment. Skipping the split entirely for a quoted value got the
+    # first half right and the second half wrong: `pkgver="1.0.3" # x`
+    # came back as `1.0.3" # x`, a version that can never match what the
+    # database records - the same rebuild-forever failure this function
+    # exists to prevent, just one quote further along.
+    if value[:1] in ("'", '"'):
+        quote = value[0]
+        end = value.find(quote, 1)
+        if end != -1:
+            value = value[1:end]
+        else:
+            value = value[1:]
+    else:
         value = value.split("#", 1)[0].strip()
     return value.strip("'\"")
 
@@ -118,13 +149,17 @@ def pkgname_of(pkgbuild: Path, text: str) -> str:
     if not raw:
         return pkgbuild.parent.name
 
-    # a shell variable: resolve it from its own assignment
-    variable = re.fullmatch(r"\$\{?(\w+)\}?", raw)
-    if variable:
+    # Substitute every variable reference, not only a value that is one
+    # reference and nothing else. `pkgname=${_pkgname}-git` failed the old
+    # whole-string match and then had its first word taken, which is the
+    # literal string "_pkgname" - sway-services really did resolve to that.
+    def resolve(match: re.Match) -> str:
         assigned = scalar(
-            re.compile(rf"^{variable.group(1)}=(.+)$", re.MULTILINE), text
+            re.compile(rf"^{match.group(1)}=(.+)$", re.MULTILINE), text
         )
-        raw = assigned or pkgbuild.parent.name
+        return assigned if assigned else match.group(0)
+
+    raw = re.sub(r"\$\{?(\w+)\}?", resolve, raw)
 
     # an array of one, which is how some PKGBUILDs spell a single package
     words = re.findall(r"[\w.+@-]+", raw.replace("'", " ").replace('"', " "))
@@ -203,6 +238,11 @@ def source_hash(directory: Path) -> str:
     for tree in source_trees(directory):
         for path in sorted(p for p in tree.rglob("*") if p.is_file()):
             digest.update(path.relative_to(tree).as_posix().encode())
+            # The exec bit is part of what ships: a payload script that
+            # gains +x is a different package, and hashing contents alone
+            # left that rebuild unscheduled - the fix would sit in the
+            # tree looking applied while the repository kept the old one.
+            digest.update(b"x" if path.stat().st_mode & 0o111 else b"-")
             digest.update(path.read_bytes())
     return digest.hexdigest()[:16]
 
