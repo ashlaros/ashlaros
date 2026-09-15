@@ -1,6 +1,12 @@
 # Maintainer: AshlarOS <build@ashlaros.download>
 
 # rebuilt once when source_hash began covering the executable bit
+#
+# pkgrel is the count of commits touching this directory, so rewriting
+# history to take the OAuth credentials out of the payload produced a
+# second commit with the same count and 169 fewer bytes - which publish
+# correctly refused, because -70 was already in the bucket and readers
+# cache it as immutable. This comment is the commit that makes it -71.
 pkgname=ashlaros-settings
 pkgver=20260910
 pkgrel=1
