@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
   <head>
     <meta charset="utf-8" />
     <title>AshlarOS</title>
@@ -92,6 +92,84 @@
         height: auto;
         border: 1px solid #3a4043;
       }
+      /* The slideshow. No framework and no stylesheet to link, so the
+         rules live here with everything else. */
+      .gallery {
+        margin: 0 0 1.6rem;
+        position: relative;
+      }
+      .gallery:focus-visible {
+        outline: 2px solid #8a8f98;
+        outline-offset: 4px;
+      }
+      .frame {
+        width: 100%;
+        height: auto;
+        display: block;
+        border: 1px solid #3a4043;
+        background: #141a1b;
+      }
+      .frame[hidden] {
+        display: none;
+      }
+      .nav {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        background: #141a1b;
+        color: #c9ccd1;
+        border: 1px solid #3a4043;
+        font-size: 1.4rem;
+        line-height: 1;
+        padding: 0.3rem 0.6rem;
+        cursor: pointer;
+      }
+      .nav:hover {
+        border-color: #8a8f98;
+      }
+      /* disabled rather than wrapping: four frames is a short set, and
+         landing back at the start is disorienting */
+      .nav[disabled] {
+        opacity: 0.3;
+        pointer-events: none;
+      }
+      .prev {
+        left: 0.4rem;
+      }
+      .next {
+        right: 0.4rem;
+      }
+      .shot-caption {
+        color: #8a8f98;
+        font-size: 0.85rem;
+        padding-top: 0.5rem;
+      }
+      .dots {
+        display: flex;
+        gap: 0.4rem;
+        padding-top: 0.5rem;
+      }
+      .dot {
+        width: 0.6rem;
+        height: 0.6rem;
+        padding: 0;
+        border: 0;
+        background: #3a4043;
+        cursor: pointer;
+      }
+      .dot[aria-selected='true'] {
+        background: #8a8f98;
+      }
+      /* With no JavaScript every frame is shown in order, which is a
+         longer page rather than a broken one. */
+      .no-js .frame[hidden] {
+        display: block;
+        margin-top: 0.6rem;
+      }
+      .no-js .nav,
+      .no-js .dots {
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -104,18 +182,29 @@
         desktop.
       </p>
 
-      <!-- width and height are set: the page ships no external stylesheet,
-           so a late-loading image would reflow everything under it -->
-      <p>
-        <img
-          class="shot"
-          src="https://iso.ashlaros.download/latest/screenshots/desktop.png"
-          alt="The AshlarOS desktop: sway with waybar, the generated wallpaper, and a terminal"
-          width="1920"
-          height="1080"
-          loading="lazy"
-        />
-      </p>
+      <!-- BEGIN generated gallery: scripts/generate_gallery.py -->
+      <figure class="gallery" tabindex="0" role="region"
+        aria-roledescription="carousel"
+        aria-label="Screenshots of the AshlarOS desktop">
+        <div class="frames">
+          <img class="frame" src="https://iso.ashlaros.download/latest/screenshots/desktop.png" alt="AshlarOS: the default session - waybar, wallpaper, a terminal" width="1920" height="1080" loading="eager" />
+          <img class="frame" hidden src="https://iso.ashlaros.download/latest/screenshots/tiling.png" alt="AshlarOS: three terminals tiled, which is what the window manager is for" width="1920" height="1080" loading="lazy" />
+          <img class="frame" hidden src="https://iso.ashlaros.download/latest/screenshots/settings.png" alt="AshlarOS: the settings TUI, which is what the distribution adds over Arch" width="1920" height="1080" loading="lazy" />
+          <img class="frame" hidden src="https://iso.ashlaros.download/latest/screenshots/launcher.png" alt="AshlarOS: rofi over the desktop" width="1920" height="1080" loading="lazy" />
+          <video class="frame" hidden src="https://iso.ashlaros.download/latest/video/tour.webm" poster="https://iso.ashlaros.download/latest/screenshots/desktop.png" width="1920" height="1080" controls preload="none" aria-label="A short silent tour of the desktop"></video>
+        </div>
+        <button class="nav prev" type="button" aria-label="Previous screenshot">&#x2039;</button>
+        <button class="nav next" type="button" aria-label="Next screenshot">&#x203a;</button>
+        <figcaption class="shot-caption">the default session - waybar, wallpaper, a terminal</figcaption>
+        <div class="dots" role="tablist" aria-label="Choose a screenshot">
+          <button class="dot" type="button" role="tab" aria-selected="true" aria-label="the default session - waybar, wallpaper, a terminal"></button>
+          <button class="dot" type="button" role="tab" aria-selected="false" aria-label="three terminals tiled, which is what the window manager is for"></button>
+          <button class="dot" type="button" role="tab" aria-selected="false" aria-label="the settings TUI, which is what the distribution adds over Arch"></button>
+          <button class="dot" type="button" role="tab" aria-selected="false" aria-label="rofi over the desktop"></button>
+          <button class="dot" type="button" role="tab" aria-selected="false" aria-label="a short silent tour: tiling, the launcher, the theme switching"></button>
+        </div>
+      </figure>
+      <!-- END generated gallery -->
 
       <h2>Download</h2>
       <p>
@@ -197,5 +286,59 @@ sudo pacman -Sy ashlaros-keyring ashlaros-mirrorlist ashlaros-settings</pre
         >
       </p>
     </main>
+    <script>
+      // The slideshow. Inline because the page ships no external file, and
+      // small enough to read in one sitting.
+      //
+      // no-js is removed here rather than set: a visitor without
+      // JavaScript keeps the class the markup carries and sees every frame
+      // stacked, which is the degraded state worth having.
+      (function () {
+        var figure = document.querySelector('.gallery');
+        if (!figure) return;
+        document.documentElement.classList.remove('no-js');
+
+        var frames = [].slice.call(figure.querySelectorAll('.frame'));
+        var dots = [].slice.call(figure.querySelectorAll('.dot'));
+        var caption = figure.querySelector('.shot-caption');
+        var prev = figure.querySelector('.prev');
+        var next = figure.querySelector('.next');
+        // the captions live on the dots already, as their labels
+        var captions = dots.map(function (d) { return d.getAttribute('aria-label'); });
+        var at = 0;
+
+        function show(index) {
+          if (index < 0 || index >= frames.length) return;
+          // pause a video being navigated away from, or its audio
+          // follows the visitor to the next frame
+          var leaving = frames[at];
+          if (leaving && leaving.pause) leaving.pause();
+
+          at = index;
+          frames.forEach(function (f, i) { f.hidden = i !== index; });
+          dots.forEach(function (d, i) {
+            d.setAttribute('aria-selected', i === index ? 'true' : 'false');
+          });
+          caption.textContent = captions[index];
+          // disabled at the ends rather than wrapping
+          prev.disabled = index === 0;
+          next.disabled = index === frames.length - 1;
+        }
+
+        prev.addEventListener('click', function () { show(at - 1); });
+        next.addEventListener('click', function () { show(at + 1); });
+        dots.forEach(function (d, i) {
+          d.addEventListener('click', function () { show(i); });
+        });
+
+        figure.addEventListener('keydown', function (event) {
+          if (event.key === 'ArrowLeft') { show(at - 1); event.preventDefault(); }
+          else if (event.key === 'ArrowRight') { show(at + 1); event.preventDefault(); }
+          else if (event.key === 'Escape') { figure.blur(); }
+        });
+
+        show(0);
+      })();
+    </script>
   </body>
 </html>
