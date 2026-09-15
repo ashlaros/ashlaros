@@ -104,6 +104,18 @@ DESKTOP_PACKAGES = [
     "gvfs-smb",
     "gvfs-nfs",
     "tpm2-tools",
+    # External monitor brightness. brightnessctl only drives
+    # /sys/class/backlight, which exists on a laptop panel and nowhere
+    # else - so on a desktop the brightness keys, the waybar slider and
+    # the idle dimming in idle.yaml all ran against nothing. ddcutil
+    # speaks DDC/CI over the monitor's i2c line, and wluma already
+    # discovers external monitors that way and falls back to raw DDC when
+    # ddcutil-service (AUR only) is absent.
+    #
+    # It needs no configuration: the package ships modules-load.d for
+    # i2c-dev and a udev rule tagging display i2c devices uaccess, so the
+    # logged-in user reaches them without a group or a sudo rule.
+    "ddcutil",
     # Printing. cups pulls cups-filters and avahi itself, so neither is
     # listed: cups-pk-helper is what lets a desktop user add a printer
     # without root, and system-config-printer is the dialog that does it.

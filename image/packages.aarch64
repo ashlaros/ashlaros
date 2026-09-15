@@ -65,6 +65,16 @@ xdg-desktop-portal-gtk
 xdg-desktop-portal-wlr
 xdg-user-dirs
 
+# External monitor brightness, over DDC/CI on the monitor's i2c line.
+# More load-bearing here than on x86_64: a Pi has no /sys/class/backlight
+# at all, so brightnessctl - which the settings package pulls in for the
+# brightness keys and the idle dimming - has nothing to address, and DDC
+# is the only way a brightness control on this board does anything.
+#
+# Needs no setup: the package ships modules-load.d for i2c-dev and a udev
+# rule tagging display i2c devices uaccess.
+ddcutil
+
 # files, printing, discovery - the same set the installer picks, because
 # what a user sees is meant to be the same desktop
 pcmanfm-qt
