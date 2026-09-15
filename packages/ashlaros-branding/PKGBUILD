@@ -25,6 +25,7 @@ package() {
   local branding="${startdir}/../../branding"
 
   install -Dm644 "${branding}/logo.svg" "${pkgdir}/usr/share/ashlaros/logo.svg"
+  install -Dm644 "${branding}/logo.png" "${pkgdir}/usr/share/ashlaros/logo.png"
   install -Dm644 "${branding}/favicon.svg" "${pkgdir}/usr/share/ashlaros/favicon.svg"
   install -Dm644 "${branding}/background.svg" "${pkgdir}/usr/share/ashlaros/background.svg"
   # the installer's TUI header reads this; see installer/configurator
