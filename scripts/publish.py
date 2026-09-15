@@ -25,6 +25,7 @@ import subprocess
 import sys
 
 import boto3
+from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError
 
 DB_NAME = "ashlaros"
@@ -45,6 +46,23 @@ def s3_client():
         aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
         region_name="auto",
     )
+
+
+# Never multipart. boto3 switches to it above 8 MiB by default, and a
+# multipart ETag is a digest of digests rather than the object's MD5 - so
+# refuse_overwrite has nothing to compare and falls back to a size check
+# alone. That silently disabled the guard for exactly the packages where a
+# rewrite hurts most: zen-browser-bin (139 MiB) and mise-bin (35 MiB) are
+# both over the threshold today. One PUT per object keeps the ETag an MD5
+# at every size.
+#
+# 4 GiB is R2's documented single-PUT ceiling; the largest package here is
+# 139 MiB, so nothing approaches it. A package that ever did would fail
+# loudly on upload rather than quietly lose the guard.
+SINGLE_PUT_LIMIT = 4 * 1024**3
+SINGLE_PART = TransferConfig(
+    multipart_threshold=SINGLE_PUT_LIMIT, multipart_chunksize=SINGLE_PUT_LIMIT
+)
 
 
 # Arch compresses packages with zstd; Arch Linux ARM still uses xz, and
@@ -189,13 +207,13 @@ def publish(s3, bucket: str, arch: str, pkg_dir: str, packages: list[str], key: 
     for package in packages:
         name = os.path.basename(package)
         refuse_overwrite(s3, bucket, prefix + name, package)
-        s3.upload_file(package, bucket, prefix + name)
+        s3.upload_file(package, bucket, prefix + name, Config=SINGLE_PART)
         log(f"{arch}: uploaded {name}")
         signature = package + ".sig"
         if os.path.exists(signature):
-            s3.upload_file(signature, bucket, prefix + os.path.basename(signature))
-
-    prune_superseded(s3, bucket, prefix, [os.path.basename(p) for p in packages])
+            s3.upload_file(
+                signature, bucket, prefix + os.path.basename(signature), Config=SINGLE_PART
+            )
 
     # the database goes last: until it names them, the objects above are
     # simply unreferenced, and a client mid-publish sees the old repository
@@ -206,8 +224,16 @@ def publish(s3, bucket: str, arch: str, pkg_dir: str, packages: list[str], key: 
             real = os.path.realpath(local)
             if not os.path.exists(real):
                 continue
-            s3.upload_file(real, bucket, prefix + name)
+            s3.upload_file(real, bucket, prefix + name, Config=SINGLE_PART)
             log(f"{arch}: uploaded {name}")
+
+    # After the database, never before it. Pruning first deletes the object
+    # the CURRENTLY PUBLISHED database still names, so for the whole length
+    # of the upload loop above every client running `pacman -S` on that
+    # package gets a 404 - on every single update, deterministically. Once
+    # the new database is live nothing references the old version, and the
+    # delete is unobservable.
+    prune_superseded(s3, bucket, prefix, [os.path.basename(p) for p in packages])
 
 
 def main() -> int:
