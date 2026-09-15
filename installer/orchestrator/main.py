@@ -32,6 +32,7 @@ def build_phases():
         enable_services,
         enroll_tpm,
         install_system,
+        lock_boot_editor,
         prepare_live,
         run_hardware_detection,
         validate_boot,
@@ -52,6 +53,7 @@ def build_phases():
         # initramfs itself: this adds one more hook and rebuilds once more,
         # rather than racing it
         ("Configuring the boot splash", configure_splash),
+        ("Locking the boot menu", lock_boot_editor),
         ("Validating boot", validate_boot),
     ]
 

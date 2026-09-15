@@ -727,14 +727,31 @@ def use_systemd_initramfs(ctx: InstallContext) -> None:
     info("› initramfs: sd-encrypt, so the TPM keyslot is actually used")
 
 
-def use_plymouth_initramfs(ctx: InstallContext) -> bool:
-    """Put the plymouth hook in the initramfs, before whatever unlocks root.
+UNLOCK_HOOKS = ("encrypt", "sd-encrypt")
 
-    Order is the whole of it. The hook starts plymouthd and shows the
-    splash, so it has to run before sd-encrypt asks for a passphrase - if
-    it runs after, the prompt is drawn on a bare console and the splash
-    appears once the disk is already open, which looks worse than no
-    splash at all.
+
+def use_plymouth_initramfs(ctx: InstallContext) -> bool:
+    """Put the plymouth hook after kms and before whatever unlocks root.
+
+    Both halves are load-bearing, and an earlier version implemented only
+    the second - it anchored on systemd/udev and never looked at kms.
+
+    AFTER kms, because plymouth draws through KMS: with no DRM driver
+    loaded and no EFI framebuffer it fails outright. On the TPM path that
+    went unnoticed, since use_systemd_initramfs had already rewritten the
+    list into an order that happens to work. On a machine with no TPM the
+    list is the stock one, plymouth landed at index 2 - ahead of kms - and
+    the result was a blank screen exactly where the LUKS passphrase is
+    wanted (#61).
+
+    Blank, not absent: plymouthd is running and merely cannot render, so
+    the busybox encrypt hook's `plymouth --ping` succeeds, the prompt is
+    handed to plymouth, and the console fallback that would have printed
+    it is skipped. The machine is live and invisible, which reads as a
+    dead boot.
+
+    BEFORE the unlocker, or the passphrase prompt is drawn on a bare
+    console and the splash arrives once the disk is already open.
 
     Returns whether the file changed, so the caller can decide whether an
     initramfs rebuild is owed.
@@ -748,13 +765,32 @@ def use_plymouth_initramfs(ctx: InstallContext) -> bool:
             lines.append(line)
             continue
         hooks = line[len("HOOKS=("):].rstrip(")").split()
-        # after `systemd`/`udev`, which set up the device nodes plymouth
-        # draws on, and before any unlocker
-        anchor = next(
-            (i for i, h in enumerate(hooks) if h in ("systemd", "udev")),
-            0,
-        )
+
+        # kms first, then the early-userspace hook, then the front. The
+        # list may or may not have been rewritten by use_systemd_initramfs
+        # already - the TPM and non-TPM paths differ in that - so this
+        # reads what is actually there rather than assuming either shape.
+        anchor = next((i for i, h in enumerate(hooks) if h == "kms"), None)
+        if anchor is None:
+            anchor = next(
+                (i for i, h in enumerate(hooks) if h in ("systemd", "udev")),
+                -1,
+            )
         hooks.insert(anchor + 1, "plymouth")
+
+        # The invariant the docstring claims, checked rather than trusted.
+        # An image that boots to a black screen at the passphrase prompt is
+        # worse than an install that stops here and says why.
+        placed = hooks.index("plymouth")
+        unlocker = next(
+            (i for i, h in enumerate(hooks) if h in UNLOCK_HOOKS), None
+        )
+        if unlocker is not None and placed > unlocker:
+            raise RuntimeError(
+                f"plymouth landed at {placed}, after the unlocker at "
+                f"{unlocker}: HOOKS=({' '.join(hooks)})"
+            )
+
         lines.append(f"HOOKS=({' '.join(hooks)})")
         changed = True
 
@@ -1168,6 +1204,46 @@ def run_hardware_detection(ctx: InstallContext) -> None:
         error(f"chwd found no profile to install: {result.stderr.strip()}")
         return
     info("› chwd installed the detected graphics profile")
+
+
+def lock_boot_editor(ctx: InstallContext) -> None:
+    """Turn off systemd-boot's kernel command-line editor.
+
+    It defaults to on, and on a machine whose TPM unlocks the disk that is
+    a full compromise in about fifteen seconds: press `e` at the menu,
+    append init=/bin/bash, boot to a root shell on the decrypted
+    filesystem. The TPM releases the key because PCR 7 measures Secure
+    Boot policy, and editing a command line does not change Secure Boot
+    policy (#63).
+
+    Amended, never clobbered: archinstall writes this file - read off a
+    real install, it carries `timeout 3` - and rewriting it wholesale
+    would silently drop that.
+
+    This does not make TPM unlock sound. With Secure Boot off, an attacker
+    boots their own binary and never sees this menu; even with it on, PCR 7
+    measures neither the kernel nor the initramfs. Those belong to the
+    enrolment-policy question. This closes the free one.
+    """
+    esp = ctx.target / ctx.esp_mount.lstrip("/")
+    conf = esp / "loader/loader.conf"
+    conf.parent.mkdir(parents=True, exist_ok=True)
+
+    note = "# the cmdline editor is a root shell on a TPM-unlocked disk (#63)"
+    lines = conf.read_text().splitlines() if conf.exists() else []
+    kept = [
+        line
+        for line in lines
+        # Both, or a re-run stacks a second copy of the comment while the
+        # setting itself stays correct - which is how this was caught.
+        # An existing `editor` setting is the thing being overridden.
+        if line.strip() != note
+        and not line.strip().lstrip("#").strip().startswith("editor")
+    ]
+    kept.append(note)
+    kept.append("editor no")
+    conf.write_text("\n".join(kept) + "\n")
+    info("› boot menu: the command-line editor is off")
 
 
 def validate_boot(ctx: InstallContext) -> None:
