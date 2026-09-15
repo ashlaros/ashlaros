@@ -1901,14 +1901,22 @@ current_snapshot() {
 }
 
 # One snapshot, chosen by number and description rather than number alone.
+# snapper draws a box table, and the number is right-aligned hard against
+# the U+2502 separator with no space - so on a real listing $1 is "0│" and
+# not "0". Measured against real snapshots in the VM: the whitespace-field
+# version matched nothing at all, which made every action here select
+# nothing and silently do nothing. The column separator is what the fields
+# are split on for that reason.
+SNAPSHOT_NUMBER='BEGIN { FS = "\u2502" } { n = $1; gsub(/[[:space:]]/, "", n) }'
+
 snapshot_pick() {
   local header=$1 rows choice
   rows=$(snapper -c root list --columns number,date,description 2>/dev/null |
-    awk 'NR > 2 && $1 ~ /^[0-9]+$/ { print }' | tail -30)
+    awk "$SNAPSHOT_NUMBER"' NR > 2 && n ~ /^[0-9]+$/ { print }' | tail -30)
   [[ -n $rows ]] || { screen "Snapshots"; warn "No snapshots yet."; pause; return 1; }
   choice=$(printf '%s\n' "$rows" | gum choose --header "$header") || return 1
   [[ -n $choice ]] || return 1
-  awk '{ print $1 }' <<<"$choice"
+  awk "$SNAPSHOT_NUMBER"' { print n }' <<<"$choice"
 }
 
 # 20. DISK UNLOCK
