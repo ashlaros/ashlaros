@@ -12,6 +12,11 @@ on:
       # change to it has to be exercised rather than trusted until the
       # next time someone touches iso/
       - test/vm/**
+      # the build runs these: one stages the package cache into the
+      # profile, the other can fail the build. A change to either that
+      # nothing here exercised would surface as a broken nightly.
+      - scripts/seed_install_cache.py
+      - scripts/check_iso_packages.py
   workflow_dispatch:
 
 concurrency:
