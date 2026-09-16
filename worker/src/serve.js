@@ -196,6 +196,13 @@ export function handler(site) {
     if (site.isAlias?.(key)) {
       const pointer = await bucket.get(key);
       if (!pointer) return notFound();
+      // A pointer is a version string - twelve bytes or so. Reading the
+      // body without checking its size killed the isolate when the key
+      // still held the 1.98 GB image it used to be a copy of: text() on
+      // two gigabytes is Cloudflare's error 1101, and both aliases
+      // answered 500 until the objects were replaced. Anything larger
+      // than a version cannot be one, so it is not read at all.
+      if (pointer.size > 64) return notFound();
       const version = (await pointer.text()).trim();
       // a pointer that is not a version is a broken publish; 404 beats
       // redirecting somewhere arbitrary

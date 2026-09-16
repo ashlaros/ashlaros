@@ -3,7 +3,12 @@
 // What a latest/ pointer holds: the version the alias points at, taken
 // from the newest version prefix in the fake bucket so a test does not
 // have to state it twice.
-const aliasBody = (key) => (key.startsWith('latest/') ? '2026.09.10' : 'bytes');
+// Only the two alias keys are pointers. latest/ also holds screenshots and
+// the tour video, which are real files: sizing those like a version string
+// broke the media test, which is exactly the distinction that matters.
+const isPointer = (key) =>
+  key === 'latest/ashlaros.iso' || key === 'latest/ashlaros-rpi5.img.xz';
+const aliasBody = (key) => (isPointer(key) ? '2026.09.10' : 'bytes');
 
 export function bucketOf(keys, { etag = '"e"', pageSize = 1000 } = {}) {
   return {
@@ -43,12 +48,16 @@ export function bucketOf(keys, { etag = '"e"', pageSize = 1000 } = {}) {
       // text() because latest/ now holds a version string the worker
       // reads rather than an image it streams; R2 objects carry it and a
       // fake without it cannot exercise the redirect at all
+      // A pointer is a version string and an image is gigabytes, and the
+      // handler now refuses to read a body too large to be a pointer -
+      // so the fake has to tell them apart the way R2 does, by size.
+      const body = aliasBody(k);
       const object = {
         body: 'bytes',
-        size,
+        size: isPointer(k) ? body.length : size,
         writeHttpMetadata: () => {},
         httpEtag: etag,
-        text: async () => aliasBody(k),
+        text: async () => body,
       };
       if (match) {
         const offset = Number(match[1]);

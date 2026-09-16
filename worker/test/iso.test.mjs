@@ -72,6 +72,24 @@ test('the index lists newest first and does not repeat latest as a version', asy
   assert.match(body, /href="\/latest\/ashlaros\.iso"/);
 });
 
+test('an alias key holding a whole image is refused, not read', async () => {
+  // The bug this defends: latest/ashlaros.iso was still the 1.98 GB image
+  // it used to be a copy of, and reading it as a pointer killed the
+  // isolate - Cloudflare error 1101, a 500 on the download link. A body
+  // too large to be a version string is never read.
+  const bucket = bucketOf(KEYS);
+  const huge = {
+    ...(await bucket.get('latest/ashlaros.iso')),
+    size: 1_978_718_208,
+    text: async () => {
+      throw new Error('a whole image must never be read as a pointer');
+    },
+  };
+  const env = { ISO: { ...bucket, get: async () => huge }, ANALYTICS_ENGINE: null };
+  const res = await worker.fetch(get('iso.ashlaros.download', 'latest/ashlaros.iso'), env);
+  assert.equal(res.status, 404);
+});
+
 test('versionOf reads the prefix, and rejects a bare key', () => {
   assert.equal(versionOf('2026.09.10/x.iso'), '2026.09.10');
   assert.equal(versionOf('latest/ashlaros.iso'), 'latest');
