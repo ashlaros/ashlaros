@@ -21,7 +21,6 @@ meaningless.
 """
 
 import argparse
-import ast
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PACKAGES = ROOT / "packages"
 
 sys.path.insert(0, str(ROOT / "scripts"))
+import seed_install_cache  # noqa: E402
 from package_version import NoHistory, version_of  # noqa: E402
 
 
@@ -89,39 +89,28 @@ def expected_versions() -> dict[str, str]:
     return expected
 
 
-def staged_cache_covers_overlap(rootfs: Path) -> list[str]:
-    """Packages on both lists that the ISO's cache does not carry.
+def unstaged_overlap(rootfs: Path) -> list[str]:
+    """Packages on both lists that the staged cache does not carry.
 
     Seven packages are installed on the live ISO and requested again by the
-    installer, so the ISO stages them under /var/cache/ashlaros/pkg and the
-    install copies them from the medium (#82). The overlap is derived from
-    the two lists, so either changing moves it - and a moved overlap that
-    nothing staged is a silent return to downloading firefox twice.
+    installer, so seed_install_cache.py stages them on the medium and the
+    install copies them instead of downloading them a second time (#82).
+    The overlap is derived from the two lists, so either changing moves it -
+    and a moved overlap nothing staged is a silent return to fetching
+    firefox twice, which only a timed install would reveal.
+
+    The lists are read with seed_install_cache's own parsers: a second copy
+    here would disagree with the staging the first time either file changed
+    shape, and disagree silently.
     """
-    iso_list = ROOT / "iso" / "packages.x86_64"
-    impl = ROOT / "installer" / "orchestrator" / "phases_impl.py"
-    if not iso_list.is_file() or not impl.is_file():
-        return []
-
-    iso_packages = {
-        line.strip()
-        for line in iso_list.read_text().splitlines()
-        if line.strip() and not line.startswith("#")
-    }
-
-    desktop: set[str] = set()
-    for node in ast.parse(impl.read_text()).body:
-        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == (
-            "DESKTOP_PACKAGES"
-        ):
-            desktop = set(ast.literal_eval(node.value))
-
-    overlap = iso_packages & desktop
+    overlap = set(seed_install_cache.iso_packages()) & set(
+        seed_install_cache.desktop_packages()
+    )
     if not overlap:
         return []
 
-    cache = rootfs / "var/cache/ashlaros/pkg"
-    cached = {path.name.rsplit("-", 3)[0] for path in cache.glob("*.pkg.tar*")}
+    cache = rootfs / seed_install_cache.cache_path().relative_to("/")
+    cached = {path.name.rsplit("-", 3)[0] for path in cache.glob("*.pkg.tar.zst")}
     return sorted(overlap - cached)
 
 
@@ -157,7 +146,7 @@ def main() -> int:
         print("no ashlaros-* packages in the rootfs", file=sys.stderr)
         return 2
 
-    missing = staged_cache_covers_overlap(args.rootfs)
+    missing = unstaged_overlap(args.rootfs)
     if missing:
         print(
             "these packages are on the ISO and in DESKTOP_PACKAGES but are not "

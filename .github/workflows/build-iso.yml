@@ -63,11 +63,6 @@ jobs:
         # else under /var/cache, which is why ISO_PACKAGE_CACHES names a
         # path of ours rather than pacman's.
         run: python3 scripts/seed_install_cache.py --rootfs iso/airootfs
-      - name: stage the packages the install would otherwise refetch
-        # Seven packages are on the ISO and in the installer's own list;
-        # without this the install downloads all seven again, firefox at
-        # 84 MiB among them (#82).
-        run: .github/scripts/stage-package-cache.sh iso
       - name: build the iso
         run: |
           mkarchiso -v -w /tmp/work -o out iso/
