@@ -86,6 +86,27 @@ def log(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
+def array_body(text: str, start: int) -> str:
+    """The contents of the array assignment beginning at `start`.
+
+    Comments are stripped before the parens are counted, so a ")" inside a
+    comment cannot close the array early.
+    """
+    opening = text.find("(", start)
+    if opening == -1:
+        return ""
+    stripped = re.sub(r"#[^\n]*", "", text[opening:])
+    depth = 0
+    for index, char in enumerate(stripped):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return stripped[1:index]
+    return ""
+
+
 def field(pattern: re.Pattern, text: str) -> list[str]:
     """Every quoted or bare word in EVERY matching array assignment.
 
@@ -99,7 +120,15 @@ def field(pattern: re.Pattern, text: str) -> list[str]:
     """
     names = []
     for match in pattern.finditer(text):
-        body = re.sub(r"#.*", "", match.group(1))
+        # The pattern's own capture stops at the first ")" in the text,
+        # which in a commented array is one inside a comment: our
+        # ashlaros-settings has "# reads a QR code off the screen
+        # (capture-qr.sh)" 29 lines into a 99-line depends=(), so
+        # everything after it - eww among them - was invisible and its
+        # build ordered as if it had no such dependency. Comments go
+        # first, then the array is taken to its real closing paren.
+        body = array_body(text, match.start()) or match.group(1)
+        body = re.sub(r"#.*", "", body)
         for word in body.replace("'", " ").replace('"', " ").split():
             # strip >=, <=, =, >, < and whatever follows
             name = re.split(r"[<>=]", word, maxsplit=1)[0]
