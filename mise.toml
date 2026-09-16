@@ -1,0 +1,53 @@
+# Tool and dependency versions, so a workstation and a runner agree.
+#
+# The scripts here are standalone - each is runnable on its own and none
+# imports a third-party package beyond boto3 and PyYAML - so there is no
+# package to build and no lockfile to resolve. mise pins the tools and uv
+# installs the two dependencies, which is the whole of it.
+#
+# Node and Rust are here because the worker and core are built with them:
+# CI pinned node in two workflows and took whatever rustup shipped, so a
+# toolchain update could change the wasm the verifier runs with no commit
+# to blame it on.
+#
+# The jobs that run inside an archlinux container do not use this: repo-add
+# and makepkg have to come from the same pacman generation that built the
+# packages, so those take python-boto3 from pacman instead.
+
+[tools]
+python = "3.14.7"
+uv = "0.12"
+ruff = "0.16.7"
+node = "22"
+rust = "1.90.0"
+
+[env]
+# keep uv's cache inside the checkout so a runner can cache one directory
+UV_CACHE_DIR = "{{ config_root }}/.uv-cache"
+
+[tasks.install]
+description = "install the script dependencies"
+run = "uv pip install --system -r requirements.txt"
+
+[tasks.lint]
+description = "lint the python that is kept clean"
+# Not `ruff check .`: the settings payload carries 22 pre-existing findings
+# and fixing those is a separate job, so weather.py is the only file listed
+# out of that directory. CI runs this task rather than repeating the paths.
+run = """
+ruff check scripts installer/orchestrator test/vm \
+  packages/ashlaros-settings/payload/usr/share/sway/scripts/weather.py
+"""
+
+[tasks.wasm-target]
+description = "add the wasm target the worker's tests compile against"
+# npm test builds core/ for wasm32, which fails with "can't find crate for
+# core" if the target was never added. Idempotent, so it is cheap to depend
+# on rather than remember.
+run = "rustup target add wasm32-unknown-unknown"
+
+[tasks.test]
+description = "run the worker tests"
+depends = ["wasm-target"]
+dir = "worker"
+run = "npm test"

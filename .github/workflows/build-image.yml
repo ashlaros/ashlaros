@@ -23,6 +23,7 @@ jobs:
       QEMU_PREFIX: ${{ github.workspace }}/.qemu
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
 
       - name: tools
         # parted, losetup, mkfs.vfat and bsdtar run on the runner rather
@@ -104,5 +105,5 @@ jobs:
           R2_BUCKET: ashlaros-iso
           VERSION: ${{ steps.version.outputs.value }}
         run: |
-          sudo apt-get install -y --no-install-recommends python3-boto3
+          mise run install
           python3 scripts/upload_iso.py --iso-dir out --version "$VERSION"

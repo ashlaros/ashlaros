@@ -578,6 +578,17 @@ to the upload step.
 
 ## Building
 
+`mise.toml` pins the tooling — python, node, rust, ruff and uv — so a
+workstation and a runner agree on versions, and `requirements.txt` pins the
+two third-party packages the scripts import. `mise install` then
+`mise run install` is the whole setup; `mise run lint` and `mise run test`
+are what CI calls, so there is one definition of each rather than a copy in
+every workflow.
+
+Jobs that run inside an `archlinux` container are the exception and take
+`python-boto3` from pacman: `repo-add` and `makepkg` have to come from the
+same pacman generation that built the packages.
+
 The ISO is built by `.github/workflows/build-iso.yml` with `archiso`. To build
 it locally, on an Arch host with `archiso` installed:
 

@@ -17,6 +17,10 @@ work/
 # cargo build trees
 core/target/
 client/target/
+# uv's cache, kept in the checkout by mise.toml so CI caches one directory
+.uv-cache/
+# ruff's cache
+.ruff_cache/
 # built from core/ by `npm run core:build` - a binary that a compiler
 # emits does not belong in the tree
 worker/src/game/ashlaros_games.wasm

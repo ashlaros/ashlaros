@@ -14,23 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
-      - name: wasm target
-        # the tests import the compiled core, so it has to exist first
-        run: rustup target add wasm32-unknown-unknown
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - name: test
-        working-directory: worker
-        run: npm test
+        # the task adds the wasm target the tests compile against, so a
+        # workstation and a runner run the same thing
+        run: mise run test
 
   core:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 22
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - run: rustup target add wasm32-unknown-unknown
       - name: build the wasm the worker imports
         run: cargo build --release --manifest-path core/Cargo.toml --target wasm32-unknown-unknown
@@ -124,17 +118,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.13'
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
       - name: ruff
-        run: |
-          pip install ruff
-          # the payload's python is otherwise linted by nothing. Only
-          # weather.py is listed: the rest of that directory carries 22
-          # pre-existing findings, and fixing those is not this job.
-          ruff check scripts installer/orchestrator test/vm \
-            packages/ashlaros-settings/payload/usr/share/sway/scripts/weather.py
+        # the paths live in mise.toml's lint task, so a workstation and a
+        # runner lint the same files
+        run: mise run lint
       - name: the worker's style copies match docs/
         # docs/site.css is the one stylesheet; the worker carries its bytes
         # because docs/ is bound as assets on the apex alone. A stale copy
@@ -144,7 +132,7 @@ jobs:
         # the gallery is generated, so a shot added to the capture list
         # without a re-run would be published and never shown
         run: |
-          pip install pyyaml
+          mise run install
           python3 scripts/generate_gallery.py --check
 
   arm-repo:
