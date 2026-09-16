@@ -9,9 +9,8 @@ set -euo pipefail
 : "${SHOT_USER:=ashlar}"
 
 pacman -Sy --noconfirm --needed archlinux-keyring >/dev/null
-# python-requests is only an optdepend of ashlaros-settings, and without it
-# the bar's weather module renders as an error
-pacman -S --noconfirm --needed curl python-yaml python-requests >/dev/null
+# jq drives the bar's weather module; python-yaml is for the capture scripts
+pacman -S --noconfirm --needed curl python-yaml jq >/dev/null
 
 curl -fsSL "$ASHLAROS_REPO_URL/ashlaros.gpg" -o /tmp/ashlaros.gpg
 pacman-key --init

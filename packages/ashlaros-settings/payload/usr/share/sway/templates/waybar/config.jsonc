@@ -300,9 +300,14 @@
     "custom/weather": {
         "format": "{}",
         "tooltip": true,
-        "interval": 3600,
+        // Not 3600. MET asks clients not to poll on a fixed hourly cadence -
+        // their data updates continuously and Expires sits about 30 minutes
+        // out - and revalidation makes a poll nearly free, since a 304
+        // transfers no body. 1500s is inside that window without landing on
+        // the same minute every hour.
+        "interval": 1500,
         // accepts -c/--city <city> -t/--temperature <C/F> -d/--distance <km/miles>
-        "exec": "/usr/share/sway/scripts/weather.py",
+        "exec": "/usr/share/sway/scripts/weather.sh",
         "return-type": "json",
         "on-click": "xdg-open \"https://wttr.in/$(/usr/share/sway/scripts/geoip.sh | jq -r '.city')\"",
         "on-click-right": "waybar-signal weather",

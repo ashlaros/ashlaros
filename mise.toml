@@ -31,13 +31,10 @@ run = "uv pip install --system -r requirements.txt"
 
 [tasks.lint]
 description = "lint the python that is kept clean"
-# Not `ruff check .`: the settings payload carries 22 pre-existing findings
-# and fixing those is a separate job, so weather.py is the only file listed
-# out of that directory. CI runs this task rather than repeating the paths.
-run = """
-ruff check scripts installer/orchestrator test/vm \
-  packages/ashlaros-settings/payload/usr/share/sway/scripts/weather.py
-"""
+# Not `ruff check .`: the settings payload carries pre-existing findings and
+# fixing those is a separate job, so nothing under it is listed. CI runs this
+# task rather than repeating the paths.
+run = "ruff check scripts installer/orchestrator test/vm"
 
 [tasks.wasm-target]
 description = "add the wasm target the worker's tests compile against"

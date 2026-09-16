@@ -129,7 +129,6 @@ optdepends=(
     # here because this package is arch=any and yay is not built for ARM
     'yay: AUR helper, for packages outside the repositories'
     'pcmanfm-qt: file manager'
-    'python-requests: the waybar weather module'
     # never a hard dependency: the Ask key sends a picture of your screen
     # to whichever provider you configure, and an LLM tool on every
     # desktop by default is a statement this distribution should not make
@@ -163,6 +162,11 @@ package() {
     install -d "${pkgdir}/etc" "${pkgdir}/usr"
     cp -a "${payload}/etc/." "${pkgdir}/etc/"
     cp -a "${payload}/usr/." "${pkgdir}/usr/"
+
+    # A __pycache__ left in a checkout is git-ignored but cp -a copies it
+    # anyway, so a stale .pyc of a script we deleted can ship. Found exactly
+    # that with weather.cpython-312.pyc after weather.py became weather.sh.
+    find "${pkgdir}" -name __pycache__ -type d -prune -exec rm -rf {} +
 
     # cp -a keeps the source tree's modes; the scripts must be executable
     # whatever the checkout looked like
