@@ -221,6 +221,10 @@ follow-install)
   follow_install "${2:-5400}"
   ;;
 wait-installed)
+  # The installed disk asks for the LUKS passphrase before anything else,
+  # since that is what the installer offers by default. Nothing typed it,
+  # and wait_for_desktop sat on a black screen until its deadline.
+  docker exec "$container" python3 /vm/unlock.py | sed 's/^/   /'
   wait_for_desktop "${2:-3600}"
   ;;
 boot)
