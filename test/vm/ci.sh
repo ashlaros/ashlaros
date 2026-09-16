@@ -63,15 +63,20 @@ boot)
   "$here/run.sh" live-session
   ;;
 install)
-  SECONDS_TO_RUN=7200 "$here/run.sh" install
+  # Measured on the last green run rather than guessed: the install itself
+  # took 392s with KVM and the reboot into it 22s. The deadlines below are
+  # roughly four times that, which covers a slow runner without letting a
+  # hung boot burn an hour before saying so - 5400s here is what turned one
+  # missing passphrase prompt into a 101-minute job (#86).
+  SECONDS_TO_RUN=3600 "$here/run.sh" install
   # the driver runs detached; follow its log so the step reports progress
   # rather than going silent for however long the install takes
-  "$here/run.sh" follow-install 5400
+  "$here/run.sh" follow-install 1800
   # install.py takes the offered reboot, so the same VM comes back up on
   # the disk it just wrote. Waiting for it here rather than trusting the
   # installer's own "done" is the point: an install that completes and
   # produces an unbootable system is the failure worth catching.
-  "$here/run.sh" wait-installed 5400
+  "$here/run.sh" wait-installed 600
   "$here/run.sh" shot ci-installed >/dev/null
   echo "== the installed system boots"
 
@@ -87,7 +92,7 @@ install)
   # minutes, and it covers the transition that actually broke.
   "$here/run.sh" stop >/dev/null 2>&1 || true
   CDROM=no VGA=virtio "$here/run.sh" boot
-  "$here/run.sh" wait-installed 900
+  "$here/run.sh" wait-installed 600
   "$here/run.sh" shot ci-installed-virtio >/dev/null
   echo "== and it boots on virtio-gpu too"
   ;;

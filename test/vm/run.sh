@@ -89,7 +89,7 @@ sys.exit(0 if bytes([0xaa,0xaa,0xaa]) * 16 in raw else 1)
 # watch. install.py runs detached so the interactive user keeps control;
 # this is how the non-interactive one learns anything before the end.
 follow_install() {
-  local deadline=$((SECONDS + ${1:-5400}))
+  local deadline=$((SECONDS + ${1:-1800}))
   local seen=0 lines
   while ((SECONDS < deadline)); do
     sleep 30
@@ -126,10 +126,29 @@ follow_install() {
 # panic and the loader menu are all text on black, so this distinguishes a
 # desktop from every way the boot can go wrong.
 wait_for_desktop() {
-  local deadline=$((SECONDS + ${1:-3600}))
+  local deadline=$((SECONDS + ${1:-600}))
+  # A boot that is going to work repaints: the loader counts down, the
+  # console scrolls, the greeter draws. One that is waiting on something
+  # nobody answered is a still frame and stays one - which is how a failed
+  # passphrase prompt spent 90 minutes here reporting nothing, when the
+  # evidence was complete at minute five (#86). install.py:161 already
+  # gives up on ten identical samples; this is the same bound.
+  local stuck_limit=15 unchanged=0 last='' now
   while ((SECONDS < deadline)); do
     sleep 20
     docker exec "$container" python3 /vm/qmp.py '' probe 1 >/dev/null 2>&1 || continue
+    now=$(docker exec "$container" sha256sum /vm/out/probe.ppm 2>/dev/null | cut -d' ' -f1)
+    if [ -n "$now" ] && [ "$now" = "$last" ]; then
+      unchanged=$((unchanged + 1))
+      if ((unchanged >= stuck_limit)); then
+        echo "## the screen has not changed in $((stuck_limit * 20))s;" \
+          "the boot is waiting on something nothing answered" >&2
+        return 1
+      fi
+    else
+      unchanged=0
+    fi
+    last=$now
     if docker exec "$container" python3 -c "
 import sys
 raw = open('/vm/out/probe.ppm','rb').read()
@@ -143,7 +162,7 @@ sys.exit(0 if pixels and dark < len(pixels) * 0.5 else 1)
       return 0
     fi
   done
-  echo "## no desktop within ${1:-3600}s" >&2
+  echo "## no desktop within ${1:-600}s" >&2
   return 1
 }
 
@@ -219,14 +238,14 @@ install-start)
 # "done": an install that finishes and leaves an unbootable system is
 # exactly the failure a completion message cannot report.
 follow-install)
-  follow_install "${2:-5400}"
+  follow_install "${2:-1800}"
   ;;
 wait-installed)
   # The installed disk asks for the LUKS passphrase before anything else,
   # since that is what the installer offers by default. Nothing typed it,
   # and wait_for_desktop sat on a black screen until its deadline.
   docker exec "$container" python3 /vm/unlock.py | sed 's/^/   /'
-  wait_for_desktop "${2:-3600}"
+  wait_for_desktop "${2:-600}"
   ;;
 boot)
   CDROM=no start
