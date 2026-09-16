@@ -21,6 +21,7 @@ meaningless.
 """
 
 import argparse
+import ast
 import subprocess
 import sys
 from pathlib import Path
@@ -88,6 +89,42 @@ def expected_versions() -> dict[str, str]:
     return expected
 
 
+def staged_cache_covers_overlap(rootfs: Path) -> list[str]:
+    """Packages on both lists that the ISO's cache does not carry.
+
+    Seven packages are installed on the live ISO and requested again by the
+    installer, so the ISO stages them under /var/cache/ashlaros/pkg and the
+    install copies them from the medium (#82). The overlap is derived from
+    the two lists, so either changing moves it - and a moved overlap that
+    nothing staged is a silent return to downloading firefox twice.
+    """
+    iso_list = ROOT / "iso" / "packages.x86_64"
+    impl = ROOT / "installer" / "orchestrator" / "phases_impl.py"
+    if not iso_list.is_file() or not impl.is_file():
+        return []
+
+    iso_packages = {
+        line.strip()
+        for line in iso_list.read_text().splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+
+    desktop: set[str] = set()
+    for node in ast.parse(impl.read_text()).body:
+        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == (
+            "DESKTOP_PACKAGES"
+        ):
+            desktop = set(ast.literal_eval(node.value))
+
+    overlap = iso_packages & desktop
+    if not overlap:
+        return []
+
+    cache = rootfs / "var/cache/ashlaros/pkg"
+    cached = {path.name.rsplit("-", 3)[0] for path in cache.glob("*.pkg.tar*")}
+    return sorted(overlap - cached)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -119,6 +156,16 @@ def main() -> int:
     if not installed:
         print("no ashlaros-* packages in the rootfs", file=sys.stderr)
         return 2
+
+    missing = staged_cache_covers_overlap(args.rootfs)
+    if missing:
+        print(
+            "these packages are on the ISO and in DESKTOP_PACKAGES but are not "
+            "staged in the ISO's cache, so the install will download them "
+            f"again: {', '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 1
 
     stale = []
     for name, want in sorted(expected.items()):

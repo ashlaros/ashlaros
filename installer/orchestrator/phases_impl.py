@@ -21,6 +21,14 @@ from .ui import error, info
 # pacman takes the FIRST repository carrying a package, not the highest
 # version, so the v3 sections must precede core/extra or the installed system
 # is a plain x86_64 one that merely has the v3 repos configured.
+# Where the ISO keeps the packages it already carries.
+#
+# Not /var/cache/pacman/pkg: mkarchiso's _cleanup_pacstrap_dir deletes every
+# file under exactly that path before it packs the squashfs, which is why
+# the published ISO ships an empty one - checked, 0 files. A cache at any
+# other path survives, so the build stages one here.
+ISO_PACKAGE_CACHES = (Path("/var/cache/ashlaros/pkg"),)
+
 PACMAN_CONF = """\
 #
 # /etc/pacman.conf
@@ -243,6 +251,28 @@ def run_command(args: list[str], **kwargs) -> subprocess.CompletedProcess:
     return result
 
 
+def live_pacman_conf() -> str:
+    """PACMAN_CONF with the ISO's own package cache added as a CacheDir.
+
+    Only the live system's copy. Pacman falls through to the mirrors on a
+    miss, so this is a shortcut rather than a source of truth, and a cache
+    older than the repositories loses to them on version comparison.
+
+    The ISO's own cache is listed first and pacman's default second, so
+    anything fetched during this session is reused too.
+    """
+    caches = [path for path in ISO_PACKAGE_CACHES if path.is_dir()]
+    if not caches:
+        return PACMAN_CONF
+    listed = " ".join(str(path) for path in caches)
+    added = (
+        "[options]\n"
+        "# the ISO's own packages, so an install does not fetch them again\n"
+        f"CacheDir = {listed} /var/cache/pacman/pkg\n"
+    )
+    return PACMAN_CONF.replace("[options]\n", added, 1)
+
+
 def write_live_repository_stack() -> None:
     """Give the LIVE system the repositories the target will be built from.
 
@@ -256,9 +286,15 @@ def write_live_repository_stack() -> None:
 
     Writing the same stack here fixes it at the source: one definition,
     used for the live system and copied to the target.
+
+    The live copy gains a CacheDir the target's does not. pacstrap resolves
+    against this file, so a package already on the ISO is copied from disk
+    instead of fetched again - seven of them are, firefox among them at
+    88 MB. The target keeps pacman's default cache, because /run/archiso
+    does not exist once the machine reboots.
     """
     live = Path("/etc")
-    live.joinpath("pacman.conf").write_text(PACMAN_CONF)
+    live.joinpath("pacman.conf").write_text(live_pacman_conf())
     pacman_d = live / "pacman.d"
     pacman_d.mkdir(parents=True, exist_ok=True)
     (pacman_d / "cachyos-v3-mirrorlist").write_text(CACHYOS_V3_MIRRORLIST)
