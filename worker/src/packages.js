@@ -4,7 +4,11 @@
 
 import { escapeHtml, html, humanSize, notFound, page } from './serve.js';
 
-const TITLE = 'ashlaros';
+// The same shape every other page uses: the project, then what this page
+// is. It was a bare lowercase "ashlaros", which named the repository but
+// matched nothing else on the site and was indistinguishable from the ISO
+// page in a tab.
+const TITLE = 'AshlarOS — Packages';
 
 // Every link this page writes is absolute from the apex, and the bucket
 // keys know nothing about the prefix - so it is added on the way out, the
@@ -52,7 +56,12 @@ export function renderListing(prefix, dirs, files) {
     ),
   ].join('\n');
 
-  return page(prefix ? `${TITLE}/${prefix}` : TITLE, `<table>\n${rows}\n</table>`);
+  // the tree a listing is inside, after the page name rather than glued to
+  // the project: "AshlarOS — Packages / x86_64/"
+  return page(
+    prefix ? `${TITLE} / ${prefix}` : TITLE,
+    `<table>\n${rows}\n</table>`,
+  );
 }
 
 export const site = {

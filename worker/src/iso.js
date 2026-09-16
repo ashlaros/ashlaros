@@ -21,7 +21,9 @@ import {
   validateSubmission,
 } from './game/scores.js';
 
-const TITLE = 'AshlarOS';
+// Named, like every other page. It was a bare "AshlarOS", which is the
+// landing page's title - two different pages with the same tab.
+const TITLE = 'AshlarOS — Downloads';
 
 // Links are absolute from the apex; bucket keys are not. The prefix is
 // added here and stripped by the handler, so R2 never sees it.
@@ -191,7 +193,9 @@ export function renderStats({ configured, archive, versions, files, version }) {
       ' <a class="link" href="/iso/stats.json">stats.json</a></p>',
   );
 
-  return page(TITLE, parts.join('\n'));
+  // named, rather than sharing the download page's title: two pages with
+  // the same tab is the thing this is meant to avoid
+  return page(`${TITLE} / stats`, parts.join('\n'));
 }
 
 export const site = {

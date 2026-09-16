@@ -37,17 +37,20 @@ export function humanSize(bytes) {
  * own index, so a relative link would send three hosts to three different
  * pages when the point is one way back to the project.
  *
- * Only the name links. A packages listing is titled "ashlaros/core", and
- * the prefix is where you already are - linking it home would be a lie
- * about where it goes.
+ * Only the name links. A packages listing is titled
+ * "AshlarOS — Packages / x86_64/", and everything after the name is where
+ * you already are - linking it home would be a lie about where it goes.
  */
 const HOME = 'https://ashlaros.download/';
 
+const NAME = 'AshlarOS';
+
 function titleLink(title) {
   const safe = escapeHtml(title);
-  const name = safe.startsWith('AshlarOS') ? 'AshlarOS' : 'ashlaros';
-  if (!safe.startsWith(name)) return safe;
-  return `<a href="${HOME}">${name}</a>${safe.slice(name.length)}`;
+  // a title that does not start with the project name is not one of ours
+  // to link; render it as text rather than guessing where it should go
+  if (!safe.startsWith(NAME)) return safe;
+  return `<a href="${HOME}">${NAME}</a>${safe.slice(NAME.length)}`;
 }
 
 export function page(title, body) {
