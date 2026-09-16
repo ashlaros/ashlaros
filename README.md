@@ -75,84 +75,31 @@ is the usual trade for an Arch-derived desktop, and the same one
 manjaro-sway made, but it is a real one — `pacman -R yay` removes it, and
 the theme switcher then says which packages it would have needed.
 
-## Screenshots
-
-`screenshots/` photographs the desktop and publishes to
-[`ashlaros.download/iso/latest/screenshots/`](https://ashlaros.download/iso/latest/screenshots/desktop.png),
-which is what the picture above and the landing page point at. They are not
-committed: a handful of PNGs regenerated on every settings change is a
-repository that grows forever for files nobody diffs.
-
-A shot of the booted ISO would show bare sway. `iso/packages.x86_64` installs
-`sway`, `foot` and `firefox` and deliberately leaves `ashlaros-settings` out,
-because the live system is the installer plus a rescue environment. So the
-capture installs the settings package from the published repository into a
-container and runs sway on wlroots' headless backend, which draws a full
-session with no GPU and no seat. Seconds, no nested virtualisation, and it
-renders the real configured desktop.
-
-What it is not: proof that anything boots or installs. It is a picture of the
-desktop, and the ISO build has its own checks for the other question.
-
-`screenshots/record.sh` records a short silent tour beside the stills,
-published at
-[`latest/video/tour.webm`](https://ashlaros.download/iso/latest/video/tour.webm). A still cannot show tiling, a launcher
-opening or the theme switching; thirty seconds can. The session setup is
-`screenshots/session.sh`, shared with the capture script rather than copied
-into it — the D-Bus re-exec and the waybar workaround are the hard-won part
-and two copies would drift.
-
-It is silent (a container has no audio, and silence means no narration to
-maintain), and the theme scene shows **the bar switching**: measured, a
-toggle repaints waybar by 79% while terminal panes change by under 14%,
-because foot takes its colours from the server that started before the
-switch. That is what the desktop really does, so that is what the tour
-shows.
-
-`screenshots/shots.yaml` is one entry per picture - the commands to run, the
-`swaymsg` placement between them, and how long to let it settle. Adding a
-picture is a block there rather than another `if` in a script.
-
-Publishing is only under `latest/screenshots/`. The desktop changes when
-`packages/ashlaros-settings/payload/` changes, which is decoupled from the
-ISO build, so writing these under `<version>/screenshots/` would say "this is
-what that ISO looked like" while meaning "what the desktop looked like
-whenever this last ran".
-
-Consecutive runs differ - the bar shows a clock, the weather, and a pending
-update count. That is fine for publishing and fatal for diffing, so there is
-deliberately no "screenshots changed" check. These are pictures, not golden
-files.
-
 ## Download stats
 
-`ashlaros.download/iso/stats` counts ISO downloads, and `/stats.json` is the
-same data machine-readable. A download is one whole-image `GET` that
+`ashlaros.download/iso/stats` counts ISO downloads, and `/stats.json` is
+the same data machine-readable. A download is one whole-image `GET` that
 returned `200`: a resumed download issues many range requests and would
-otherwise report one image as dozens, a revalidation transfers nothing, and
-`SHA256SUMS` is not a download. Only the ISO site counts — every
-`pacman -Sy` is a database fetch, and that volume would drown the signal.
+otherwise report one image as dozens, a revalidation transfers nothing,
+and `SHA256SUMS` is not a download. Only the ISO site counts — every
+`pacman -Sy` is a database fetch and would drown the signal. Images taken
+from `/latest/` have no version in their URL and are counted as their own
+row: that is how many people take the current image without pinning one.
 
-Images taken from `/latest/` carry no version in their URL, so they are
-counted as their own row rather than attributed to whichever image happened
-to be newest. That number is worth having on its own: it is how many people
-take the current image without pinning one.
-
-Two stores, because neither works alone. Analytics engine takes the writes —
-`writeDataPoint` is non-blocking, so counting costs a download nothing — but
-retains three months. KV keeps the archive indefinitely, written once a
-month by a cron on the 2nd rather than per download: KV allows one write per
-second per key and propagates for up to a minute, so a per-download counter
-would lose counts to last-write-wins. The 2nd rather than the 1st because
-ingestion is not instant, and a closed month's last events have to be
-queryable before the month is archived.
+Two stores, because neither works alone. Analytics engine takes the writes
+— `writeDataPoint` is non-blocking, so counting costs a download nothing —
+but retains three months. KV keeps the archive, written once a month by a
+cron on the 2nd rather than per download: KV allows one write per second
+per key and propagates for up to a minute, so a per-download counter would
+lose counts to last-write-wins. The 2nd, not the 1st, because a closed
+month's last events have to be queryable before it is archived.
 
 Writing needs no credentials; reading does. Analytics engine has no query
 binding, so the page reads over the SQL API with a token
-(`wrangler secret put ANALYTICS_TOKEN`, scoped *Account · Account Analytics ·
-Read*). That asymmetry is deliberate: downloads are counted whether or not
-the token is set, and it can be added later without losing anything already
-counted. Until it is, the page says so rather than answering 500.
+(`wrangler secret put ANALYTICS_TOKEN`, scoped *Account · Account
+Analytics · Read*). Downloads are counted whether or not the token is set,
+so it can be added later without losing anything; until it is, the page
+says so rather than answering 500.
 
 ## Settings
 
@@ -195,26 +142,24 @@ with it installed on a machine that has a camera, Settings → **Face
 unlock** enrols a face, tests it, and can turn it on for `sudo`.
 
 **It is weaker than a password**, and upstream says so first: a similar
-face or a photo may work. Infrared makes that harder, not impossible. This
-is 2D infrared matching, not Windows Hello — Hello's anti-spoofing comes
-from a dot projector building a depth map, and Howdy reads a flat frame.
+face or a photo may work. This is 2D infrared matching, not Windows Hello
+— Hello's anti-spoofing comes from a dot projector building a depth map,
+and Howdy reads a flat frame.
 
-The PAM rules are the same as the fingerprint entry's, for the same
-reason: `sufficient` before the password line, `sudo` only, never the lock
-screen or the greeter, and never enabled until a recognition test has
-actually passed. A face that fails — a dark room, a covered emitter, a lid
-at an angle — falls through to the password that always worked. Verified
-with `pam_howdy.so` absent entirely, which is the worst case: `sudo` still
-accepts a password. Disabling restores `/etc/pam.d/sudo` byte-identically
-to the file pacman ships, so no `.pacnew` appears.
+The PAM rules match the fingerprint entry's: `sufficient` before the
+password line, `sudo` only, never the lock screen or the greeter, and
+never enabled until a recognition test has passed. A face that fails — a
+dark room, a covered emitter, a lid at an angle — falls through to the
+password that always worked. Verified with `pam_howdy.so` absent entirely,
+the worst case: `sudo` still accepts a password. Disabling restores
+`/etc/pam.d/sudo` byte-identically to the file pacman ships, so no
+`.pacnew` appears. The disk passphrase is untouched either way: LUKS
+happens long before PAM exists.
 
-It costs 182 packages to install — `opencv` alone is 112.81 MiB — which is
-why nobody who does not want it pays for it. The disk passphrase at boot
-is untouched: LUKS happens long before PAM exists.
-
-`linux-enable-ir-emitter`, which turns on the emitters many laptops leave
-dark, is **not** packaged: its current release builds against `opencv4`
-and Arch now ships `opencv` 5, so it does not compile.
+It costs 182 packages — `opencv` alone is 112.81 MiB — which is why nobody
+who does not want it pays for it. `linux-enable-ir-emitter`, which turns
+on the emitters many laptops leave dark, is **not** packaged: its current
+release builds against `opencv4` and Arch now ships `opencv` 5.
 
 ## Notes
 
@@ -259,81 +204,67 @@ whole style string that colour appears in, and renders unstyled.
 ## Mail and calendar
 
 Neither is preinstalled and neither does anything until you configure it:
-mail is personal, and a client that opens onto nothing is worse than no
-client.
+a client that opens onto nothing is worse than no client.
 
-[`khal`](https://khal.readthedocs.io) **is** installed — it has a keybind
-— and Settings → **Calendar** points
-[`vdirsyncer`](https://vdirsyncer.pimutils.org) at a CalDAV server.
-khal reads a directory of `.ics` files; vdirsyncer is what fills it, on a
+[`khal`](https://khal.readthedocs.io) **is** installed, with a keybind,
+and Settings → **Calendar** points
+[`vdirsyncer`](https://vdirsyncer.pimutils.org) at a CalDAV server on a
 timer. A local calendar exists before any of that, so a machine with no
 account still has somewhere to put an appointment.
 
-Nextcloud, Fastmail, iCloud, mailbox.org, Posteo and Zoho are offered with
-their URLs prefilled, and "Other CalDAV server" is a first-class option.
-vdirsyncer refuses a sync that would empty both sides rather than doing
-it, and the conflict question is asked as *which copy wins* rather than in
-vdirsyncer's own "a wins"/"b wins" terms.
+Nextcloud, Fastmail, iCloud, mailbox.org, Posteo and Zoho come with their
+URLs prefilled; "Other CalDAV server" is a first-class option. vdirsyncer
+refuses a sync that would empty both sides, and the conflict question is
+asked as *which copy wins* rather than in its own "a wins"/"b wins" terms.
 
-**Google** signs in through a browser rather than a password. AshlarOS is
-registered as an OAuth client and ships that registration, the way every
-desktop offering Google accounts does — GNOME bakes the same two values
-into `gnome-online-accounts` at build time. It identifies the application,
-not you: the sign-in happens in your browser against your own account, and
-the token lands in `~/.local/share/vdirsyncer/` and is never seen by us.
-Put your own `client_id` and `client_secret` in
-`~/.config/ashlaros/google-oauth-client` to run under your own Cloud
-project instead.
+**Google** signs in through a browser rather than a password. AshlarOS
+ships an OAuth client registration, the way every desktop offering Google
+accounts does — GNOME bakes the same two values into
+`gnome-online-accounts`. It identifies the application, not you: the
+sign-in happens against your own account and the token never leaves the
+machine. Put your own `client_id` and `client_secret` in
+`~/.config/ashlaros/google-oauth-client` to use your own Cloud project.
+Gmail needs one extra step the calendar does not — the initial refresh
+token comes from an OAuth flow the entry does not run, and Google's OAuth
+2.0 Playground does it in a browser.
 
-**Subscribed calendars** read a published `.ics` link — Proton Calendar's
-"share via link", a timetable, a fixture list — into the same vdir, named
-by you and removable one at a time. Read-only, which is vdirsyncer's
-`http` storage rather than a choice here: the events show up in `khal` and
-raise reminders, and editing stays wherever the calendar lives. It is the
-only way to reach **Proton**, which speaks no CalDAV — `dav.proton.me` and
-`caldav.proton.me` do not resolve, the web app answers `405` to
-`PROPFIND`, and Proton Bridge is IMAP/SMTP only. A published link carries
-no password, so anyone holding it can read that calendar; the entry says
-so before writing one down.
+**Subscribed calendars** read a published `.ics` link — a timetable, a
+fixture list, Proton Calendar's "share via link" — into the same vdir,
+named by you and removable one at a time. Read-only, because that is what
+vdirsyncer's `http` storage is. This is also the only way to reach
+**Proton**, which speaks no CalDAV at all. A published link carries no
+password, so anyone holding it can read that calendar; the entry says so
+before writing one down.
 
 Settings → **Mail** configures [`aerc`](https://aerc-mail.org)
-(`pacman -S aerc`) against IMAP and SMTP with a password. Both clients put
-the credential in the login keyring and read it back with a command, so
-neither config file holds a secret.
+(`pacman -S aerc`) against IMAP and SMTP. Both clients keep the credential
+in the login keyring and read it back with a command, so neither config
+file holds a secret. The aerc styleset is regenerated on every theme
+switch, like the waybar colours.
 
-Gmail needs one thing the calendar does not: the initial refresh token
-comes from an OAuth flow the settings entry does not run, and Google's
-OAuth 2.0 Playground does it in a browser.
-
-**Outlook is not supported**, for mail or calendar. Microsoft retired
-CalDAV for Outlook.com and the replacement is Graph, which nothing here
-speaks; mail would need an Entra registration under separate terms.
-
-The aerc styleset is regenerated from the active desktop theme on every
-theme switch, like the waybar colours.
+**Outlook is not supported**, for mail or calendar: Microsoft retired
+CalDAV for Outlook.com in favour of Graph, which nothing here speaks.
 
 ## Office documents
 
-Nothing here opens a `.docx` out of the box — no suite, no viewer. That is
-a deliberate floor rather than an oversight: LibreOffice is 147 MB and
-looks nothing like the rest of the desktop.
+Nothing here opens a `.docx` out of the box — no suite, no viewer. A
+deliberate floor: LibreOffice is 147 MB and looks nothing like the rest of
+the desktop. Install `libreoffice-still` if you need Office formats to
+round-trip faithfully; it is the only thing that really does.
 
 Settings → **Web apps** installs Google Docs, Sheets and Slides, or
 Microsoft 365, as real web apps: own window, own icon, launchable from
-rofi, signed in as you. It needs `firefoxpwa` (`pacman -S firefoxpwa`) and
-downloads a browser runtime of about 300 MB the first time, per user.
+rofi. It needs `firefoxpwa` (`pacman -S firefoxpwa`) and downloads a
+browser runtime of about 300 MB the first time, per user. We write those
+manifests ourselves, because neither provider serves one to a logged-out
+fetch — `docs.google.com/manifest.json` is a 404 and `office.com` answers
+403 in an HTML body, so `firefoxpwa site install` against the page URL
+fails outright.
 
-We write those manifests ourselves, because neither provider serves one to
-a logged-out fetch — `docs.google.com/manifest.json` is a 404 and
-`office.com/manifest.json` answers 403 in an HTML body, so pointing
-`firefoxpwa site install` at the page URL fails outright.
-
-If you need Office formats to round-trip faithfully, install
-`libreoffice-still`; it is the only thing that really does. And `rclone`
-mounts Drive or OneDrive as a directory, which is the version of "open it
-from the cloud" that does not involve publishing your document to a public
-URL first — which is what the Office and Google *viewers* would require,
-since both take a URL and neither accepts a local file.
+`rclone` mounts Drive or OneDrive as a directory, which is the version of
+"open it from the cloud" that does not involve publishing your document to
+a public URL first — which is what both providers' *viewers* require,
+since they take a URL and neither accepts a local file.
 
 ## Reading the screen: text, QR codes, and asking a model
 
@@ -345,26 +276,22 @@ since both take a URL and neither accepts a local file.
 | `q` | decode a QR in the region onto the clipboard | no |
 | `a` | ask a configured model about the region | **yes** |
 
-`t` and `q` are local: `tesseract` and `zbar` run here. `ASHLAROS_OCR_LANGS`
-selects OCR languages once you install the data for them
-(`tesseract-data-deu` and friends); `eng` ships.
-
-The QR decode is deliberately restricted to QR symbologies, because dense
+`t` and `q` are local — `tesseract` and `zbar` run here.
+`ASHLAROS_OCR_LANGS` selects OCR languages once the data is installed;
+`eng` ships. The QR decode is restricted to QR symbologies, because dense
 screen content otherwise false-positives as a barcode, and its result is
-copied with `wl-copy --sensitive` and never printed or shown — QR codes
-routinely carry secrets, `otpauth://` 2FA URIs above all, and we ship
-`cliphist` and `wl-clip-persist`, so an unmarked entry would be kept.
+copied with `wl-copy --sensitive` and never shown: QR codes routinely
+carry secrets, `otpauth://` URIs above all, and `cliphist` would otherwise
+keep an unmarked entry.
 
-**`a` is the one that sends your screen somewhere.** It captures the
-selected region and hands the picture to [`aichat`](https://github.com/sigoden/aichat),
-which is an `optdepends` and is not installed by default. Nothing is sent
-unless you press that key, and nothing is sent at all until you configure
-a provider yourself — there is no default provider and no bundled key. The
-notification names the model before the request goes out.
+**`a` is the one that sends your screen somewhere.** It hands the region
+to [`aichat`](https://github.com/sigoden/aichat), an `optdepends` that is
+not installed by default. Nothing is sent unless you press that key, and
+nothing at all until you configure a provider — there is no default and no
+bundled key. The notification names the model before the request goes out.
 
-**Point it at a local model if you want this to cost no privacy.**
-`aichat` speaks to Ollama and any OpenAI-compatible endpoint as readily as
-to a SaaS, so the same keybind works entirely on-machine:
+Point it at a local model and it costs no privacy: `aichat` speaks to
+Ollama and any OpenAI-compatible endpoint as readily as to a SaaS.
 
 ```yaml
 # ~/.config/aichat/config.yaml
@@ -378,9 +305,8 @@ clients:
 ```
 
 Configure a hosted provider instead and a picture of part of your screen
-goes to that company. That region may hold a password manager, a private
-message, or someone else's data — which is the whole reason this is a
-separate key, an optional package, and unconfigured by default.
+goes to that company — which is why this is a separate key, an optional
+package, and unconfigured by default.
 
 ## AppImages
 
@@ -437,34 +363,32 @@ menu, and they write through way-displays exactly as the TUI does.
 
 ## Snapshots, and what recovery actually involves
 
-The default layout is btrfs, and `snapper` plus `snap-pac` are installed
-with it. `snap-pac` is a pacman hook, so every transaction is bracketed by
-a snapshot without anyone remembering to ask for one: the snapshot exists
-*before* the upgrade that broke things. `ashlaros-snapshot create` takes
-one on demand, `ashlaros-snapshot list` shows what is there.
+The default layout is btrfs, with `snapper` and `snap-pac` installed.
+`snap-pac` is a pacman hook, so the snapshot exists *before* the upgrade
+that broke things. `ashlaros-snapshot create` takes one on demand, `list`
+shows what is there. Retention is 12, following package transactions
+rather than the clock — snapper's own default keeps 50 and adds one hourly
+forever, which fills a root subvolume quietly.
 
-**Rollback is a rescue-media procedure, not a boot-menu one.** Omarchy gets
-boot-menu rollback from limine; we boot with systemd-boot, which has no
-equivalent of `limine-snapper-restore`.
+**Rollback is a rescue-media procedure, not a boot-menu one.** Omarchy
+gets boot-menu rollback from limine; we boot with systemd-boot, which has
+no equivalent of `limine-snapper-restore`.
 
-**`snapper rollback` is not the command.** It was tried on a real install
-and does not work on this layout: archinstall mounts `@` by `subvol=` in
-fstab rather than by setting it as the filesystem's default subvolume, so
-snapper reports *"Cannot detect ambit since default subvolume is unknown"*.
-Forcing it with `--ambit classic` is worse than useless — it reports
-success and sets the default subvolume, but fstab's `subvol=/@` still wins
-at the next boot, so the machine comes back **still broken** while the tool
-said it recovered.
+**`snapper rollback` is not the command.** archinstall mounts `@` by
+`subvol=` in fstab rather than as the filesystem's default subvolume, so
+snapper cannot detect its ambit. Forcing it with `--ambit classic` is
+worse than useless: it reports success, but fstab still wins at the next
+boot, so the machine comes back **still broken** while the tool said it
+recovered.
 
 What works is replacing `@` itself. Verified end to end: a machine with a
 deliberately destroyed `/etc/os-release` came back reading `AshlarOS` with
 `$HOME` intact and a deleted binary restored.
 
 1. Boot the AshlarOS ISO.
-2. Unlock the disk — `cryptsetup open /dev/nvme0n1p2 root`. The passphrase,
-   not the TPM: TPM enrolment is bound to PCR 7 and a firmware update can
-   invalidate that keyslot, so the passphrase is the one credential that
-   always works.
+2. Unlock the disk — `cryptsetup open /dev/nvme0n1p2 root`. The
+   passphrase, not the TPM: TPM enrolment is bound to PCR 7 and a firmware
+   update can invalidate that keyslot.
 3. Mount the **top level**, which is where the subvolumes live:
 
    ```sh
@@ -480,24 +404,16 @@ deliberately destroyed `/etc/os-release` came back reading `AshlarOS` with
    btrfs subvolume snapshot /mnt/@.broken/.snapshots/<number>/snapshot /mnt/@
    ```
 
-5. Reboot. Delete `@.broken` later with
-   `btrfs subvolume delete /mnt/@.broken` once the machine is known good —
-   it costs nothing until the snapshots inside it diverge.
+5. Reboot, and delete `@.broken` once the machine is known good.
 
-`$HOME` survives a root rollback, because `@home` is its own subvolume and
-only `@` is replaced. `@log` and `@pkg` are separate for the same reason —
-the journal that records the failure, and the package cache holding the
-version you may want to reinstall, both outlive the rollback.
+`$HOME` survives, because `@home` is its own subvolume and only `@` is
+replaced. `@log` and `@pkg` are separate for the same reason: the journal
+recording the failure and the package cache holding the version you may
+want to reinstall both outlive the rollback.
 
-Retention is 12 snapshots with no timeline: snapshots follow package
-transactions, not the clock. Snapper's own default keeps 50 and adds one
-every hour forever, which fills a root subvolume quietly.
-
-On an ext4 install none of this exists, and `ashlaros-snapshot` says so and
-exits 127 rather than failing — an update path can tell "cannot snapshot
-here" from "tried and failed". A snapshot tool that quietly does nothing is
-worse than no snapshot tool, because it turns "I have no backups" into "I
-think I have backups".
+On an ext4 install none of this exists, and `ashlaros-snapshot` exits 127
+saying so rather than failing — a tool that quietly does nothing turns "I
+have no backups" into "I think I have backups".
 
 ## Using the repository on an existing system
 
@@ -534,9 +450,9 @@ above can be replaced with `Include = /etc/pacman.d/ashlaros-mirrorlist`.
 
 ## The Raspberry Pi 5 image
 
-`image/` builds a prebuilt disk image for the Pi 5. It is **not the ISO for
-another architecture** - four of the ISO's defining properties cannot exist
-on an ARM board, and pretending otherwise would mis-sell it:
+`image/` builds a prebuilt disk image for the Pi 5. It is **not the ISO
+for another architecture** — four of the ISO's defining properties cannot
+exist on an ARM board:
 
 | | x86_64 ISO | Pi 5 image |
 | --- | --- | --- |
@@ -546,16 +462,15 @@ on an ARM board, and pretending otherwise would mis-sell it:
 | install | TUI installer, LUKS + TPM | written to a card, **unencrypted** |
 | hardware detection | `chwd` | none (`chwd` is x86_64 only) |
 
-What does carry over is what a user actually sees: sway, `ashlaros-settings`,
-the theming, the waybar config, the migrations mechanism.
+What carries over is what a user sees: sway, `ashlaros-settings`, the
+theming, the waybar config, the migrations mechanism.
 
-Because there is no installer to ask anything, the image does its setup on
-first boot (`image/firstboot/`): it grows the root filesystem to fill the
-card, generates ssh host keys for that machine, and creates an account on
-tty1 **before the network comes up**. Arch Linux ARM's `alarm`/`alarm` and
-`root`/`root` accounts are removed at build time and `sshd` stays off until
-there is an account to reach - a prebuilt image with published credentials
-on a network is the failure this is built to avoid.
+With no installer to ask anything, setup happens on first boot
+(`image/firstboot/`): grow the root filesystem, generate ssh host keys,
+and create an account on tty1 **before the network comes up**. Arch Linux
+ARM's `alarm` and `root` accounts are removed at build time and `sshd`
+stays off until there is an account to reach — a prebuilt image with
+published credentials on a network is the failure this avoids.
 
 ```sh
 sudo ./image/build-image.sh out            # needs loop devices; aarch64 host
@@ -567,14 +482,12 @@ and its DTB off the FAT partition with no loop device, and QEMU runs it
 under `-M raspi4b` until the serial console shows userspace. The approach
 is manjaro-sway's `ci/boot-smoke.sh`, which solved this first.
 
-**It is still not a proof it boots on a Pi 5.** QEMU has no `raspi5`
+**It is still not proof it boots on a Pi 5.** QEMU has no `raspi5`
 machine, so the image is booted on the Pi 4 model: that exercises the
-kernel and the root filesystem, not the Pi 5 firmware. The image publishes
-on every build to
+kernel and root filesystem, not the Pi 5 firmware. It publishes on every
+build to
 [`latest/ashlaros-rpi5.img.xz`](https://ashlaros.download/iso/latest/ashlaros-rpi5.img.xz),
-under its own alias and named for the board, so what it is and is not
-tested on stays legible - restore the gate by re-adding `if: inputs.publish`
-to the upload step.
+under its own alias and named for the board.
 
 ## Building
 
