@@ -873,24 +873,18 @@ def add_splash_cmdline(ctx: InstallContext) -> None:
     kernel's own messages are drawn over it - the splash is there but
     scrolled off by the time anyone looks.
 
-    Not on a disk that asks for a passphrase. The `encrypt` hook hands the
-    prompt to plymouth whenever `plymouth --ping` answers and skips the
-    console fallback that would otherwise print it, so a plymouth that is
-    running but cannot render leaves a live machine waiting on a blank
-    screen - indistinguishable from a dead boot (#86, and #61 before it).
-
-    A splash is worth having; it is not worth a boot nobody can get past.
-    TPM and TPM+PIN installs keep it: the first types nothing, and the
-    second is answered by systemd's own prompt rather than this hook.
+    The reason a splash could hide the passphrase prompt is fixed at its
+    source rather than here: ashlaros-branding now depends on ttf-dejavu,
+    the font its theme names. Without it fc-match answered with an empty
+    path at mkinitcpio time and plymouth had no font to draw with, so it
+    rendered nothing while still answering `plymouth --ping` - which is
+    what made the `encrypt` hook hand it the prompt and skip the console
+    fallback (#86).
 
     Separate from use_sd_encrypt_cmdline, which does its own rewriting and
     runs only on encrypted installs: an unencrypted machine has a boot to
     cover too, and neither path may assume the other ran.
     """
-    if ctx.needs_typed_passphrase:
-        info("› no splash: the disk asks for a passphrase, which has to be visible")
-        return
-
     entries = sorted((ctx.target / "boot/loader/entries").glob("*.conf"))
     if not entries:
         error("no loader entries to amend; the boot shows no splash")

@@ -8,6 +8,18 @@ pkgdesc="AshlarOS logo, wallpaper and palette"
 arch=('any')
 url="https://github.com/ashlaros/ashlaros"
 license=('GPL-3.0-or-later')
+# The splash draws the mark in U+2588 FULL BLOCK and nothing else -
+# logo.txt is 228 of them. The theme names DejaVu Sans Mono, and the
+# plymouth initcpio hook resolves that with fc-match at mkinitcpio time.
+# Measured on a minimal system: with no font installed fc-match answers
+# with an empty path, so the hook copies nothing and the splash has no
+# font at all; where some other font happens to be present it substitutes
+# silently, and Arch's AdwaitaMono carries no U+2588. Either way the
+# splash renders nothing - which on an encrypted disk hides the
+# passphrase prompt the `encrypt` hook has already handed to it (#86).
+#
+# So the font is a hard dependency of the theme, not a nicety.
+depends=('ttf-dejavu')
 # the splash script is generated from logo.txt at build time
 makedepends=('python')
 # built from branding/ in the monorepo checkout, not from a tarball: the
