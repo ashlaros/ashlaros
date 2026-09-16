@@ -6,7 +6,8 @@
 # vinceliuice's Matcha, a different upstream. Manjaro ships this as
 # kvantum-theme-matcha, which is the name mismatch issue #84 documents.
 pkgname=kvantum-theme-matchama
-pkgver=20210627
+epoch=1
+pkgver=20191119
 pkgrel=1
 pkgdesc="Matchama theme for Kvantum, the Qt side of the matcha sway themes"
 arch=('any')
