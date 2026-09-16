@@ -17,44 +17,21 @@ install() {
     mapfile -t wanted < "$1/packages"
     missing_pkgs=$(pacman -T "${wanted[@]}" 2>/dev/null)
     if [ -n "$missing_pkgs" ]; then
-        # The installer ships yay, but a user can remove it, and the four
-        # catppuccin themes name AUR-only packages - so say what is missing
-        # rather than exiting into a window that closes before it is read.
-        if ! command -v yay >/dev/null; then
-            echo "> This theme needs packages that are not installed:"
-            # pacman -T returns one per line; indent each rather than only
-            # the first, which is what an unquoted echo would do
-            echo "$missing_pkgs" | sed 's/^/    /'
-            echo "> They are in the AUR, and yay is not installed."
-            # yay has no aarch64 build - not in Arch Linux ARM and not in
-            # ours - so "install yay" is advice that cannot be taken here.
-            # Saying it anyway would send someone looking for a package
-            # that does not exist (#56).
-            if [ "$(uname -m)" = "x86_64" ]; then
-                echo "> Install it with 'sudo pacman -S yay', then pick the theme again."
-            else
-                echo "> yay is x86_64-only, so this theme cannot install them on $(uname -m)."
-                echo "> The sway and terminal colours below still apply; GTK and Qt will not match."
-            fi
-            prompt
-            return 1
-        fi
-        echo "> Installing theme requirements using yay"
-        foot --app-id floating_shell --window-size-chars 82x25 yay -S --needed $missing_pkgs
+        echo "> Installing theme requirements"
+        # shellcheck disable=SC2086
+        foot --app-id floating_shell --window-size-chars 82x25 \
+            sudo pacman -S --needed $missing_pkgs
     fi
 }
 
 # Can this theme's packages be installed at all on this machine?
 #
-# Offering a theme that cannot finish is the failure #56 describes: on ARM
-# the four catppuccin themes name five AUR-only packages and yay has no
-# aarch64 build, so picking one applied the sway colours and then told the
-# user to install something that does not exist for their architecture.
-#
-# A missing package is fine when pacman can resolve it, or when yay is
-# there to build it. Only a package that is in neither makes a theme
-# unofferable - which keeps every theme visible on a normal x86_64 desktop
-# and hides just the unreachable ones elsewhere.
+# Offering a theme that cannot finish is the failure #56 describes: the
+# catppuccin themes named AUR-only packages, so on ARM - where no AUR
+# helper has an aarch64 build - picking one applied the sway colours and
+# then asked for something the machine could not get. Every theme package
+# is in a repository now, ours or Arch's, but the check stays: it is what
+# keeps that from silently returning if a theme ever names something new.
 installable() {
     local dir=$1
     [ -f "$dir/packages" ] || return 0
@@ -65,8 +42,6 @@ installable() {
     local missing
     missing=$(pacman -T "${wanted[@]}" 2>/dev/null) || true
     [ -n "$missing" ] || return 0
-
-    command -v yay >/dev/null && return 0
 
     local pkg
     while read -r pkg; do

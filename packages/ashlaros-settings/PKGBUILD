@@ -128,7 +128,7 @@ optdepends=(
     'wluma: adaptive brightness based on screen contents and ALS'
     # the installer puts this on every x86_64 desktop; it stays optional
     # here because this package is arch=any and yay is not built for ARM
-    'yay: AUR helper, required by ashlaros-theme for the catppuccin themes'
+    'yay: AUR helper, for packages outside the repositories'
     'pcmanfm-qt: file manager'
     'python-requests: the waybar weather module'
     # never a hard dependency: the Ask key sends a picture of your screen
