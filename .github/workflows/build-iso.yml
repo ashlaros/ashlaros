@@ -129,6 +129,10 @@ jobs:
           path: |
             /tmp/ashlaros-vm-install/out/*.png
             /tmp/ashlaros-vm-install/out/serial.log
+            # the driver's own log: when the install stalls rather than
+            # fails, the serial console shows the boot it already got past
+            # and only this says what the driver was waiting for
+            /tmp/ashlaros-vm-install/out/install.log
           if-no-files-found: error
 
   publish:

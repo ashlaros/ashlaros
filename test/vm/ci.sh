@@ -31,6 +31,16 @@ mkdir -p "$WORKSPACE/out"
 cp "$iso" "$WORKSPACE/ashlaros.iso"
 
 cleanup() {
+  # install.py samples the screen as .ppm and only the `shot` path converts
+  # to .png - which runs after a successful install. So a failed run left
+  # every screenshot in a format the upload's *.png glob does not match,
+  # and the evidence the header above promises was dropped on exactly the
+  # runs that needed it. Convert whatever is there before the VM goes.
+  for ppm in "$WORKSPACE"/out/*.ppm; do
+    [ -e "$ppm" ] || break
+    name=$(basename "$ppm" .ppm)
+    [ -e "$WORKSPACE/out/$name.png" ] || "$here/run.sh" png "$name" >/dev/null 2>&1 || true
+  done
   # the VM is killed whatever happened, or the job hangs until the
   # workflow's own timeout - a far less readable failure
   "$here/run.sh" stop >/dev/null 2>&1 || true

@@ -102,6 +102,18 @@ follow_install() {
       /vm/out/install.log 2>/dev/null; then
       return 0
     fi
+    # A driver that died says nothing more, and neither of the two endings
+    # above will ever appear - so waiting out the deadline spends an hour
+    # and a half to learn what its exit already said. install.py raises
+    # SystemExit when a screen does not arrive; that is a failed install,
+    # not a slow one. Measured: a run that exited in four minutes held the
+    # job for ninety-two.
+    if ! docker exec "$container" pgrep -f install.py >/dev/null 2>&1; then
+      echo "## the driver exited without finishing the install" >&2
+      docker exec "$container" sh -c 'tail -n 20 /vm/out/install.log' 2>/dev/null |
+        sed 's/^/   /' >&2
+      return 1
+    fi
   done
   echo "## the driver never reported finishing" >&2
   return 1
@@ -216,6 +228,12 @@ boot)
   ;;
 shot)
   docker exec "$container" python3 /vm/qmp.py '' "$2" 1 >/dev/null
+  png "$2"
+  ;;
+# Convert a .ppm the driver already sampled, without taking a new one.
+# install.py writes .ppm and nothing else; on a failed run that is every
+# picture of what went wrong.
+png)
   png "$2"
   ;;
 film)
