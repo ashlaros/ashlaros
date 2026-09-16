@@ -1,0 +1,36 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+# Contributor: cscs <mrcyberfighter@gmail.com>
+
+# Named for what it installs, not for the GTK theme beside it. The sway
+# themes ask Kvantum for "Matchama-Dark" and friends; the GTK theme is
+# vinceliuice's Matcha, a different upstream. Manjaro ships this as
+# kvantum-theme-matcha, which is the name mismatch issue #84 documents.
+pkgname=kvantum-theme-matchama
+pkgver=20210627
+pkgrel=1
+pkgdesc="Matchama theme for Kvantum, the Qt side of the matcha sway themes"
+arch=('any')
+url="https://gitlab.com/cscs/matchama-kde"
+license=('GPL-3.0-or-later')
+depends=('kvantum')
+provides=('kvantum-theme-matcha')
+conflicts=('kvantum-theme-matcha')
+
+# A commit, for the reason kvantum-theme-catppuccin's PKGBUILD records:
+# upstream publishes no tags, and a -git pkgver() counting commits on live
+# HEAD republishes a byte-different object at the same version every run.
+# This is the commit Manjaro pins.
+_commit=8525e05
+source=("$pkgname-$_commit.tar.gz::$url/-/archive/$_commit/matchama-kde-$_commit.tar.gz")
+sha256sums=('29544b48a1e20222f080627f5c1e0a60ed93bda39c24c5ddcd218778b2f894c9')
+
+package() {
+    cd "$srcdir/matchama-kde-$_commit"
+
+    # Kvantum only; the tree also carries aurorae, konsole and plasma themes
+    # that a sway desktop has nothing to do with.
+    install -dm755 "$pkgdir/usr/share/Kvantum"
+    cp -r Kvantum/Matchama* "$pkgdir/usr/share/Kvantum/"
+
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

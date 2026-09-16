@@ -108,6 +108,19 @@ packages:
     # no /sys/class/backlight at all, but the ARM image ships no DKMS
     # toolchain and the module is untested on that kernel (#65).
     arch: x86_64
+  kvantum-theme-matchama:
+    # The Qt half of the matcha themes. Manjaro ships this as
+    # kvantum-theme-matcha, but what it installs is Matchama - cscs's
+    # upstream, not the GTK theme's - so ours is named for its contents
+    # (#84). Pinned to a commit: upstream publishes no tags.
+    upstream: https://gitlab.com/cscs/matchama-kde.git
+    arch: any
+  matcha-gtk-theme:
+    # The four dark variants the matcha sway themes name. The AUR package
+    # tracks the same upstream tags; ours builds from the tag directly so
+    # the pin is visible in the PKGBUILD.
+    upstream: https://aur.archlinux.org/matcha-gtk-theme.git
+    arch: any
   kvantum-theme-catppuccin:
     upstream: https://aur.archlinux.org/kvantum-theme-catppuccin-git.git
     # rewritten rather than copied: upstream's is a -git package whose

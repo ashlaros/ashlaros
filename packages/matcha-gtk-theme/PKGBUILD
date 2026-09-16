@@ -1,0 +1,45 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+# Contributor: Vince Liuice <vinceliuice@gmail.com>
+
+pkgname=matcha-gtk-theme
+pkgver=2025.04.11
+pkgrel=1
+pkgdesc="Flat design GTK theme, the four dark variants the matcha sway themes name"
+arch=('any')
+url="https://github.com/vinceliuice/Matcha-gtk-theme"
+license=('GPL-3.0-only')
+# No runtime depends: these are stylesheets. gnome-themes-extra carries the
+# Adwaita engine some GTK2 applications fall back on, but it is a
+# recommendation rather than a requirement and our other GTK theme packages
+# declare none either.
+makedepends=('sassc')
+
+# The upstream tag, which is a date. pkgver cannot hold the dashes, so the
+# tag is kept separately rather than derived from it.
+_tag=2025-04-11
+source=("$pkgname-$_tag.tar.gz::$url/archive/$_tag.tar.gz")
+sha256sums=('8a3f71a3b9fd4907b28686e228e337d27742018e6dfa8e338326fe77115f5ea7')
+
+# Manjaro's PKGBUILD carries two patches we deliberately do not: the fix for
+# upstream issue 238 is an Xfce 4.20 problem, closed upstream and irrelevant
+# to a sway desktop, and the other patches Dash-to-Dock, which is GNOME.
+
+package() {
+    cd "$srcdir/Matcha-gtk-theme-$_tag"
+
+    # -d installs into a directory rather than the running system's ~/.themes,
+    # and the four themes only ever name the dark variants.
+    install -dm755 "$pkgdir/usr/share/themes"
+
+    # install.sh writes its gtksourceview styles to an absolute path chosen
+    # from $UID - /usr/share for root, $HOME/.local otherwise - so under
+    # makepkg they land in the builder's home, outside the package. A
+    # throwaway HOME keeps that out of the build machine; the styles
+    # themselves are installed from the source tree below.
+    HOME="$srcdir/fakehome" ./install.sh -d "$pkgdir/usr/share/themes" -c dark
+
+    install -Dm644 -t "$pkgdir/usr/share/gtksourceview-3.0/styles" \
+        src/extra/gtksourceview/*.xml
+
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
