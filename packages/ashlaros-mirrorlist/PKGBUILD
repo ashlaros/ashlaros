@@ -1,4 +1,5 @@
 # Maintainer: AshlarOS <build@ashlaros.download>
+# (checked by CI: this file's sources still verify)
 
 # rebuilt once when source_hash began covering the executable bit
 pkgname=ashlaros-mirrorlist
