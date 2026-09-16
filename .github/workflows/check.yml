@@ -177,18 +177,56 @@ jobs:
     container: archlinux:base-devel
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # the diff below needs the base commit to compare against
+          fetch-depth: 0
+      # SRCDEST, so a source already downloaded is reused rather than
+      # refetched. Keyed on the PKGBUILDs themselves: a changed sha256sum
+      # misses the key and refetches, which is what keeps the check honest.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /var/cache/makepkg/src
+          key: makepkg-src-${{ hashFiles('packages/*/PKGBUILD') }}
+          restore-keys: makepkg-src-
       - name: every PKGBUILD parses and its checksums match its sources
         # a stale sha256sum fails the build twenty minutes in; catch it here
+        #
+        # Only the packages this push touched. --verifysource downloads
+        # every source to check it, and running that over all of them on
+        # every push put real traffic on the upstreams that host them -
+        # enough that a maintainer saw it in their download counts and
+        # asked us to stop (#81). Most pushes touch no package at all.
         run: |
           # git: several PKGBUILDs take git+ sources, which makepkg
           # refuses to even look at without it
           pacman -Sy --noconfirm --needed pacman-contrib git >/dev/null
+          git config --global --add safe.directory "$PWD"
+
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] ||
+            ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            # no usable base - a new branch, a force push, a manual run.
+            # Verify everything rather than silently checking nothing.
+            changed=$(printf '%s\n' packages/*/PKGBUILD)
+          else
+            changed=$(git diff --name-only "$base" HEAD -- 'packages/*/PKGBUILD')
+          fi
+
+          if [ -z "$changed" ]; then
+            echo "no PKGBUILD changed; nothing to verify"
+            exit 0
+          fi
+
+          mkdir -p /var/cache/makepkg/src
           useradd -m builder
-          chown -R builder:builder .
+          chown -R builder:builder . /var/cache/makepkg/src
           fail=0
-          for pkgbuild in packages/*/PKGBUILD; do
+          for pkgbuild in $changed; do
+            [ -f "$pkgbuild" ] || continue
             dir=$(dirname "$pkgbuild")
-            if ! sudo -u builder bash -c "cd '$dir' && makepkg --verifysource --noconfirm --skippgpcheck" >/dev/null 2>&1; then
+            echo "verifying $dir"
+            if ! sudo -u builder SRCDEST=/var/cache/makepkg/src \
+              bash -c "cd '$dir' && makepkg --verifysource --noconfirm --skippgpcheck" >/dev/null 2>&1; then
               echo "::error file=$pkgbuild::sources do not verify"
               fail=1
             fi
