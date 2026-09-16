@@ -72,6 +72,9 @@
     - '[app_id="foot"] resize set 720 320'
     - '[app_id="foot"] move position center'
 
+# rofi is detached so the capture happens with it on screen, and it draws
+# a layer surface - which the per-shot `[app_id=".*"] kill` does not
+# match. Left running it sat over the help overlay two shots later.
 - name: launcher
   description: rofi over the desktop
   commands:
@@ -85,6 +88,9 @@
 # One picture per matcha variant. The four differ only in the GTK theme and
 # the accent, which is exactly the kind of change that resolves cleanly and
 # still looks wrong - so #84 asked for pictures rather than a package list.
+  after:
+    - pkill -x rofi
+
 - name: theme-matcha-green
   gallery: false
   description: the default theme, which the shipped sway config names

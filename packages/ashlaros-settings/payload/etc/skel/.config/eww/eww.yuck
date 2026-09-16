@@ -17,9 +17,16 @@
   ; within a category keep the order the parser produced them in.
   `/usr/share/sway/scripts/sbdp.sh $HOME/.config/sway/config | jq --raw-output 'sort_by(.category) | .[] | .action + ": <b>" + .keybinding + "</b>"' | tr '\n' '\r' | sed 's/\r/\\n/g'`)
 
+; :show-truncated false is what stops the text being cut. For a :markup
+; label eww's default is show-truncated true, which sets pango's
+; EllipsizeMode::End; with the label narrower than its content that ate
+; every line down to "…" and, once the window had a width, broke them
+; mid-word instead. eww's own doc: disabling it "will completly disable
+; truncation on pango markup", which is exactly what a cheatsheet wants -
+; a binding shown as "Move focused wo…" tells nobody anything.
 (defwidget help-box []
   (box :class "help" :orientation "vertical" :halign "start" :valign "end"
-    (label :markup help-text :xalign 0 :wrap false)))
+    (label :markup help-text :xalign 0 :wrap false :show-truncated false)))
 
 ; :width is not optional. Omitted, eww's geometry defaults to Pixels(0)
 ; and app.rs calls set_size_request(0, 0), so GTK allocates the minimum
@@ -30,6 +37,6 @@
 (defwindow help
   :monitor 0
   :stacking "bg"
-  :geometry (geometry :x "20px" :y "20px" :width "480px"
+  :geometry (geometry :x "20px" :y "20px" :width "620px"
                       :anchor "bottom left")
   (help-box))
