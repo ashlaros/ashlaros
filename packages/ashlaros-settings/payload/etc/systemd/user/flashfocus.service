@@ -1,0 +1,12 @@
+[Unit]
+Description=Flash a window when it takes focus
+PartOf=sway-session.target
+After=sway-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/share/sway/scripts/flashfocus.sh
+Restart=always
+
+[Install]
+WantedBy=sway-session.target

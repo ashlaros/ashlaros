@@ -45,8 +45,8 @@ jobs:
         run: python3 scripts/discover_packages.py >> "$GITHUB_OUTPUT"
 
   # A wave is build-then-publish, because the next wave resolves its
-  # dependencies out of the published repository: flashfocus cannot be built
-  # until python-xpybutil is installable. Two waves are expressed as two
+  # dependencies out of the published repository: ashlaros-installer cannot
+  # be built until ashlaros-branding is installable. Two waves are two
   # pairs of jobs rather than a loop - Actions has no such loop, and the
   # alternative (a workflow that dispatches itself) hides the ordering.
   wave0:

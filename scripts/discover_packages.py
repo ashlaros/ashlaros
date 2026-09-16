@@ -9,9 +9,10 @@ Three things shape a run:
 
   - A package that depends on another package built here cannot be built in
     the same wave: the dependency has to be published before makepkg can
-    resolve it. flashfocus needs python-xpybutil, and Arch packages neither.
-    Wave 0 is everything with no such dependency; wave 1 is what depends on
-    wave 0, and so on.
+    resolve it. ashlaros-installer needs ashlaros-branding, and
+    ashlaros-settings needs ashlaros-snapshot and grimshot. Wave 0 is
+    everything with no such dependency; wave 1 is what depends on wave 0,
+    and so on.
 
   - A package already published at the version its PKGBUILD declares is
     skipped. Rebuilding it is not free and not harmless: makepkg is not

@@ -116,7 +116,6 @@ depends=(
     'ttf-roboto'              # default font
 )
 optdepends=(
-    'flashfocus: better flashing on focus changes'
     'gtklock: lockscreen based on gtkgreet'
     'swaylock-effects: minimalistic lockscreen with fancy effects'
     'wlsunset: time & place based light temperature'

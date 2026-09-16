@@ -70,9 +70,6 @@ packages:
   catppuccin-gtk-theme-mocha:
     upstream: https://aur.archlinux.org/catppuccin-gtk-theme-mocha.git
     arch: any
-  flashfocus:
-    upstream: https://aur.archlinux.org/flashfocus.git
-    arch: any
   howdy-next:
     upstream: https://aur.archlinux.org/howdy-next.git
     # x86_64 only, and not by choice: libinih is not in Arch Linux ARM, so
@@ -129,9 +126,6 @@ packages:
   poweralertd:
     upstream: https://aur.archlinux.org/poweralertd.git
     arch: both
-  python-xpybutil:
-    upstream: https://aur.archlinux.org/python-xpybutil.git
-    arch: any
   swaycwd:
     # no upstream repository: the AUR url is a dead google cache link, so
     # the script itself is vendored beside the PKGBUILD
