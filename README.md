@@ -36,18 +36,20 @@ of them installs: locale and keyboard, user and password, encryption, disk
 layout. Encryption is on by default and the disk is LUKS2 with the root
 filesystem on btrfs; the ESP is mounted at `/boot`.
 
-### After a firmware update, expect a passphrase prompt
+### If you chose TPM unlock, a firmware update brings the passphrase back
 
-If the machine has a TPM, the installer enrols the LUKS passphrase against
-**PCR 7**, so an ordinary boot unlocks without typing anything. PCR 7
-measures the Secure Boot policy and key databases. A vendor firmware update
-that ships new `dbx` or `KEK` contents therefore changes it, and the
-enrolled keyslot stops matching.
+The installer asks how the disk should unlock — passphrase, TPM + PIN, or
+TPM alone — with passphrase preselected. Settings → **Disk unlock**
+changes it later.
+
+Both TPM options bind to **PCR 7**, which measures the Secure Boot policy
+and key databases. A vendor firmware update that ships new `dbx` or `KEK`
+contents changes it, and the enrolled keyslot stops matching.
 
 Nothing is lost when that happens — the passphrase still unlocks the disk,
-which is why the installer requires one. But the prompt arrives with no
-explanation, and it is easy to read as a corrupted disk. It is not. Re-enrol
-afterwards:
+which is why there is always one. But the prompt arrives with no
+explanation, and it is easy to read as a corrupted disk. It is not.
+Re-enrol from the settings entry, or by hand:
 
 ```sh
 sudo systemd-cryptenroll --wipe-slot=tpm2 --tpm2-device=auto --tpm2-pcrs=7 /dev/<luks-partition>
@@ -73,30 +75,6 @@ is the usual trade for an Arch-derived desktop, and the same one
 manjaro-sway made, but it is a real one — `pacman -R yay` removes it, and
 the theme switcher then says which packages it would have needed.
 
-### Installs made before 2026-09-11 need one rename for the theme toggle
-
-The theme switcher shipped with the sway config named its stashed theme
-`theme.night.conf_`, while the toggle that reads it looked for
-`theme.light.conf_`. The two never met, so the waybar theme module never
-appeared at all. Both halves say `light` now.
-
-A fresh install is correct. An existing one keeps the old name in `$HOME`,
-where no package upgrade will touch it — nothing here rummages through home
-directories. Two renames fix it:
-
-```sh
-cd ~/.config
-mv sway/definitions.d/theme.night.conf_ sway/definitions.d/theme.light.conf_
-mv foot/foot-theme.night.ini_ foot/foot-theme.light.ini_
-cp foot/foot-theme.ini foot/foot-theme.dark.ini_
-```
-
-The third line is not a typo: `foot-theme.ini` is generated from a
-`.dark.` and a `.light.` half rather than being one of them, so the dark
-half has to exist before the first toggle can merge anything. `skel`
-rewrites all of this from the shipped defaults if you would rather start
-clean — it backs up `~/.config` first.
-
 ## Screenshots
 
 `screenshots/` photographs the desktop and publishes to
@@ -118,8 +96,7 @@ desktop, and the ISO build has its own checks for the other question.
 
 `screenshots/record.sh` records a short silent tour beside the stills,
 published at
-[`latest/video/tour.webm`](https://ashlaros.download/iso/latest/video/tour.webm)
-and shown on the download page. A still cannot show tiling, a launcher
+[`latest/video/tour.webm`](https://ashlaros.download/iso/latest/video/tour.webm). A still cannot show tiling, a launcher
 opening or the theme switching; thirty seconds can. The session setup is
 `screenshots/session.sh`, shared with the capture script rather than copied
 into it — the D-Bus re-exec and the waybar workaround are the hard-won part
@@ -146,145 +123,6 @@ Consecutive runs differ - the bar shows a clock, the weather, and a pending
 update count. That is fine for publishing and fatal for diffing, so there is
 deliberately no "screenshots changed" check. These are pictures, not golden
 files.
-
-## The games
-
-[`ashlaros.download/game/`](https://ashlaros.download/game/) is **Courses**,
-a falling-block game, and [`/game/quarry`](https://ashlaros.download/game/quarry)
-is **Quarry**, a block breaker. Both have a daily leaderboard. Everyone gets the same pieces
-on the same day, so the board compares play rather than luck.
-
-**The worker issues a seed, the game runs locally, the worker verifies the
-replay.** The design is `boredland/slopduel`'s `GAME-RULES.md`, whose
-failure modes were all found the expensive way there:
-
-- **The seed is the only source of world state**, and `Math.random()`
-  appears nowhere in the simulation — not "only for visuals", nowhere.
-- **Time is a tick index, never a wall clock.** The simulation is discrete,
-  so a timestamp would be a lossier way of naming the same integer. A
-  suspended tab owes the simulation nothing, so there is no late timestamp
-  to reject and no tolerance to tune — which is the bug that lost someone a
-  duel upstream for taking a phone call.
-- **The replay is the submission.** The server recomputes the score and
-  discards the number the client reported; the seed comes from the server's
-  record, never from the request.
-- **One attempt per seed, enforced server-side** by a unique index. The
-  board is a pure function of the seed, so a player who restarts gets the
-  same board now known — measured upstream at +34.7% for best-of-five.
-- **A run belongs to the day its seed was issued**, not the moment it was
-  submitted: a run started at 23:59 and submitted at 00:01 was played on
-  yesterday's pieces, and scoring it against today's seed would reject an
-  honest player for starting late.
-- **Integers only.** Two engines agreeing on integer arithmetic is a
-  property of the arithmetic; agreeing on floats is a hope.
-
-**Identity is three characters, the way Atari did it.** A leaderboard needs
-a stable name, there are no accounts, and `geo.js` commits this project to
-storing nothing identifying. `[A-Z0-9]`×3 is 46,656 possibilities — enough
-to feel personal, far too short to be a moderation queue — and entering
-them after a run that placed is the arcade ritual rather than a form.
-Collisions are fine; the arcade never cared either.
-
-**Two boards.** The daily one is the competition and resets, so a newcomer
-is never looking at a wall of scores set months ago. All-time is one row
-per player rather than the best runs — scores from different seeds are not
-comparable, so a table of runs would rank the kindest seed — with a rolling
-30-day window beside it, because an all-time table ossifies. Every run is
-kept and the boards are queries over them, so a rating (which would remove
-seed luck properly) can be added later without a backfill.
-
-**Offline is the default.** Without the network the game still plays, on a
-seed derived by the same function the server uses — imported, not rewritten
-— so an offline run is on the same board as everyone else's that day. Only
-the leaderboard needs a connection.
-
-**Quarry** is the Arkanoid formula rather than 1976 Breakout: designed
-seeded walls, multi-hit and indestructible bricks, falling capsules and
-multi-ball. Two of its constants are measurements rather than taste, and
-`worker/test/quarry-balance.mjs` is what took them:
-
-- **The paddle is faster than the ball.** At `px(4)` every skill band lost
-  inside nine seconds — the ball crosses the field in 40 ticks where the
-  paddle needed 60, and no skill closes a gap the paddle cannot physically
-  close.
-- **The wall is sized to the measured clear rate.** A perfect tracker
-  breaks 0.46 bricks/second, so an eight-row wall needing 137 hits was
-  195 seconds of work inside a 120-second run — nobody ever cleared a
-  level and the level bonus was unreachable code. That is `slop-out`'s
-  finding reproduced almost exactly (they measured 0.56 against 0.93).
-
-The harness reports the score spread and how runs end for four scripted
-skill bands; run it before changing a constant, because none of the above
-is visible from reading the code:
-
-```sh
-cd worker && node test/quarry-balance.mjs 12
-```
-
-**The replay logs the paddle's target, never its position.** The paddle
-closes on the target at a fixed speed, so the server derives where it
-went rather than being told — and the speed cap is a verification
-requirement, not a difficulty choice: uncapped, every position at every
-tick is legal and the verifier has nothing to reject. Sampled targets are
-12 events/second against 60 for logging every tick.
-
-**The sound is generated, not sourced.** `scripts/game-sfx.mjs` writes all
-21 cues as WAV — 340 KiB, deterministic, byte-identical across runs, with
-no third-party rights to check and nothing sampled or transcribed from any
-other work. It runs as part of `npm run game:sync`, so the files are built
-rather than committed.
-
-A cue carries information, not decoration, and two rules follow:
-**frequency is the information channel, loudness is the priority channel.**
-What happens every second is quiet and dull (`move` peaks at 0.02 of full
-scale); what happens rarely is loud and bright (`gameover` at 0.40). The
-line clears and the brick tiers each walk up a major triad plus the
-octave — measured off the rendered audio at 440, 554, 659 and 880 Hz — so
-breaking upward through a wall lets you hear how deep you are without
-looking. Each rung is its own file, never one repitched: resampling
-shortens a sound, so a four-line clear would answer *shorter* than a
-single.
-
-**The music is synthesised in the browser**, not shipped. A loop has to
-outlast the round or the player hears the seam — `slopduel` chose 156s
-against a 120s duel for exactly that — and three loops long enough to
-cover a run are **33 MiB of PCM** against **5 KiB** for the module that
-makes them. It also makes tempo a parameter rather than a resample:
-speeding a file up shortens it, so a sourced loop's guarantee would have
-to be computed at the fastest rate.
-
-Which track a run gets is **derived from the seed and keyed separately**
-(`${seed}:music`), so two players on the same daily seed hear the same
-thing — and adding a fourth track later cannot shift a single piece.
-Verified: 300 bags identical before and after consuming the selector.
-
-Audio never blocks the game. It degrades to silence when the files are
-missing, when a context cannot be created, and when autoplay policy
-refuses one; `m` mutes, and the preference persists.
-
-**`core/` is the single implementation**, in Rust, compiled twice: to
-`wasm32-unknown-unknown` for the verifier the worker runs, and natively
-for the `ashlaros-arcade` client, which links it as an rlib. Playing on
-the desktop and playing in a browser are the same run, scored the same
-way. `ci/cross-target.mjs` is what makes that a checked property rather
-than a claim: it replays a fixed corpus through both builds and diffs
-them, and CI fails if they part.
-
-Integers only, throughout - which matters more across two compilers than
-it did across two engines. With floats, LLVM may contract operations
-differently per target, so agreement would be a hope about optimisation
-rather than a property of the arithmetic.
-
-`worker/src/game/logic.js` is what the page plays. `docs/game/logic.js` is
-generated from it by `npm run game:sync`, which `npm test` and the deploy
-both run — a hand-maintained second copy of a simulation is exactly the
-drift that would reject every honest score.
-
-Verification runs in a **Durable Object**, not the fetch handler. The free
-plan gives a handler 10 ms of CPU and re-stepping a multi-minute run at
-60 Hz does not fit; `waitUntil` draws on the same budget and so does a
-scheduled handler. A Durable Object gets 30 s per invocation, and a handler
-waiting on one spends no CPU of its own.
 
 ## Download stats
 
@@ -322,11 +160,11 @@ counted. Until it is, the page says so rather than answering 500.
 that are otherwise commands you have to know: locale and keyboard layout,
 time and timezone, kernel variants from the cachyos repository, chwd's
 hardware profiles, fingerprint enrolment, face unlock, adaptive
-brightness, sharing the current Wi-Fi as a QR code, the wallpaper,
-packages nothing needs any more, and a door to the things that need
-setting up before they do anything — mail, a calendar, notes, chat
-clients, web apps and a model. Displays and package installation dispatch to
-`ashlaros-displays` and `pacseek`.
+brightness, power profiles, how the disk unlocks, snapshots, the
+wallpaper, packages nothing needs any more, and a door to the things that
+need setting up before they do anything — mail, a calendar, notes, chat
+clients, web apps and a model. Displays and package installation dispatch
+to `ashlaros-displays` and `pacseek`.
 
 **A launcher, not a control panel.** Every entry either runs an existing
 tool or collects input and runs one command; the menu owns no settings
@@ -401,6 +239,23 @@ conflict.
 `zk` ships an LSP server, so `[[wikilink]]` completion works in `helix`
 without a plugin.
 
+## The prompt
+
+`starship` is configured in skel, with the mark rendered as three courses
+of stone: `▄█▀`, a solid course between one stepping down and one stepping
+up. It is not the logo — 40 columns of dressed stone do not survive being
+shrunk to a prompt — and it is not `▞`, which reads as two specks at that
+size in the font we ship.
+
+`generate-starship-config.sh` rewrites it on a theme switch, beside the
+waybar and aerc generators. It is the cheapest of the three: starship
+re-reads its config every prompt, so a theme change reaches the shell you
+are already sitting in.
+
+One thing worth knowing if you edit the config by hand: **starship needs
+six-digit hex.** Given `#eee` it accepts the file, silently drops the
+whole style string that colour appears in, and renders unstyled.
+
 ## Mail and calendar
 
 Neither is preinstalled and neither does anything until you configure it:
@@ -441,43 +296,18 @@ only way to reach **Proton**, which speaks no CalDAV — `dav.proton.me` and
 no password, so anyone holding it can read that calendar; the entry says
 so before writing one down.
 
-`calcurse` was here until 2026-09-15 and could not reach Google at all:
-its OAuth path is built on `python-oauth2client`, which Google archived,
-sends no PKCE, and wants a client secret in a config file.
-
-**Outlook calendar is not supported.** Microsoft retired CalDAV for
-Outlook.com and the replacement is Microsoft Graph, which nothing here
-speaks.
-
 Settings → **Mail** configures [`aerc`](https://aerc-mail.org)
 (`pacman -S aerc`) against IMAP and SMTP with a password. Both clients put
 the credential in the login keyring and read it back with a command, so
 neither config file holds a secret.
 
-### Google accounts use your own OAuth client
+Gmail needs one thing the calendar does not: the initial refresh token
+comes from an OAuth flow the settings entry does not run, and Google's
+OAuth 2.0 Playground does it in a browser.
 
-Gmail and Google Calendar are offered, and both ask for a client ID and
-secret from a Google Cloud project you create. **We deliberately ship no
-credentials of our own.** Google's terms, section "Confidential Matters",
-are read by `vdirsyncer` — a mature project that had to answer the same
-question — as forbidding hardcoded credentials in open-source software,
-so every one of its users registers their own project. Until that reading
-is settled with Google rather than guessed at, this is the version that
-is certainly allowed, and it is the same configuration a shipped client
-ID would later fill in.
-
-Nothing of ours is in the exchange either way: the browser talks to
-Google, and the token lands on your machine.
-
-Two details are easy to get wrong and the wizard names both. For the
-calendar, **the CalDAV API has to be enabled, not the Calendar API** —
-they are different and the wrong one syncs nothing. For mail, obtaining
-the initial refresh token needs an OAuth flow the entry does not run;
-Google's OAuth 2.0 Playground does it in a browser.
-
-**Outlook mail and calendar are not supported.** Microsoft needs an Entra
-registration under separate terms, and Outlook.com's calendar needs Graph
-(above).
+**Outlook is not supported**, for mail or calendar. Microsoft retired
+CalDAV for Outlook.com and the replacement is Graph, which nothing here
+speaks; mail would need an Entra registration under separate terms.
 
 The aerc styleset is regenerated from the active desktop theme on every
 theme switch, like the waybar colours.
