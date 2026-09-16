@@ -30,6 +30,26 @@ export function humanSize(bytes) {
  */
 
 
+/**
+ * The topbar title, with the project name linking home.
+ *
+ * Absolute, to the apex: on packages. and iso. a bare "/" is that site's
+ * own index, so a relative link would send three hosts to three different
+ * pages when the point is one way back to the project.
+ *
+ * Only the name links. A packages listing is titled "ashlaros/core", and
+ * the prefix is where you already are - linking it home would be a lie
+ * about where it goes.
+ */
+const HOME = 'https://ashlaros.download/';
+
+function titleLink(title) {
+  const safe = escapeHtml(title);
+  const name = safe.startsWith('AshlarOS') ? 'AshlarOS' : 'ashlaros';
+  if (!safe.startsWith(name)) return safe;
+  return `<a href="${HOME}">${name}</a>${safe.slice(name.length)}`;
+}
+
 export function page(title, body) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -40,7 +60,7 @@ export function page(title, body) {
     <link rel="stylesheet" href="/site.css" />
   </head>
   <body>
-    <h1>${escapeHtml(title)}</h1>
+    <h1>${titleLink(title)}</h1>
     <main>
 ${body}
     </main>

@@ -65,6 +65,18 @@ h1 {
   margin: 0;
 }
 
+/* The project name in the topbar links home. The global rule paints every
+   element with the foreground colour, which would make the name brighter
+   than the page it names - so it inherits the heading's colour and only
+   brightens on hover, like every other link here. */
+h1 a {
+  color: inherit;
+}
+
+h1 a:hover {
+  color: var(--highlight);
+}
+
 h2 {
   color: var(--accent);
   font-size: 0.8rem;
