@@ -24,8 +24,13 @@ Three things shape a run:
 Skipping is by declared version AND source hash: the version alone would
 miss a PKGBUILD edit that changes what gets built without touching pkgver
 (wluma's dropped man-page step did exactly that, and needed pkgrel bumped
-by hand). Set REBUILD_ALL=1 to ignore what is published and build
-everything, which is what a toolchain change needs.
+by hand).
+
+There is deliberately no way to rebuild what is already published. A rebuild
+at an unchanged version cannot be published - publish.py refuses to replace
+an object the live database names - so a toolchain rebuild is a pkgrel bump,
+which arrives here as an ordinary changed source hash.
+rebuild-on-breakage.yml makes those bumps.
 
 Writes GitHub Actions outputs on stdout.
 """
@@ -304,7 +309,6 @@ def published(arch: str) -> dict[str, tuple[str, str | None]]:
 
 def main() -> int:
     only = os.environ.get("ONLY", "").strip()
-    rebuild_all = os.environ.get("REBUILD_ALL", "").strip() not in ("", "0", "false")
 
     packages = {}
     for pkgbuild in sorted(PACKAGES.glob("*/PKGBUILD")):
@@ -324,7 +328,7 @@ def main() -> int:
         packages = {only: packages[only]}
 
     skipped = []
-    if not rebuild_all and not only:
+    if not only:
         # an `any` package lives in both trees, so it counts as built only
         # when both carry it; a compiled one is judged per architecture in
         # its own leg, and x86_64 is the one the ISO is built from

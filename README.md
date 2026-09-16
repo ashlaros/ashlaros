@@ -775,6 +775,39 @@ aarch64, a broken man-page step removed — so that merge is three-way against
 `packages/.upstream/` and conflicts are left for a human. Nothing merges
 itself.
 
+### Rebuilds when nothing in the package changed
+
+A package compiled here records the sonames it linked against —
+`libinput.so.10`, `libwlroots-0.19.so`. When the distribution moves one, our
+package still installs, because pacman resolves the plain package names the
+PKGBUILD declares, and then fails to start. Nothing in the package directory
+changed, so nothing in the pipeline notices.
+
+`.github/workflows/rebuild-on-breakage.yml` asks the published artefacts
+directly, weekly and on both architectures: `scripts/audit_links.py`
+downloads each package, reads every `DT_NEEDED` entry it ships, and resolves
+it through `pacman -F` against the repositories as they are today. What no
+longer resolves gets its `pkgrel` bumped by `scripts/bump_pkgrel.py` and
+pushed straight to `main`.
+
+The bump is what makes the rebuild possible at all, not bookkeeping:
+`scripts/publish.py` refuses to replace an object the live database already
+names — the worker serves packages as `immutable, max-age=31536000`, so a
+reader mid-upload would get one build's package with another build's
+signature — which means a rebuild at an unchanged version cannot be
+published. There is deliberately no flag that forces one.
+
+The bump is decimal, `6` to `6.1`, because `track-upstreams.yml` takes
+upstream's PKGBUILD verbatim and the next upstream release resets `pkgrel` to
+a small integer; `6.1` sorts above `6` and below `7`, so upstream always
+wins. Authored packages are refused by the bumper — their `pkgrel` is the
+commit count, so the commit recording a rebuild moves it already.
+
+Unlike `track-upstreams.yml`, this pushes rather than opening a pull request:
+taking an upstream change is a judgement call against our local edits, while
+a `pkgrel` bump is one mechanical line gated on an audit that either found
+broken links or did nothing.
+
 ### Where a package belongs
 
 Three lists exist, and the boundary between them was decided ad hoc until

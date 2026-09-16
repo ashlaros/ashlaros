@@ -1,0 +1,164 @@
+name: rebuild-on-breakage
+
+# The distribution moves a soname; our compiled packages keep naming the old
+# one. They still install - pacman resolves the plain package names our
+# PKGBUILDs declare - and then fail to start, and nothing in the build
+# pipeline notices, because nothing in the package directory changed.
+#
+# So the published artefacts are asked directly, once a week: does every
+# DT_NEEDED entry still resolve to a package in the repositories as they are
+# today? What does not resolve is rebuilt.
+#
+# A rebuild is a pkgrel bump, not a mode. publish.py refuses to replace an
+# object the live database already names - the worker serves packages as
+# `immutable, max-age=31536000`, so a reader mid-upload would get one build's
+# package with another build's signature - which means a rebuild at an
+# unchanged version cannot be published at all. Bumping pkgrel gives the new
+# build a filename of its own and takes the ordinary path: the commit changes
+# the package directory, discover_packages.py sees a source hash that no
+# longer matches what is published, and builds it.
+#
+# Pushed directly, unlike track-upstreams.yml. That workflow opens pull
+# requests because taking an upstream change is a judgement call against our
+# local edits. A pkgrel bump is mechanical, touches one line, and is gated on
+# an audit that either found broken links or did nothing at all.
+on:
+  schedule:
+    # Sunday, after the Saturday it would most often have to react to
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: rebuild-on-breakage
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+    # The ARM leg matters more, not less: build-wave.yml tolerates an aarch64
+    # failure so one bad package cannot block the repository, which is how
+    # way-displays was absent from that database for a week unnoticed.
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    container:
+      image: ${{ matrix.arch == 'aarch64' && 'menci/archlinuxarm:base' || 'archlinux:base' }}
+    steps:
+      - name: install git before the checkout
+        # Same probe the build containers use: pacman 7 confines downloads
+        # with Landlock and the ALARM container's seccomp profile blocks the
+        # syscalls, so the first sync fails there.
+        run: |
+          if ! pacman -Sy --noconfirm >/dev/null 2>&1; then
+            sed -i '0,/^\[options\]/s//[options]\nDisableSandbox/' /etc/pacman.conf
+          fi
+          pacman -Sy --noconfirm --needed git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: add the published repository
+        env:
+          REPO_URL: ${{ vars.REPO_URL || 'https://packages.ashlaros.download' }}
+        run: |
+          pacman -Sy --noconfirm --needed curl binutils python >/dev/null
+          curl -fsSL "${REPO_URL}/ashlaros.gpg" -o /tmp/ashlaros.gpg
+          pacman-key --init
+          pacman-key --populate "${{ matrix.arch == 'aarch64' && 'archlinuxarm' || 'archlinux' }}"
+          pacman-key --add /tmp/ashlaros.gpg
+          gpg --show-keys --with-colons /tmp/ashlaros.gpg |
+            awk -F: '/^fpr:/ {print $10}' |
+            while read -r fingerprint; do pacman-key --lsign-key "$fingerprint"; done
+          printf '\n[ashlaros]\nSigLevel = Required DatabaseOptional\nServer = %s/$arch\n' \
+            "$REPO_URL" >> /etc/pacman.conf
+          pacman -Sy
+
+      # Through an artifact rather than a job output: both matrix legs would
+      # share one `outputs` map, each writing only its own key, and the
+      # second to finish replaces the map the first wrote. The aarch64
+      # result is exactly the one that would vanish, on the architecture
+      # least watched.
+      - name: which packages no longer resolve their libraries
+        id: audit
+        run: |
+          set +e
+          python3 scripts/audit_links.py > "broken-${{ matrix.arch }}.txt"
+          status=$?
+          set -e
+          if [ "$status" -gt 1 ]; then
+            echo "::error::the audit could not run"
+            exit 1
+          fi
+          if [ -s "broken-${{ matrix.arch }}.txt" ]; then
+            echo "### ${{ matrix.arch }}: rebuilding $(tr '\n' ' ' < "broken-${{ matrix.arch }}.txt")" \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### ${{ matrix.arch }}: every soname still resolves" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: broken-${{ matrix.arch }}
+          path: broken-${{ matrix.arch }}.txt
+          retention-days: 1
+          # an empty file is the good outcome, not a missing one
+          if-no-files-found: error
+
+  rebuild:
+    needs: audit
+    # `always()`: a leg that failed to audit must not silently cancel the
+    # rebuild of what the other leg did find
+    if: always() && needs.audit.result != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # the bump is committed, and package_version.py needs full history
+          # for whatever else the build stamps
+          fetch-depth: 0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: broken-*
+          path: audit
+          merge-multiple: true
+
+      - name: bump the pkgrel of everything that broke
+        id: bump
+        run: |
+          # A package broken on both architectures is one package and one
+          # bump: the PKGBUILD is shared, and arch=any packages are built once.
+          broken=$(cat audit/broken-*.txt 2>/dev/null | sort -u | tr '\n' ' ' |
+            sed 's/^ *//; s/ *$//')
+          [ -n "$broken" ] || {
+            echo "nothing to rebuild"
+            exit 0
+          }
+
+          # shellcheck disable=SC2086
+          python3 scripts/bump_pkgrel.py $broken
+          echo "packages=$broken" >> "$GITHUB_OUTPUT"
+
+      - name: commit and push
+        if: steps.bump.outputs.packages != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages
+          git commit -m "rebuild against the current toolchain: ${{ steps.bump.outputs.packages }}
+
+          Their libraries no longer resolve against the repositories as they
+          are today, found by scripts/audit_links.py."
+          git push origin HEAD:main
+
+      # A push made with GITHUB_TOKEN does not trigger another workflow -
+      # GitHub refuses, to stop a run from looping - so build-packages would
+      # never see this commit and the bump would sit unbuilt until a human
+      # pushed something else. Dispatching it explicitly is the whole reason
+      # this step exists.
+      - name: build the packages just bumped
+        if: steps.bump.outputs.packages != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build-packages.yml --repo "${{ github.repository }}" --ref main
