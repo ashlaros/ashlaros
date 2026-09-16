@@ -167,18 +167,13 @@ test('a screenshot is revalidated, like everything else under latest/', async ()
   assert.equal(res.headers.get('cache-control'), 'no-cache');
 });
 
-test('the tour plays on the page and is never a download row', async () => {
-  // same rule as the stills: the listing skips latest/ entirely, so a video
-  // there has to be rendered deliberately or it is invisible
+test('the tour is neither shown nor offered as a download row', async () => {
+  // the page shows no media at all now, and latest/ is skipped by the
+  // listing - a regression that started listing it would put the video
+  // back as a row, which is the failure worth catching
   const body = await (await worker.fetch(req(''), env())).text();
-  assert.match(body, /<video class="tour" src="\/latest\/video\/tour\.webm"/);
+  assert.doesNotMatch(body, /<video/);
   assert.doesNotMatch(body, /class="row" href="\/latest\/video/);
-});
-
-test('the tour is not preloaded for every visitor', async () => {
-  // a few hundred KB on a download page that most visitors never play
-  const body = await (await worker.fetch(req(''), env())).text();
-  assert.match(body, /preload="metadata"/);
 });
 
 test('the tour serves as video, not as an attachment', async () => {
@@ -259,22 +254,21 @@ test('a resumed download of an unchanged object still resumes', async () => {
 });
 
 test('the index lists every version, not just the first page', async () => {
-  // R2 caps a list at 1000 keys and lists lexically, so `latest/` sorts
-  // last: without pagination the tour is the first thing to disappear,
-  // then the newest releases.
+  // R2 caps a list at 1000 keys and lists lexically, so a truncated
+  // listing loses whatever sorts last - and with 400 versions of three
+  // files each, that is 1200 keys and the newest releases are what goes.
   const many = [];
   for (let i = 0; i < 400; i += 1) {
     const v = `2026.01.${String(i).padStart(3, '0')}`;
     many.push(`${v}/ashlaros-${v}-x86_64.iso`, `${v}/SHA256SUMS`, `${v}/SHA256SUMS.sig`);
   }
-  many.push('latest/ashlaros.iso', 'latest/video/tour.webm');
+  many.push('latest/ashlaros.iso');
 
   const bucket = bucketOf(many);
   const res = await worker.fetch(req(''), { PACKAGES: bucketOf([]), ISO: bucket });
   const body = await res.text();
-  // the last version lexically, which is exactly what a truncated listing loses
+  // the last version lexically, which is exactly what a truncated listing
+  // loses - and the first one, to prove the walk did not simply start late
   assert.match(body, /2026\.01\.399/);
-  // the tour lives under latest/, which sorts after every version prefix,
-  // so it renders only if the listing walked the whole bucket
-  assert.match(body, /video\/tour\.webm/);
+  assert.match(body, /2026\.01\.000/);
 });

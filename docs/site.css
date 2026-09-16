@@ -266,13 +266,6 @@ footer {
   display: none;
 }
 
-/* max-width rather than a fixed width: a fixed 960px on a 390px phone put
-   the right edge off the screen. */
-.tour {
-  max-width: 100%;
-  border: 1px solid var(--edge);
-}
-
 canvas {
   background: #0d1112;
   border: 1px solid var(--edge);
