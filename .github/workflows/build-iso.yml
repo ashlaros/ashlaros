@@ -74,6 +74,12 @@ jobs:
         with:
           name: iso
           path: out/*.iso
+          # The ISO is a squashfs of already-zstd-compressed packages, so
+          # deflating it buys nothing: measured, level 6 turned 1,978,718,208
+          # bytes into 1,967,600,780 - 0.56% - and every one of the three
+          # consumer jobs pays to inflate it again. The action's own docs
+          # recommend 0 for large files that do not compress.
+          compression-level: 0
           retention-days: 1
           if-no-files-found: error
 
