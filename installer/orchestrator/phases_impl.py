@@ -953,6 +953,34 @@ def add_verbose_entry(ctx: InstallContext) -> None:
     info("› boot entries: a verbose one beside each, for a boot that fails")
 
 
+def drop_autodetect(ctx: InstallContext) -> bool:
+    """Remove the autodetect hook, whatever else the install did.
+
+    Split out of use_systemd_initramfs because that one runs only on the
+    TPM path and this has to happen on all of them. Idempotent: an install
+    that already went through use_systemd_initramfs finds nothing to do.
+
+    Returns whether the file changed, so the caller knows whether a
+    rebuild is owed.
+    """
+    conf = ctx.target / "etc/mkinitcpio.conf"
+    lines = []
+    changed = False
+
+    for line in conf.read_text().splitlines():
+        if not line.startswith("HOOKS=") or "autodetect" not in line:
+            lines.append(line)
+            continue
+        hooks = [h for h in line[len("HOOKS=("):].rstrip(")").split() if h != "autodetect"]
+        lines.append(f"HOOKS=({' '.join(hooks)})")
+        changed = True
+
+    if changed:
+        conf.write_text("\n".join(lines) + "\n")
+        info("› initramfs: every module, not just the installer's hardware")
+    return changed
+
+
 def configure_splash(ctx: InstallContext) -> None:
     """Select the theme and make sure the initramfs carries it.
 
@@ -961,6 +989,21 @@ def configure_splash(ctx: InstallContext) -> None:
     add_crypttab_tpm_option already does. So the theme is set without -R
     and the rebuild is done once, here, after every hook edit is in place.
     """
+    # Before anything else, and on every install: autodetect prunes the
+    # initramfs to the hardware mkinitcpio can see, and mkinitcpio runs
+    # under arch-chroot on the live ISO - so it keeps the INSTALLER's
+    # drivers. Only bochs, which is what the ISO's own -vga std uses.
+    #
+    # use_systemd_initramfs drops it, but its one caller is
+    # add_crypttab_tpm_option, which runs only after a TPM enrolment. A
+    # passphrase-only install therefore shipped an initramfs with no
+    # driver for the display it was about to boot on, plymouth found no
+    # DRM device, and the splash - and with it the passphrase prompt the
+    # encrypt hook had already handed over - rendered nothing at all
+    # (#86). Measured: the probe frame was pure (0,0,0), where a splash
+    # that drew even its own background would have been #141A1B.
+    drop_autodetect(ctx)
+
     theme = ctx.target / "usr/share/plymouth/themes/ashlaros/ashlaros.plymouth"
     if not theme.exists():
         info("› no ashlaros plymouth theme installed, leaving the boot bare")
