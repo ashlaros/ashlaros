@@ -203,11 +203,20 @@ jobs:
           git config --global --add safe.directory "$PWD"
 
           base="${{ github.event.pull_request.base.sha || github.event.before }}"
-          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] ||
-            ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            # no usable base - a new branch, a force push, a manual run.
-            # Verify everything rather than silently checking nothing.
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            echo "no base commit in the event; verifying everything"
             changed=$(printf '%s\n' packages/*/PKGBUILD)
+          elif ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            # The base can be absent from a shallow or partial clone. Ask the
+            # remote for it rather than falling back to all 33 packages,
+            # which is the traffic this change exists to stop.
+            git fetch --no-tags --depth=1 origin "$base" 2>/dev/null || true
+            if git cat-file -e "$base^{commit}" 2>/dev/null; then
+              changed=$(git diff --name-only "$base" HEAD -- 'packages/*/PKGBUILD')
+            else
+              echo "base $base is unreachable even after a fetch; verifying everything"
+              changed=$(printf '%s\n' packages/*/PKGBUILD)
+            fi
           else
             changed=$(git diff --name-only "$base" HEAD -- 'packages/*/PKGBUILD')
           fi
