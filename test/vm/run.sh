@@ -37,7 +37,7 @@ ensure_image() {
 sync_scripts() {
   mkdir -p "$workspace/out"
   cp "$here/boot.sh" "$here/qmp.py" "$here/install.py" "$here/unlock.py" \
-    "$workspace/"
+    "$here/live_session.py" "$workspace/"
 }
 
 start() {
@@ -230,6 +230,14 @@ wait-installed)
   ;;
 boot)
   CDROM=no start
+  ;;
+# The live session lives on tty2 and the installer keeps tty1 (#83).
+# Needs a VM already sitting on the installer, so it follows install-start.
+live-session)
+  docker exec "$container" python3 /vm/live_session.py | sed 's/^/   /'
+  for shot in live-tty1-before live-tty2-session live-tty1-after; do
+    png "$shot"
+  done
   ;;
 shot)
   docker exec "$container" python3 /vm/qmp.py '' "$2" 1 >/dev/null

@@ -56,6 +56,11 @@ boot)
   SECONDS_TO_RUN=1800 "$here/run.sh" install-start
   "$here/run.sh" shot ci-installer >/dev/null
   echo "== the ISO reaches the installer"
+
+  # The live session is on tty2 and must not disturb the installer on
+  # tty1 (#83). Checked here rather than in the install job because it
+  # needs nothing more than a booted ISO, and this job is the fast one.
+  "$here/run.sh" live-session
   ;;
 install)
   SECONDS_TO_RUN=7200 "$here/run.sh" install
