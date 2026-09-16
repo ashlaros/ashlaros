@@ -33,6 +33,14 @@ EOF
 pacman -Sy --noconfirm >/dev/null
 pacman -S --noconfirm --needed ashlaros-settings >/dev/null
 
+# The theme shots photograph what a theme looks like, so its packages have
+# to be on the machine - the settings package ships the sway half only, and
+# a missing GTK theme photographs as an unthemed window rather than a
+# failure (#84). The shipped list, so this follows the themes rather than
+# naming them twice.
+mapfile -t theme_packages < <(sort -u /usr/share/sway/themes/matcha-*/packages)
+pacman -S --noconfirm --needed "${theme_packages[@]}" >/dev/null
+
 # waybar exits immediately without one: "Cannot spawn a message bus without
 # a machine-id". A container image ships none, a real install gets it from
 # systemd's first boot.

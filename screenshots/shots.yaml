@@ -81,3 +81,47 @@
   # capture happens underneath it
   overlay: rofi -show drun -show-icons -font 'JetBrainsMono Nerd Font 10' -lines 10
   overlay_settle: 2
+
+# One picture per matcha variant. The four differ only in the GTK theme and
+# the accent, which is exactly the kind of change that resolves cleanly and
+# still looks wrong - so #84 asked for pictures rather than a package list.
+- name: theme-matcha-green
+  description: the default theme, which the shipped sway config names
+  theme: matcha-green
+  commands:
+    - footclient
+  settle: 3
+  layout:
+    - '[app_id="foot"] floating enable'
+    - '[app_id="foot"] resize set 1100 620'
+    - '[app_id="foot"] move position center'
+- name: theme-matcha-blue
+  description: the azul variant
+  theme: matcha-blue
+  commands:
+    - footclient
+  settle: 3
+  layout:
+    - '[app_id="foot"] floating enable'
+    - '[app_id="foot"] resize set 1100 620'
+    - '[app_id="foot"] move position center'
+- name: theme-matcha-leaf
+  description: the pueril variant
+  theme: matcha-leaf
+  commands:
+    - footclient
+  settle: 3
+  layout:
+    - '[app_id="foot"] floating enable'
+    - '[app_id="foot"] resize set 1100 620'
+    - '[app_id="foot"] move position center'
+- name: theme-matcha-red
+  description: the aliz variant, the one with its own accent
+  theme: matcha-red
+  commands:
+    - footclient
+  settle: 3
+  layout:
+    - '[app_id="foot"] floating enable'
+    - '[app_id="foot"] resize set 1100 620'
+    - '[app_id="foot"] move position center'

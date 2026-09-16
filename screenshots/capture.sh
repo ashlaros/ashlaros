@@ -41,7 +41,30 @@ while read -r shot; do
     settle=$(field "$shot" settle 3)
     overlay=$(field "$shot" overlay '')
     overlay_settle=$(field "$shot" overlay_settle 2)
+    theme=$(field "$shot" theme '')
     log "=== $name ==="
+
+    # A shot can ask for a theme, which is how the variants get one picture
+    # each (#84). The same copy-and-reload ashlaros-theme does, without its
+    # rofi prompts: sway rereads definitions.d/theme.conf on reload, so no
+    # session restart is needed.
+    if [ -n "$theme" ]; then
+        theme_dir="/usr/share/sway/themes/$theme"
+        if [ -f "$theme_dir/theme.conf" ]; then
+            log "  theme: $theme"
+            cp "$theme_dir/theme.conf" "$HOME/.config/sway/definitions.d/theme.conf"
+            [ -f "$theme_dir/foot-theme.ini" ] &&
+                cp "$theme_dir/foot-theme.ini" "$HOME/.config/foot/foot-theme.dark.ini_"
+            /usr/share/sway/scripts/theme-toggle.sh merge-foot 2>/dev/null || true
+            swaymsg reload >/dev/null 2>&1 || true
+            # the reload restarts the bar and the wallpaper, which the shot
+            # would otherwise photograph mid-flight
+            sleep 4
+        else
+            log "  theme: $theme has no theme.conf, skipping the shot"
+            continue
+        fi
+    fi
 
     # every shot starts from an empty workspace, so one shot's windows can
     # never leak into the next. Matched on app_id rather than workspace:
