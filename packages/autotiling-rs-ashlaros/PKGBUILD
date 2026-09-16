@@ -1,0 +1,60 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+# Contributor: Frederik Schwan <freswa at archlinux dot org>
+
+# Arch's own autotiling-rs, carrying one patch we sent upstream as
+# ammgws/autotiling-rs#29.
+#
+# Named -ashlaros rather than autotiling-rs because [ashlaros] sits after
+# [extra] in the repository stack, and pacman takes the first repository
+# carrying a name rather than the highest version - a package called
+# autotiling-rs here would never be the one installed. Every other vendored
+# package is absent from the official repositories, so this is the first
+# collision in the tree.
+#
+# Drop this the moment #29 is released: replaces= hands the user back to
+# extra/autotiling-rs on the next upgrade, so removal is deleting this
+# directory and the depends line in ashlaros-settings.
+pkgname=autotiling-rs-ashlaros
+_pkgname=autotiling-rs
+pkgver=0.1.8
+pkgrel=1
+pkgdesc='Automatically alternates container layouts between horizontal and vertical (with the tabbed-layout fix)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/ammgws/autotiling-rs'
+license=('MIT')
+makedepends=('rust')
+provides=("$_pkgname=$pkgver")
+conflicts=("$_pkgname")
+replaces=("$_pkgname")
+source=("https://github.com/ammgws/autotiling-rs/archive/v${pkgver}/${_pkgname}-${pkgver}.tar.gz"
+        "0001-check-parent-layout.patch")
+b2sums=('67015260921c7d38b7294ae870f8a7b1f7d0007829b7dff60e8db60b95a71494b84a946d9cebf04d97d7606638cb5dd44f341c1444646372c2dd899d4f9c428e'
+        '4accb8e2602054673de79a34c41cea02133c09f5083580fc0c3df5cbe9ef8ebfdc9ead9e50621cc81c41b22b958976d07dfbdd6bd05666dbf066a96ede8a60b5')
+
+prepare() {
+  cd "${_pkgname}-${pkgver}"
+
+  # The tabbed and stacked checks read the focused node's layout, but the
+  # focused node is a leaf and sway reports NodeLayout::None for leaves - so
+  # neither check ever fired and autotiling split inside tabbed containers.
+  # Sway wraps the leaf in a new split con, leaving the tabbed parent with a
+  # single child and a tab bar that has nothing to switch to.
+  #
+  # The bar survives every later layout command, which is what makes this
+  # worth a patched package rather than a note: $mod+w then $mod+e, the
+  # bindings sway/modes/default already ships, reproduce it in two presses
+  # and the only way out is moving the window to another workspace.
+  patch -p1 < "$srcdir/0001-check-parent-layout.patch"
+
+  cargo fetch --locked --target "$(rustc --print host-tuple)"
+}
+
+build() {
+  cd "${_pkgname}-${pkgver}"
+  cargo build --release --locked
+}
+
+package() {
+  cd "${_pkgname}-${pkgver}"
+  install -Dm755 "target/release/${_pkgname}" "$pkgdir/usr/bin/${_pkgname}"
+}

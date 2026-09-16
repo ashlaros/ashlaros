@@ -5,7 +5,7 @@ After=sway-session.target
 
 [Service]
 Type=simple
-ExecStart=/bin/sh -c 'if [ -x "$(command -v autotiling)" ]; then exec autotiling; elif [ -x "$(command -v autotiling-rs)" ]; then exec autotiling-rs; fi'
+ExecStart=/usr/bin/autotiling-rs
 Restart=on-failure
 
 [Install]

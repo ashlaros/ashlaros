@@ -28,7 +28,7 @@ set $initialize_way_displays '[ -x "$(command -v way-displays)" ] && systemctl -
 set $initialize_flashfocus 'systemctl --user enable --now --no-reload flashfocus'
 set $initialize_mako '[ -x "$(command -v mako)" ] && systemctl --user set-environment MAKO_FONT="$term-font" MAKO_TEXT_COLOR="$text-color" MAKO_BORDER_COLOR="$accent-color" MAKO_BG_COLOR="$background-color" && systemctl --user reload-or-restart mako'
 set $initialize_wlsunset '[ -x "$(command -v wlsunset)" ] && systemctl --user enable --now --no-reload wlsunset'
-set $initialize_autotiling '[ -x "$(command -v autotiling)" ] || [ -x "$(command -v autotiling-rs)" ] && systemctl --user enable --now --no-reload autotiling'
+set $initialize_autotiling 'systemctl --user enable --now --no-reload autotiling'
 set $initialize_cliphist_store '[ -x "$(command -v cliphist)" ] && systemctl --user enable --now --no-reload cliphist-store'
 set $initialize_cliphist_watch '[ -x "$(command -v cliphist)" ] && systemctl --user enable --now --no-reload cliphist-watch'
 set $initialize_polkit_agent '[ -x /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 ] && systemctl --user enable --now --no-reload polkit-gnome'

@@ -51,6 +51,12 @@ depends=(
     'xdg-terminal-exec'       # execute-in-terminal xdg standard
     'idlehack'                # inhibit swayidle on screensaver-inhibit dbus calls
     'swayr'                   # lru window switcher for sway
+    # the -ashlaros build, not extra's: [ashlaros] sits after [extra]
+    # in the repository stack, so a package under upstream's own name
+    # could never win. Carries the tabbed-layout fix the sway config
+    # here needs, because $mod+w then $mod+e leaves a stray tab bar
+    # without it (ammgws/autotiling-rs#29)
+    'autotiling-rs-ashlaros'
     'way-displays'            # display management; the user unit, the
                               # autostart entry and the skel cfg.yaml here
                               # all assume it, and without it the desktop
@@ -119,7 +125,6 @@ optdepends=(
     'gtklock: lockscreen based on gtkgreet'
     'swaylock-effects: minimalistic lockscreen with fancy effects'
     'wlsunset: time & place based light temperature'
-    'autotiling: automated tiling'
     'sworkstyle: dynamic workspace names (icons) in waybar'
     'cliphist: clipboard manager'
     'swaycwd: open here helper'
