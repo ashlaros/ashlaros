@@ -103,7 +103,9 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ashlaros-iso
-          VERSION: ${{ steps.version.outputs.value }}
+        # No VERSION: upload_iso.py reads it out of the image name, which
+        # build-image.sh stamped, so the prefix cannot disagree with the
+        # file it holds.
         run: |
           mise run install
-          python3 scripts/upload_iso.py --iso-dir out --version "$VERSION"
+          python3 scripts/upload_iso.py --iso-dir out
