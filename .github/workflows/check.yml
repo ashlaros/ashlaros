@@ -176,6 +176,13 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:base-devel
     steps:
+      - name: install git before the checkout
+        # Without git in the image, actions/checkout downloads a tarball
+        # through the REST API and there is no .git at all - so fetch-depth
+        # is ignored, every git command fails, and the diff below silently
+        # falls back to verifying all 33 packages. Same pattern
+        # rebuild-on-breakage.yml already uses.
+        run: pacman -Sy --noconfirm --needed git >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # the diff below needs the base commit to compare against
@@ -197,8 +204,9 @@ jobs:
         # enough that a maintainer saw it in their download counts and
         # asked us to stop (#81). Most pushes touch no package at all.
         run: |
-          # git: several PKGBUILDs take git+ sources, which makepkg
-          # refuses to even look at without it
+          # git is already here from the pre-checkout step; pacman-contrib
+          # is what makepkg wants for several PKGBUILDs that take git+
+          # sources
           pacman -Sy --noconfirm --needed pacman-contrib git >/dev/null
           # The container runs as root over a checkout the runner made, so
           # git refuses it as dubiously owned and every later command fails
