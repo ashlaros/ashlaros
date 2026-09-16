@@ -1,28 +1,76 @@
 #!/bin/sh
+# mjr.sh - Non-tracking URL shortener.
+#
+# Takes the URL as an argument or on stdin, so it chains: `termpaste < log
+# | mjr` shortens the paste it just printed.
 
-if [ -z "$1" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+set -eu
+
+usage() {
   echo "mjr.sh - Non-tracking URL shortener"
-  echo "Usage: $(basename $0) <url>"
+  echo "Usage: $(basename "$0") <url>"
+  echo "       <command printing a url> | $(basename "$0")"
+}
+
+case "${1:-}" in
+-h | --help)
+  usage
+  exit 0
+  ;;
+esac
+
+if [ $# -gt 0 ]; then
+  INPUT="$1"
+else
+  # One URL, not a log: read a single line rather than the whole stream, so
+  # a pipe that keeps printing does not hang here waiting for EOF.
+  IFS= read -r INPUT || true
+fi
+
+# Trim the whitespace a pipe brings with it - `termpaste` ends its output
+# with a newline, and a trailing space would be sent as %20 rather than
+# rejected. Only at the ends: stripping throughout would turn a rejected
+# line into an unreadable one run together in the error message.
+INPUT=$(printf '%s' "$INPUT" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+
+if [ -z "$INPUT" ]; then
+  usage
   exit 1
 fi
 
-RESULT=$(curl --fail -s https://mjr.sh/add?url=$1)
+# The shortener stores whatever it is given and hands back a link that
+# redirects there, so anything that is not an http(s) URL becomes a
+# redirect to nowhere - found only by whoever clicks it. A password typed
+# at the wrong prompt, or a log line piped in by mistake, is worth
+# refusing here rather than publishing.
+case "$INPUT" in
+http://* | https://*) ;;
+*)
+  echo "Not an http(s) URL: $INPUT" >&2
+  exit 1
+  ;;
+esac
+
+# --get with --data-urlencode rather than pasting into the query string:
+# a URL carrying & or ? is otherwise cut short, and the remainder is read
+# as further parameters to /add.
+RESULT=$(curl --fail -s --get --data-urlencode "url=$INPUT" https://mjr.sh/add) || RESULT=''
 
 if [ -z "$RESULT" ]; then
-  echo "Failed to shorten URL"
+  echo "Failed to shorten URL" >&2
   exit 1
 fi
 
-URL=$(echo $RESULT | jq -r '.url')
-SECRET=$(echo $RESULT | jq -r '.secret')
-STATS=$(echo $RESULT | jq -r '.stats')
-KEY=$(echo $RESULT | jq -r '.key')
+URL=$(echo "$RESULT" | jq -r '.url')
+SECRET=$(echo "$RESULT" | jq -r '.secret')
+STATS=$(echo "$RESULT" | jq -r '.stats')
+KEY=$(echo "$RESULT" | jq -r '.key')
 
 STORAGE_DIR="${XDG_DOCUMENTS_DIR:-$HOME/Documents}/mjr"
 mkdir -p "$STORAGE_DIR"
 
-BACKUP="$STORAGE_DIR/$(echo $1 | awk -F[/:] '{print $4}')_${KEY}.json"
-echo $RESULT > $BACKUP
+BACKUP="$STORAGE_DIR/$(echo "$INPUT" | awk -F'[/:]' '{print $4}')_${KEY}.json"
+echo "$RESULT" >"$BACKUP"
 
 echo "---"
 echo "url: $URL"
