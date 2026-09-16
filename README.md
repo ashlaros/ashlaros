@@ -430,6 +430,17 @@ Put your own `client_id` and `client_secret` in
 `~/.config/ashlaros/google-oauth-client` to run under your own Cloud
 project instead.
 
+**Subscribed calendars** read a published `.ics` link — Proton Calendar's
+"share via link", a timetable, a fixture list — into the same vdir, named
+by you and removable one at a time. Read-only, which is vdirsyncer's
+`http` storage rather than a choice here: the events show up in `khal` and
+raise reminders, and editing stays wherever the calendar lives. It is the
+only way to reach **Proton**, which speaks no CalDAV — `dav.proton.me` and
+`caldav.proton.me` do not resolve, the web app answers `405` to
+`PROPFIND`, and Proton Bridge is IMAP/SMTP only. A published link carries
+no password, so anyone holding it can read that calendar; the entry says
+so before writing one down.
+
 `calcurse` was here until 2026-09-15 and could not reach Google at all:
 its OAuth path is built on `python-oauth2client`, which Google archived,
 sends no PKCE, and wants a client secret in a config file.

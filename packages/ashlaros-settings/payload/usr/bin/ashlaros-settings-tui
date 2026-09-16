@@ -971,29 +971,259 @@ google_calendar() {
   pause
 }
 
-calendar_entry() {
-  screen "Calendar"
+# Subscribed calendars: a published .ics link, fetched read-only.
+#
+# Any calendar that hands out a link - Proton, a university timetable, a
+# football fixture list, a shared Google calendar - can be read this way,
+# so this is one generic entry rather than a row per provider. It is how
+# Proton Calendar is reachable at all: Proton speaks no CalDAV (dav. and
+# caldav. do not resolve, and the web app answers 405 to PROPFIND), and
+# Proton Bridge is IMAP/SMTP only.
+#
+# Read-only, and that is vdirsyncer's own property rather than a choice
+# here: HttpStorage sets read_only = True. Events show up in khal and get
+# reminders; editing them stays in whatever app owns the calendar.
+#
+# One [pair] per feed, named by the user. That is what makes them
+# removable: dropping a feed is deleting its pair, its storages and its
+# directory, and nothing else in the file is touched - the CalDAV account
+# configured by the entry above keeps working either way.
+FEEDS_DIR="$VDIR_ROOT"
 
-  if [[ -f $VDIRSYNCER_CONFIG ]]; then
-    local server
-    server=$(sed -n 's/^ *url *= *"\(.*\)"/\1/p' "$VDIRSYNCER_CONFIG" | head -1)
-    say "Configured: ${server:-a CalDAV server}"
+# The pairs in the config that are subscribed feeds. Marked with a comment
+# rather than inferred from the storage type: a user who hand-edits the
+# file keeps whatever they wrote, and only what this entry created is
+# offered for removal.
+feed_names() {
+  [[ -f $VDIRSYNCER_CONFIG ]] || return 0
+  sed -n 's/^# ashlaros-feed: \(.*\)$/\1/p' "$VDIRSYNCER_CONFIG"
+}
+
+# A pair name vdirsyncer accepts, derived from what the user typed. The
+# display name is kept in the marker comment above, so "Uni timetable" can
+# stay readable while the pair is uni_timetable.
+feed_slug() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '_' |
+    sed 's/^_//; s/_$//'
+}
+
+feeds_entry() {
+  local choice
+  while true; do
+    screen "Subscribed calendars"
+
+    local names
+    names=$(feed_names)
+    if [[ -n $names ]]; then
+      say "Subscribed:"
+      local n
+      while read -r n; do [[ -n $n ]] && say "  $n"; done <<<"$names"
+    else
+      say "No subscribed calendars yet."
+      echo
+      say "A published .ics link - Proton Calendar's \"share via link\", a"
+      say "timetable, a fixture list - is read into your calendar here."
+    fi
     echo
-    local existing
-    existing=$(gum choose --header "Calendar sync" \
-      "Sync now" "Open the calendar" "Reconfigure" "Back") || return 0
-    case $existing in
+
+    local entries=("Add a calendar")
+    [[ -n $names ]] && entries+=("Refresh now" "Remove one")
+    entries+=("Back")
+
+    choice=$(gum choose --header "Subscribed calendars" "${entries[@]}") || return 0
+    case $choice in
+      "Add a calendar") feed_add ;;
+      "Refresh now") feed_refresh ;;
+      "Remove one") feed_remove ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+feed_add() {
+  screen "Add a calendar"
+
+  local name slug url
+  name=$(gum input --prompt "Name: " --placeholder "Proton, timetable, fixtures") || return 0
+  [[ -n $name ]] || return 0
+  slug=$(feed_slug "$name")
+  [[ -n $slug ]] || { oops "That name has no letters or digits in it."; pause; return 0; }
+
+  if feed_names | grep -qxF "$name"; then
+    oops "A calendar called $name is already subscribed."
+    pause
+    return 0
+  fi
+
+  say "The link ends in .ics, or starts with webcal://"
+  echo
+  url=$(gum input --prompt "Link: " --placeholder "https://…/calendar.ics") || return 0
+  [[ -n $url ]] || return 0
+  # webcal:// is http(s) with a scheme that tells a browser to subscribe;
+  # vdirsyncer speaks neither, so it is rewritten rather than refused
+  case $url in
+    webcal://*) url="https://${url#webcal://}" ;;
+  esac
+
+  echo
+  say "This is read-only: events appear in your calendar and you get"
+  say "reminders, but edits happen wherever the calendar lives."
+  echo
+  # Worth saying once, at the moment someone pastes one in: a published
+  # link is a capability. It carries no password, so whoever has the URL
+  # can read that calendar - including, for an end-to-end encrypted
+  # provider, a server that could not read it before it was published.
+  say --foreground 3 "! Anyone with this link can read the calendar; it has no password."
+  echo
+  gum confirm --affirmative "Add" --negative "Cancel" "Add $name?" || return 0
+
+  mkdir -p "$FEEDS_DIR/$slug"
+
+  # appended, so the CalDAV account and any other feed are untouched
+  [[ -f $VDIRSYNCER_CONFIG ]] || feed_config_header
+  {
+    echo
+    echo "# ashlaros-feed: $name"
+    echo "[pair $slug]"
+    echo "a = \"${slug}_local\""
+    echo "b = \"${slug}_remote\""
+    # null rather than a list: an .ics URL is one calendar, not a server
+    # with collections to discover
+    echo "collections = null"
+    echo
+    echo "[storage ${slug}_local]"
+    echo "type = \"filesystem\""
+    echo "path = \"$FEEDS_DIR/$slug\""
+    echo "fileext = \".ics\""
+    echo
+    echo "[storage ${slug}_remote]"
+    echo "type = \"http\""
+    echo "url = \"$url\""
+  } >> "$VDIRSYNCER_CONFIG"
+  chmod 600 "$VDIRSYNCER_CONFIG"
+
+  screen "Add a calendar"
+  say "Fetching $name:"
+  echo
+  # one pair, so a broken feed cannot fail the CalDAV sync beside it
+  yes | vdirsyncer discover "$slug" 2>&1 | sed 's/^/  /' | head -20
+  vdirsyncer sync "$slug" 2>&1 | sed 's/^/  /' | head -20
+  echo
+
+  local count
+  count=$(find "$FEEDS_DIR/$slug" -name '*.ics' 2>/dev/null | wc -l)
+  if ((count > 0)); then
+    say "$count event(s) from $name. khal shows them; the timer refreshes"
+    say "every 15 minutes."
+  else
+    warn "Nothing arrived. The link may be wrong, or may not be public."
+    say "\"Remove one\" takes it out again."
+  fi
+  pause
+}
+
+feed_refresh() {
+  screen "Subscribed calendars"
+  local slug
+  while read -r name; do
+    [[ -n $name ]] || continue
+    slug=$(feed_slug "$name")
+    say "$name:"
+    vdirsyncer sync "$slug" 2>&1 | sed 's/^/  /' | head -10
+  done <<<"$(feed_names)"
+  pause
+}
+
+feed_remove() {
+  local name slug
+  name=$(feed_names | gum choose --header "Remove which?") || return 0
+  [[ -n $name ]] || return 0
+  slug=$(feed_slug "$name")
+
+  gum confirm --affirmative "Remove" --negative "Keep" \
+    "Remove $name and its events from this machine?" || return 0
+
+  # The block runs from the marker to the line before the next marker or
+  # the end. awk rather than sed: the range has to end at whichever comes
+  # first, and a trailing block has no terminator to match on.
+  local trimmed
+  trimmed=$(mktemp)
+  awk -v marker="# ashlaros-feed: $name" '
+    $0 == marker { skipping = 1; next }
+    /^# ashlaros-feed: / { skipping = 0 }
+    !skipping { print }
+  ' "$VDIRSYNCER_CONFIG" > "$trimmed"
+  cat "$trimmed" > "$VDIRSYNCER_CONFIG"
+  rm -f "$trimmed"
+  chmod 600 "$VDIRSYNCER_CONFIG"
+
+  rm -rf "${FEEDS_DIR:?}/$slug"
+  # the status directory remembers what was synced; leaving it behind
+  # makes a re-added feed look like a conflict rather than a fresh fetch
+  rm -rf "${HOME:?}/.local/share/vdirsyncer/status/$slug"* 2>/dev/null
+
+  screen "Subscribed calendars"
+  say "Removed $name."
+  pause
+}
+
+# Only when there is no config at all: a feed must be addable before any
+# CalDAV account exists.
+feed_config_header() {
+  private_file "$VDIRSYNCER_CONFIG"
+  {
+    echo "# written by ashlaros-settings-tui"
+    echo "[general]"
+    echo "status_path = \"~/.local/share/vdirsyncer/status/\""
+  } > "$VDIRSYNCER_CONFIG"
+  chmod 600 "$VDIRSYNCER_CONFIG"
+}
+
+calendar_entry() {
+  # An account and subscribed links are independent: either can exist
+  # without the other, so this is a menu rather than a straight line into
+  # the account wizard.
+  local choice
+  while true; do
+    screen "Calendar"
+
+    if [[ -f $VDIRSYNCER_CONFIG ]] && grep -q '^\[pair calendar\]' "$VDIRSYNCER_CONFIG"; then
+      local server
+      server=$(sed -n 's/^ *url *= *"\(.*\)"/\1/p' "$VDIRSYNCER_CONFIG" | head -1)
+      say "Account: ${server:-a CalDAV server}"
+    else
+      say "No account configured."
+    fi
+    local subscribed
+    subscribed=$(feed_names | grep -c . || true)
+    ((subscribed > 0)) && say "Subscribed calendars: $subscribed"
+    echo
+
+    local entries=()
+    if [[ -f $VDIRSYNCER_CONFIG ]]; then
+      entries+=("Sync now" "Open the calendar")
+    fi
+    entries+=("Set up an account" "Subscribed calendars" "Back")
+
+    choice=$(gum choose --header "Calendar" "${entries[@]}") || return 0
+    case $choice in
       "Sync now")
+        screen "Calendar"
         # --force-delete is deliberately absent: without it vdirsyncer
         # aborts rather than emptying both sides, which is the accident
         # worth refusing
         vdirsyncer sync 2>&1 | sed 's/^/  /' | head -40
-        pause; return 0 ;;
-      "Open the calendar") khal interactive; return 0 ;;
-      "Reconfigure") ;;
+        pause ;;
+      "Open the calendar") khal interactive ;;
+      "Subscribed calendars") feeds_entry ;;
+      "Set up an account") calendar_account; return 0 ;;
       *) return 0 ;;
     esac
-  fi
+  done
+}
+
+calendar_account() {
+  screen "Calendar"
 
   # A table rather than a branch per provider: the common failure is not
   # knowing the CalDAV URL, and the URL is data. Every host below was
