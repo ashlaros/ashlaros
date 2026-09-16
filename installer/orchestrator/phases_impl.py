@@ -218,6 +218,13 @@ DESKTOP_PACKAGES = [
     # does not, and nothing authenticates against it until someone
     # enrols a finger in the settings TUI and asks for it.
     "fprintd",
+    # What makes GNOME Boxes and virt-manager recognise an AshlarOS ISO
+    # (#85). Published upstream too, but an entry in osinfo-db reaches a
+    # host at its next osinfo-db release; this reaches an AshlarOS host
+    # now, which is the machine most likely to be building a VM of us.
+    # Inert without libosinfo, so it costs a 3 KiB file on a desktop that
+    # never virtualises anything.
+    "ashlaros-osinfo",
     # An editor has to exist: $EDITOR is set in the shipped .profile and
     # git, visudo and systemctl edit all consume it, including from a TTY
     # or an ssh session. vim carries the desktop file the mime list points
