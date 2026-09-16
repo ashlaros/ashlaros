@@ -181,8 +181,6 @@ jobs:
         with:
           name: iso
           path: out
-      - id: version
-        run: echo "value=$(date +%Y.%m.%d)" >> "$GITHUB_OUTPUT"
       - name: checksum
         # Recomputed here rather than carried: the artefact round trip is
         # what the checksum is meant to prove the image survived.
@@ -195,14 +193,20 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ashlaros-iso
-          VERSION: ${{ steps.version.outputs.value }}
+        # The version is read out of the image names, not computed here.
+        # profiledef.sh stamps the filename when the ISO is built and this
+        # job runs after about an hour of VM tests: a date taken here
+        # published 2026.09.17/ashlaros-2026.09.16-x86_64.iso across
+        # midnight UTC, and the worker builds the latest/ redirect target
+        # from the prefix, so it pointed at a key that does not exist.
+        id: upload
         run: |
           mise run install
-          python3 scripts/upload_iso.py --iso-dir out --version "$VERSION"
+          python3 scripts/upload_iso.py --iso-dir out
       - name: release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.value }}
+          VERSION: ${{ steps.upload.outputs.version }}
         run: |
           # the ISO itself is not attached: github caps a release asset at
           # 2 GB and this one is larger. The bucket holds the image; the

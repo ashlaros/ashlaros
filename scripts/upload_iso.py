@@ -24,10 +24,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from r2 import log, s3_client
 
 
+VERSION_IN_NAME = re.compile(r"-(\d{4}\.\d{2}\.\d{2})-")
+
+
+def version_of(names: list[str]) -> str:
+    """The version the images themselves carry.
+
+    Not a date computed here. profiledef.sh stamps the filename at build
+    time and this runs after the VM tests, which take about an hour: a run
+    that started before midnight UTC and published after it wrote
+    `2026.09.17/ashlaros-2026.09.16-x86_64.iso`, and the worker builds the
+    `latest/` redirect target from the prefix, so it pointed at a key that
+    does not exist.
+    """
+    found = {m.group(1) for name in names if (m := VERSION_IN_NAME.search(name))}
+    if not found:
+        raise SystemExit(f"no version in any image name: {', '.join(names)}")
+    if len(found) > 1:
+        raise SystemExit(f"images disagree about the version: {', '.join(sorted(found))}")
+    return found.pop()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iso-dir", required=True)
-    parser.add_argument("--version", required=True)
     args = parser.parse_args()
 
     # (glob, content type, the latest/ alias it repoints)
@@ -49,12 +69,22 @@ def main() -> int:
         log("nothing to upload")
         return 1
 
+    version = version_of([os.path.basename(path) for path, _, _ in found])
+    log(f"publishing {version}, read from the image names")
+
+    # The release tag and its notes URL have to name the same version the
+    # bucket got, so the workflow reads it back from here rather than
+    # computing a second date of its own.
+    if output := os.environ.get("GITHUB_OUTPUT"):
+        with open(output, "a", encoding="utf-8") as handle:
+            handle.write(f"version={version}\n")
+
     bucket = os.environ["R2_BUCKET"]
     s3 = s3_client()
 
     for path, content_type, _ in found:
         name = os.path.basename(path)
-        key = f"{args.version}/{name}"
+        key = f"{version}/{name}"
         s3.upload_file(path, bucket, key, ExtraArgs={"ContentType": content_type})
         log(f"uploaded {key} ({os.path.getsize(path)} bytes)")
 
@@ -71,10 +101,10 @@ def main() -> int:
         s3.upload_file(
             path,
             bucket,
-            f"{args.version}/{name}",
+            f"{version}/{name}",
             ExtraArgs={"ContentType": "text/plain"},
         )
-        log(f"uploaded {args.version}/{name}")
+        log(f"uploaded {version}/{name}")
 
     # Last, and a pointer rather than a copy of the image. This used to be
     # a server-side copy: 1.7 GB duplicated per release, and worse than
@@ -92,13 +122,13 @@ def main() -> int:
         s3.put_object(
             Bucket=bucket,
             Key=alias,
-            Body=args.version.encode(),
+            Body=version.encode(),
             ContentType="text/plain",
             # the pointer changes every release and is tiny; a cache that
             # held it would pin the whole site to an old image
             CacheControl="no-cache",
         )
-        log(f"{alias} -> {args.version}/{name}")
+        log(f"{alias} -> {version}/{name}")
 
     prune_old_versions(s3, bucket, keep=5)
 
