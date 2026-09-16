@@ -43,7 +43,15 @@ def frames() -> list[dict]:
     terminals tiled, which is what the window manager is for" tells a
     screen reader exactly what a sighted visitor sees.
     """
-    shots = yaml.safe_load(SHOTS.read_text())
+    # `gallery: false` marks a shot that is taken to be looked at rather
+    # than published: the four matcha variants are a verification that each
+    # theme renders (#84), and four near-identical desktops in a row is
+    # padding here - the tour video already shows the theme switching.
+    shots = [
+        shot
+        for shot in yaml.safe_load(SHOTS.read_text())
+        if shot.get("gallery", True)
+    ]
     out = [
         {
             "kind": "image",
