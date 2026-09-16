@@ -1,0 +1,70 @@
+# Security updates and major version bumps, and nothing else.
+#
+# The security half is a repository setting rather than a file - Dependabot
+# security updates and the vulnerability alerts they depend on are enabled
+# under Settings -> Code security - and it raises those PRs for a
+# vulnerable dependency whatever this file says. What this file decides is
+# when a dependency that is merely *old* gets one.
+#
+# The answer here is: only when the major moves. The `version-update:`
+# prefix on the ignored types is load-bearing - it scopes the rule to
+# version updates, so a patch release that fixes a CVE still arrives as a
+# security update. Ignoring a dependency by name would not: that form of
+# `ignore` applies to security updates too.
+#
+# Only the ecosystems that have dependencies are listed. worker/package.json
+# declares none at all (it is scripts only) and core/Cargo.toml none either,
+# so entries for them would open nothing and imply a surface that is not
+# there.
+
+version: 2
+updates:
+  # 41 usages across 6 actions, every one pinned to a commit SHA. A pinned
+  # SHA never resolves to a newer release on its own, so without this the
+  # pins rot silently - upload-artifact was already sitting on v5.0.0 in one
+  # workflow and v7.0.1 in seven others by the time this was written.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # One PR for the lot. They move together, they are first-party or
+      # already trusted, and several separate PRs a week is how a
+      # repository teaches people to stop reading them.
+      actions:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: cargo
+    directory: /client
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    commit-message:
+      prefix: build
+
+  # requirements.txt pins boto3 and PyYAML exactly, so nothing moves here
+  # without a commit - which is the point of pinning, and also the reason
+  # something has to propose the move.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    commit-message:
+      prefix: build
