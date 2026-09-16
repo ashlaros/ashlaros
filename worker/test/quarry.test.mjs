@@ -188,7 +188,7 @@ test('an unknown game is refused rather than given a board of its own', async ()
   const env = { ISO: bucketOf([]), DOCS: { fetch: async () => new Response('docs') } };
   for (const path of ['game/seed?game=nope', 'game/board?game=nope']) {
     const res = await worker.fetch(
-      new Request(`https://iso.ashlaros.download/${path}`),
+      new Request(`https://ashlaros.download/iso/${path}`),
       env,
       {},
     );
@@ -201,7 +201,7 @@ test('both games answer on their own seeds', async () => {
   const seeds = {};
   for (const game of ['courses', 'quarry']) {
     const res = await worker.fetch(
-      new Request(`https://iso.ashlaros.download/game/seed?game=${game}`),
+      new Request(`https://ashlaros.download/game/seed?game=${game}`),
       env,
       {},
     );

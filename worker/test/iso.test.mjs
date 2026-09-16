@@ -48,7 +48,7 @@ test('latest is never cached as immutable', async () => {
 
 test('a range request is answered as a range, so a download resumes', async () => {
   const request = new Request(
-    'https://iso.ashlaros.download/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
+    'https://ashlaros.download/iso/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
     { headers: { range: 'bytes=1000-2000' } },
   );
   const res = await worker.fetch(request, env());
@@ -69,7 +69,7 @@ test('the index lists newest first and does not repeat latest as a version', asy
   );
   // latest/ is an alias of an image already listed under its own version
   assert.doesNotMatch(body, /<h2>latest<\/h2>/);
-  assert.match(body, /href="\/latest\/ashlaros\.iso"/);
+  assert.match(body, /href="\/iso\/latest\/ashlaros\.iso"/);
 });
 
 test('an alias key holding a whole image is refused, not read', async () => {
@@ -198,7 +198,7 @@ test('a media file carries the length and range support a player needs', async (
 test('a ranged request reports which bytes it answered with', async () => {
   // the versioned key, because latest/ is a pointer now and answers 302
   const request = new Request(
-    'https://iso.ashlaros.download/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
+    'https://ashlaros.download/iso/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
     { headers: { range: 'bytes=100-199' } },
   );
   const res = await worker.fetch(request, env(), {});
@@ -215,7 +215,7 @@ test('latest is a redirect to the versioned image, not the image', async () => {
   assert.equal(res.status, 302);
   assert.equal(
     res.headers.get('location'),
-    '/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
+    '/iso/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
   );
   // a cached hop would pin every visitor to whichever release they first saw
   assert.match(res.headers.get('cache-control'), /no-cache/);
@@ -226,7 +226,7 @@ test('the pi alias redirects to its own versioned name, not the iso one', async 
   assert.equal(res.status, 302);
   assert.equal(
     res.headers.get('location'),
-    '/2026.09.10/ashlaros-2026.09.10-aarch64-rpi5.img.xz',
+    '/iso/2026.09.10/ashlaros-2026.09.10-aarch64-rpi5.img.xz',
   );
 });
 
@@ -235,7 +235,7 @@ test('a resumed download across a new release restarts instead of splicing', asy
   // survives: a validator that no longer matches drops the range rather
   // than handing back the tail of a different file to append.
   const stale = new Request(
-    'https://iso.ashlaros.download/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
+    'https://ashlaros.download/iso/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
     { headers: { range: 'bytes=1000-2000', 'if-range': '"an-older-release"' } },
   );
   const res = await worker.fetch(stale, env());
@@ -245,7 +245,7 @@ test('a resumed download across a new release restarts instead of splicing', asy
 
 test('a resumed download of an unchanged object still resumes', async () => {
   const current = new Request(
-    'https://iso.ashlaros.download/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
+    'https://ashlaros.download/iso/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
     { headers: { range: 'bytes=1000-2000', 'if-range': '"e"' } },
   );
   const res = await worker.fetch(current, env());

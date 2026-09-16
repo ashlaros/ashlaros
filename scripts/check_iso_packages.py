@@ -3,7 +3,7 @@
 
 build-iso and build-packages are independent workflows. A push touching both
 `packages/` and `installer/` triggers both, and build-iso's pacstrap runs
-against packages.ashlaros.download, which keeps serving the previous build
+against ashlaros.download/packages, which keeps serving the previous build
 until build-packages publishes. The ISO comes out green carrying code from
 the commit before, and nothing says so - the only way to notice is to
 unsquash the image and read the file.

@@ -1,5 +1,5 @@
 /**
- * Download counting for iso.ashlaros.download.
+ * Download counting for ashlaros.download/iso.
  *
  * Two stores, because neither alone works:
  *

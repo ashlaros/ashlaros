@@ -1,5 +1,5 @@
 /**
- * iso.ashlaros.download - the ISO downloads.
+ * /iso - the ISO downloads.
  *
  * The listing is the bucket, not a manifest the publish job has to keep in
  * step: a page rendered from R2 cannot show an image that is not there, or
@@ -22,6 +22,11 @@ import {
 } from './game/scores.js';
 
 const TITLE = 'AshlarOS';
+
+// Links are absolute from the apex; bucket keys are not. The prefix is
+// added here and stripped by the handler, so R2 never sees it.
+const PREFIX = 'iso';
+const href = (key) => `/${PREFIX}/${key}`;
 
 /**
  * The version prefix a key belongs to.
@@ -97,7 +102,7 @@ export function renderIndex(byVersion) {
             .get(target)
             .map(
               (o) =>
-                `<a class="row" href="/${escapeHtml(o.key)}"><span>${escapeHtml(
+                `<a class="row" href="${escapeHtml(href(o.key))}"><span>${escapeHtml(
                   o.name,
                 )}</span><span>${humanSize(o.size)}</span></a>`,
             )
@@ -112,12 +117,12 @@ export function renderIndex(byVersion) {
   return page(
     TITLE,
     `      <p>The newest x86_64 ISO is always at
-        <a href="/latest/ashlaros.iso"><code>/latest/ashlaros.iso</code></a>,
+        <a href="/iso/latest/ashlaros.iso"><code>/iso/latest/ashlaros.iso</code></a>,
         and the newest Raspberry Pi 5 image at
-        <a href="/latest/ashlaros-rpi5.img.xz"
-          ><code>/latest/ashlaros-rpi5.img.xz</code></a
+        <a href="/iso/latest/ashlaros-rpi5.img.xz"
+          ><code>/iso/latest/ashlaros-rpi5.img.xz</code></a
         >. Verify a download against the <code>SHA256SUMS</code> beside it.
-        <a class="link" href="/stats">Download stats</a>.</p>
+        <a class="link" href="/iso/stats">Download stats</a>.</p>
       <!-- beside the download rather than in a footnote (#29): the ISO
            encrypts by default and someone who knows that will reasonably
            assume the Pi image does too -->
@@ -183,13 +188,14 @@ export function renderStats({ configured, archive, versions, files, version }) {
       'A download is one whole-image GET that transferred.' +
       ' Resumed downloads and revalidations are not counted, and neither is' +
       ' <code>SHA256SUMS</code>.' +
-      ' <a class="link" href="/stats.json">stats.json</a></p>',
+      ' <a class="link" href="/iso/stats.json">stats.json</a></p>',
   );
 
   return page(TITLE, parts.join('\n'));
 }
 
 export const site = {
+  prefix: PREFIX,
   bucket: 'ISO',
   isListing: (key) => key === '',
 

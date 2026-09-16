@@ -189,7 +189,7 @@ test('a POST route is reachable at all', async () => {
   // A bucket still only answers GET and HEAD.
   const env = { ISO: bucketOf([]), PACKAGES: bucketOf([]) };
   const posted = await worker.fetch(
-    new Request('https://iso.ashlaros.download/game/score', {
+    new Request('https://ashlaros.download/game/score', {
       method: 'POST',
       body: '{}',
     }),
@@ -200,7 +200,7 @@ test('a POST route is reachable at all', async () => {
 
   // and a POST to a bucket path is still refused
   const bucketPost = await worker.fetch(
-    new Request('https://iso.ashlaros.download/latest/ashlaros.iso', { method: 'POST' }),
+    new Request('https://ashlaros.download/iso/latest/ashlaros.iso', { method: 'POST' }),
     env,
     {},
   );

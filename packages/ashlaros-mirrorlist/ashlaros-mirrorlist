@@ -5,4 +5,4 @@
 ## x86_64/ and aarch64/, so one line covers both architectures.
 ##
 
-Server = https://packages.ashlaros.download/$arch
+Server = https://ashlaros.download/packages/$arch

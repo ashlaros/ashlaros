@@ -13,7 +13,7 @@
 set -euo pipefail
 
 CACHYOS_MIRROR="${CACHYOS_MIRROR:-https://mirror.cachyos.org/repo/x86_64}"
-ASHLAROS_KEY_URL="${ASHLAROS_KEY_URL:-https://packages.ashlaros.download/ashlaros.gpg}"
+ASHLAROS_KEY_URL="${ASHLAROS_KEY_URL:-https://ashlaros.download/packages/ashlaros.gpg}"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

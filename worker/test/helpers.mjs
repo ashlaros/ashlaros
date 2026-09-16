@@ -69,4 +69,18 @@ export function bucketOf(keys, { etag = '"e"', pageSize = 1000 } = {}) {
   };
 }
 
-export const get = (host, path) => new Request(`https://${host}/${path}`);
+// Everything is one hostname now, and a site is a path prefix. The first
+// argument stayed a site name rather than becoming a literal prefix so the
+// call sites still read as "this request is for the ISO site" - and so a
+// test cannot accidentally ask the docs binding for a bucket object.
+const PREFIXES = {
+  'iso.ashlaros.download': 'iso/',
+  'packages.ashlaros.download': 'packages/',
+  'ashlaros.download': '',
+};
+
+export const get = (site, path) => {
+  const prefix = PREFIXES[site];
+  if (prefix === undefined) throw new Error(`unknown site ${site}`);
+  return new Request(`https://ashlaros.download/${prefix}${path}`);
+};

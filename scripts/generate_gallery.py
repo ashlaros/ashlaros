@@ -26,7 +26,7 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SHOTS = ROOT / "screenshots" / "shots.yaml"
 PAGE = ROOT / "docs" / "index.html"
-BASE = "https://iso.ashlaros.download/latest"
+BASE = "https://ashlaros.download/iso/latest"
 
 # Where the generated block begins and ends. Markers rather than a line
 # range: the page is edited by hand around this, and a range goes stale

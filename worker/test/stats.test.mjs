@@ -154,7 +154,7 @@ test('the stats page is reachable from the index', async () => {
   // this was missed upstream the first time
   const env = { ISO: bucketOf(['2026.09.11/ashlaros.iso']) };
   const response = await worker.fetch(get('iso.ashlaros.download', ''), env, {});
-  assert.match(await response.text(), /href="\/stats"/);
+  assert.match(await response.text(), /href="\/iso\/stats"/);
 });
 
 test('a quote in the query string cannot escape the SQL literal', () => {

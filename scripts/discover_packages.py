@@ -72,7 +72,7 @@ COMMIT_RE = re.compile(r"^_commit=[\"']?[0-9a-f]{40}", re.MULTILINE)
 # every run - the very failure the comment describes.
 PKGVER_FN_RE = re.compile(r"^\s*pkgver\s*\(\)\s*\{", re.MULTILINE)
 
-REPO_URL = os.environ.get("REPO_URL", "https://packages.ashlaros.download")
+REPO_URL = os.environ.get("REPO_URL", "https://ashlaros.download/packages")
 FIELD = re.compile(r"%([A-Z0-9]+)%\n([^\n]*)")
 
 # What the repository records for a package we built, so a rebuild can be

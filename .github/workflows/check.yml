@@ -182,7 +182,7 @@ jobs:
           pacman -Q ashlaros-settings ashlaros-branding
           test -f /etc/sway/config
     env:
-      REPO_URL: ${{ vars.REPO_URL || 'https://packages.ashlaros.download' }}
+      REPO_URL: ${{ vars.REPO_URL || 'https://ashlaros.download/packages' }}
 
   packages:
     runs-on: ubuntu-latest

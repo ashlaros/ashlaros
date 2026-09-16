@@ -22,11 +22,11 @@
         aria-roledescription="carousel"
         aria-label="Screenshots of the AshlarOS desktop">
         <div class="frames">
-          <img class="frame" src="https://iso.ashlaros.download/latest/screenshots/desktop.png" alt="AshlarOS: the default session - waybar, wallpaper, a terminal" width="1920" height="1080" loading="eager" />
-          <img class="frame" hidden src="https://iso.ashlaros.download/latest/screenshots/tiling.png" alt="AshlarOS: three terminals tiled, which is what the window manager is for" width="1920" height="1080" loading="lazy" />
-          <img class="frame" hidden src="https://iso.ashlaros.download/latest/screenshots/settings.png" alt="AshlarOS: the settings TUI, which is what the distribution adds over Arch" width="1920" height="1080" loading="lazy" />
-          <img class="frame" hidden src="https://iso.ashlaros.download/latest/screenshots/launcher.png" alt="AshlarOS: rofi over the desktop" width="1920" height="1080" loading="lazy" />
-          <video class="frame" hidden src="https://iso.ashlaros.download/latest/video/tour.webm" poster="https://iso.ashlaros.download/latest/screenshots/desktop.png" width="1920" height="1080" controls preload="none" aria-label="A short silent tour of the desktop"></video>
+          <img class="frame" src="https://ashlaros.download/iso/latest/screenshots/desktop.png" alt="AshlarOS: the default session - waybar, wallpaper, a terminal" width="1920" height="1080" loading="eager" />
+          <img class="frame" hidden src="https://ashlaros.download/iso/latest/screenshots/tiling.png" alt="AshlarOS: three terminals tiled, which is what the window manager is for" width="1920" height="1080" loading="lazy" />
+          <img class="frame" hidden src="https://ashlaros.download/iso/latest/screenshots/settings.png" alt="AshlarOS: the settings TUI, which is what the distribution adds over Arch" width="1920" height="1080" loading="lazy" />
+          <img class="frame" hidden src="https://ashlaros.download/iso/latest/screenshots/launcher.png" alt="AshlarOS: rofi over the desktop" width="1920" height="1080" loading="lazy" />
+          <video class="frame" hidden src="https://ashlaros.download/iso/latest/video/tour.webm" poster="https://ashlaros.download/iso/latest/screenshots/desktop.png" width="1920" height="1080" controls preload="none" aria-label="A short silent tour of the desktop"></video>
         </div>
         <button class="nav prev" type="button" aria-label="Previous screenshot">&#x2039;</button>
         <button class="nav next" type="button" aria-label="Next screenshot">&#x203a;</button>
@@ -43,7 +43,7 @@
 
       <h2>Download</h2>
       <p>
-        <a class="link" href="https://iso.ashlaros.download/latest/ashlaros.iso"
+        <a class="link" href="https://ashlaros.download/iso/latest/ashlaros.iso"
           >ashlaros.iso</a
         >
         &nbsp;<span class="muted"
@@ -54,7 +54,7 @@
       <p>
         <a
           class="link"
-          href="https://iso.ashlaros.download/latest/ashlaros-rpi5.img.xz"
+          href="https://ashlaros.download/iso/latest/ashlaros-rpi5.img.xz"
           >ashlaros-rpi5.img.xz</a
         >
         &nbsp;<span class="muted"
@@ -66,7 +66,7 @@
       </p>
       <p class="muted">
         Every build, with checksums:
-        <a class="link" href="https://iso.ashlaros.download/">iso.ashlaros.download</a>
+        <a class="link" href="https://ashlaros.download/iso/">ashlaros.download/iso</a>
       </p>
       <p class="muted">
         <strong>UEFI only.</strong> The image carries one boot path,
@@ -85,12 +85,12 @@
         install on Arch Linux ARM just as well.
       </p>
       <pre>
-curl -fsSL https://packages.ashlaros.download/ashlaros.gpg -o /tmp/ashlaros.gpg
+curl -fsSL https://ashlaros.download/packages/ashlaros.gpg -o /tmp/ashlaros.gpg
 sudo pacman-key --add /tmp/ashlaros.gpg
 sudo pacman-key --lsign-key "$(gpg --show-keys --with-colons /tmp/ashlaros.gpg |
   awk -F: '/^fpr:/ {print $10; exit}')"
 
-printf '[ashlaros]\nSigLevel = Required DatabaseRequired\nServer = https://packages.ashlaros.download/$arch\n' |
+printf '[ashlaros]\nSigLevel = Required DatabaseRequired\nServer = https://ashlaros.download/packages/$arch\n' |
   sudo tee -a /etc/pacman.conf
 
 sudo pacman -Sy ashlaros-keyring ashlaros-mirrorlist ashlaros-settings</pre

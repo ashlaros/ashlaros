@@ -23,7 +23,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 workspace="${WORKSPACE:-/tmp/ashlaros-vm}"
 image="${IMAGE:-ashlaros-vm}"
 container="${CONTAINER:-ashlaros-vm}"
-iso_url="${ISO_URL:-https://iso.ashlaros.download}"
+iso_url="${ISO_URL:-https://ashlaros.download/iso}"
 
 ensure_image() {
   docker image inspect "$image" >/dev/null 2>&1 && return

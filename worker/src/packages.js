@@ -1,10 +1,16 @@
 /**
- * packages.ashlaros.download - the pacman repository.
+ * /packages - the pacman repository.
  */
 
 import { escapeHtml, html, humanSize, notFound, page } from './serve.js';
 
 const TITLE = 'ashlaros';
+
+// Every link this page writes is absolute from the apex, and the bucket
+// keys know nothing about the prefix - so it is added on the way out, the
+// same place the handler strips it on the way in.
+const PREFIX = 'packages';
+const href = (key) => `/${PREFIX}/${key}`;
 
 // The two trees the publish workflow writes. Anything else is a typo, and
 // answering 404 for it is cheaper than a bucket round trip.
@@ -13,8 +19,9 @@ const ARCHES = ['x86_64', 'aarch64'];
 /**
  * The stored key a request path refers to, or null if it names no tree.
  *
- * Clients configure `Server = https://.../$arch`, so every real request
- * carries an architecture as its first segment. The root is allowed so the
+ * Clients configure `Server = https://ashlaros.download/packages/$arch`, so
+ * every real request carries an architecture as its first segment once the
+ * prefix is stripped. The root is allowed so the
  * listing has somewhere to start.
  */
 export function resolveKey(path) {
@@ -26,16 +33,18 @@ export function resolveKey(path) {
 export function renderListing(prefix, dirs, files) {
   const parent = prefix.replace(/[^/]+\/$/, '');
   const rows = [
-    prefix ? `<tr><td><a href="/${escapeHtml(parent)}">../</a></td><td></td><td></td></tr>` : '',
+    prefix
+      ? `<tr><td><a href="${escapeHtml(href(parent))}">../</a></td><td></td><td></td></tr>`
+      : '',
     ...dirs.map(
       (d) =>
-        `<tr><td><a href="/${escapeHtml(d)}">${escapeHtml(
+        `<tr><td><a href="${escapeHtml(href(d))}">${escapeHtml(
           d.slice(prefix.length),
         )}</a></td><td></td><td></td></tr>`,
     ),
     ...files.map(
       (f) =>
-        `<tr><td><a href="/${escapeHtml(f.key)}">${escapeHtml(
+        `<tr><td><a href="${escapeHtml(href(f.key))}">${escapeHtml(
           f.key.slice(prefix.length),
         )}</a></td><td>${humanSize(f.size)}</td><td>${escapeHtml(
           new Date(f.uploaded).toISOString().slice(0, 16).replace('T', ' '),
@@ -47,6 +56,7 @@ export function renderListing(prefix, dirs, files) {
 }
 
 export const site = {
+  prefix: PREFIX,
   bucket: 'PACKAGES',
   isListing: (key) => key === '' || key.endsWith('/'),
 

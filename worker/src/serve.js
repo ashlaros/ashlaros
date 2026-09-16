@@ -150,10 +150,45 @@ export async function serveObject(request, bucket, key, extraHeaders = {}) {
  * that is not a bucket object. A route is called with
  * (request, bucket, env, url).
  */
+/**
+ * Everything is served from one hostname now, so a site owns a path prefix
+ * rather than a subdomain: /packages/ and /iso/. The prefix is stripped
+ * here and put back by site.href, so the bucket keys and every resolveKey
+ * stay exactly what they were - the move is in the URL, not in R2.
+ */
+/**
+ * The files every page links: the stylesheet, its background and the
+ * favicon.
+ *
+ * At the entrypoint rather than inside a site handler, because the pages
+ * link them absolutely from the apex - /site.css, not /packages/site.css -
+ * and a listing under a prefix has to resolve the same URL the landing
+ * page does. They used to sit in the handler, which was right when each
+ * site owned a hostname and wrong the moment they owned a path.
+ */
+export function sharedAsset(pathname) {
+  const assets = {
+    '/site.css': ['text/css; charset=utf-8', STYLESHEET],
+    '/background.svg': ['image/svg+xml', BACKGROUND],
+    // .ico callers accept an svg body, so one file serves both
+    '/favicon.svg': ['image/svg+xml', FAVICON],
+    '/favicon.ico': ['image/svg+xml', FAVICON],
+  };
+  const asset = assets[pathname];
+  if (!asset) return null;
+  const [type, body] = asset;
+  return new Response(body, {
+    headers: { 'content-type': type, 'cache-control': 'public, max-age=86400' },
+  });
+}
+
 export function handler(site) {
   return async (request, env) => {
     const url = new URL(request.url);
-    const requested = decodeURIComponent(url.pathname.slice(1));
+    const path = decodeURIComponent(url.pathname);
+    const base = `/${site.prefix}`;
+    if (path !== base && !path.startsWith(`${base}/`)) return notFound();
+    const requested = path.slice(base.length).replace(/^\//, '');
     const bucket = env[site.bucket];
 
     // Routes are checked before the method gate: a bucket only ever
@@ -169,40 +204,6 @@ export function handler(site) {
 
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return new Response('method not allowed', { status: 405 });
-    }
-
-    // Every hostname serves the stylesheet, so a page on packages. or iso.
-    // links it from its own origin rather than reaching for the apex. Same
-    // reasoning as the favicon below: one file, no cross-origin fetch.
-    // site.css asks every page for this, so it has to answer on every
-    // hostname too - otherwise a listing on packages. renders on a flat
-    // field while the apex has the mark behind it.
-    if (requested === 'background.svg') {
-      return new Response(BACKGROUND, {
-        headers: {
-          'content-type': 'image/svg+xml',
-          'cache-control': 'public, max-age=86400',
-        },
-      });
-    }
-
-    if (requested === 'site.css') {
-      return new Response(STYLESHEET, {
-        headers: {
-          'content-type': 'text/css; charset=utf-8',
-          'cache-control': 'public, max-age=86400',
-        },
-      });
-    }
-
-    if (requested === 'favicon.svg' || requested === 'favicon.ico') {
-      // .ico callers accept an svg body, so one file serves both
-      return new Response(FAVICON, {
-        headers: {
-          'content-type': 'image/svg+xml',
-          'cache-control': 'public, max-age=86400',
-        },
-      });
     }
 
     const key = site.resolveKey(requested);
@@ -231,7 +232,7 @@ export function handler(site) {
       return new Response(null, {
         status: 302,
         headers: {
-          location: `/${version}/${site.aliasTarget(version, name)}`,
+          location: `/${site.prefix}/${version}/${site.aliasTarget(version, name)}`,
           // the pointer moves every release, so nothing may cache the hop
           'cache-control': 'no-cache',
         },

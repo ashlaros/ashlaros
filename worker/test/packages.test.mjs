@@ -77,7 +77,7 @@ test('packages are immutable, the database is not', async () => {
 });
 
 test('a range request is answered as a range', async () => {
-  const request = new Request('https://packages.ashlaros.download/x86_64/ashlaros.db.tar.gz', {
+  const request = new Request('https://ashlaros.download/packages/x86_64/ashlaros.db.tar.gz', {
     headers: { range: 'bytes=0-3' },
   });
   const res = await worker.fetch(request, env());
@@ -90,7 +90,7 @@ test('an absent object is 404, not an empty 200', async () => {
 });
 
 test('a write method is refused', async () => {
-  const request = new Request('https://packages.ashlaros.download/x86_64/ashlaros.db.tar.gz', {
+  const request = new Request('https://ashlaros.download/packages/x86_64/ashlaros.db.tar.gz', {
     method: 'DELETE',
   });
   const res = await worker.fetch(request, env());
@@ -108,8 +108,22 @@ test('resolveKey admits the tree roots and the bucket root, nothing else', () =>
 test('a listing links to paths that resolve', async () => {
   const res = await worker.fetch(req('x86_64/'), env());
   const body = await res.text();
-  assert.match(body, /href="\/x86_64\/ashlaros\.db\.tar\.gz"/);
-  // the parent link from a tree root goes to the bucket root, which lists
-  // the trees
-  assert.match(body, /href="\/"/);
+  assert.match(body, /href="\/packages\/x86_64\/ashlaros\.db\.tar\.gz"/);
+  // the parent link from a tree root goes to the site root, which lists
+  // the trees - and under a path prefix that is /packages/, not /
+  assert.match(body, /href="\/packages\/"/);
+
+  // every link is followed rather than pattern-matched: the prefix is
+  // added when a page is rendered and stripped when a request arrives, and
+  // a mismatch between those two would look right in the markup and 404 in
+  // a browser
+  const links = [...body.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(links.length >= 2, 'the listing should link something');
+  // the topbar links home, which is the static site rather than a bucket
+  const withDocs = { ...env(), DOCS: { fetch: () => new Response('landing') } };
+  for (const link of links) {
+    const url = link.startsWith('http') ? link : `https://ashlaros.download${link}`;
+    const followed = await worker.fetch(new Request(url), withDocs);
+    assert.ok(followed.status < 400, `${link} answered ${followed.status}`);
+  }
 });

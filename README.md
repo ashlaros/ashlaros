@@ -5,7 +5,7 @@ v3-optimised repositories layered over it, `chwd` for hardware detection,
 `linux-cachyos` as the kernel, systemd-boot, and a sway desktop carried over
 from [manjaro-sway](https://github.com/manjaro-sway/manjaro-sway).
 
-![The AshlarOS desktop](https://iso.ashlaros.download/latest/screenshots/desktop.png)
+![The AshlarOS desktop](https://ashlaros.download/iso/latest/screenshots/desktop.png)
 
 One repository holds everything: the packages we build, the ISO profile, the
 installer, and the branding.
@@ -100,7 +100,7 @@ clean — it backs up `~/.config` first.
 ## Screenshots
 
 `screenshots/` photographs the desktop and publishes to
-[`iso.ashlaros.download/latest/screenshots/`](https://iso.ashlaros.download/latest/screenshots/desktop.png),
+[`ashlaros.download/iso/latest/screenshots/`](https://ashlaros.download/iso/latest/screenshots/desktop.png),
 which is what the picture above and the landing page point at. They are not
 committed: a handful of PNGs regenerated on every settings change is a
 repository that grows forever for files nobody diffs.
@@ -118,7 +118,7 @@ desktop, and the ISO build has its own checks for the other question.
 
 `screenshots/record.sh` records a short silent tour beside the stills,
 published at
-[`latest/video/tour.webm`](https://iso.ashlaros.download/latest/video/tour.webm)
+[`latest/video/tour.webm`](https://ashlaros.download/iso/latest/video/tour.webm)
 and shown on the download page. A still cannot show tiling, a launcher
 opening or the theme switching; thirty seconds can. The session setup is
 `screenshots/session.sh`, shared with the capture script rather than copied
@@ -288,7 +288,7 @@ waiting on one spends no CPU of its own.
 
 ## Download stats
 
-`iso.ashlaros.download/stats` counts ISO downloads, and `/stats.json` is the
+`ashlaros.download/iso/stats` counts ISO downloads, and `/stats.json` is the
 same data machine-readable. A download is one whole-image `GET` that
 returned `200`: a resumed download issues many range requests and would
 otherwise report one image as dozens, a revalidation transfers nothing, and
@@ -677,12 +677,12 @@ on an existing Arch Linux ARM system.
 
 ```sh
 # 1. trust the signing key
-curl -fsSL https://packages.ashlaros.download/ashlaros.gpg -o /tmp/ashlaros.gpg
+curl -fsSL https://ashlaros.download/packages/ashlaros.gpg -o /tmp/ashlaros.gpg
 sudo pacman-key --add /tmp/ashlaros.gpg
 sudo pacman-key --lsign-key "$(gpg --show-keys --with-colons /tmp/ashlaros.gpg | awk -F: '/^fpr:/ {print $10; exit}')"
 
 # 2. add the repository
-printf '[ashlaros]\nSigLevel = Required DatabaseRequired\nServer = https://packages.ashlaros.download/$arch\n' |
+printf '[ashlaros]\nSigLevel = Required DatabaseRequired\nServer = https://ashlaros.download/packages/$arch\n' |
   sudo tee -a /etc/pacman.conf
 
 # 3. install
@@ -741,7 +741,7 @@ is manjaro-sway's `ci/boot-smoke.sh`, which solved this first.
 machine, so the image is booted on the Pi 4 model: that exercises the
 kernel and the root filesystem, not the Pi 5 firmware. The image publishes
 on every build to
-[`latest/ashlaros-rpi5.img.xz`](https://iso.ashlaros.download/latest/ashlaros-rpi5.img.xz),
+[`latest/ashlaros-rpi5.img.xz`](https://ashlaros.download/iso/latest/ashlaros-rpi5.img.xz),
 under its own alias and named for the board, so what it is and is not
 tested on stays legible - restore the gate by re-adding `if: inputs.publish`
 to the upload step.

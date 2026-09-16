@@ -5,7 +5,7 @@
 # the picture show the real desktop rather than bare sway.
 set -euo pipefail
 
-: "${ASHLAROS_REPO_URL:=https://packages.ashlaros.download}"
+: "${ASHLAROS_REPO_URL:=https://ashlaros.download/packages}"
 : "${SHOT_USER:=ashlar}"
 
 pacman -Sy --noconfirm --needed archlinux-keyring >/dev/null

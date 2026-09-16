@@ -68,7 +68,7 @@ Include = /etc/pacman.d/ashlaros-mirrorlist
 
 CACHYOS_V3_MIRRORLIST = "Server = https://mirror.cachyos.org/repo/x86_64_v3/$repo\n"
 CACHYOS_MIRRORLIST = "Server = https://mirror.cachyos.org/repo/x86_64/$repo\n"
-ASHLAROS_MIRRORLIST = "Server = https://packages.ashlaros.download/$arch\n"
+ASHLAROS_MIRRORLIST = "Server = https://ashlaros.download/packages/$arch\n"
 
 # Installed on the target after the base system exists. base-devel and the
 # ashlaros-* set come from the archinstall config's "packages"; these are the

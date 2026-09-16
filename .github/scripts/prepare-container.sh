@@ -7,7 +7,7 @@
 # while it is being built.
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://packages.ashlaros.download}"
+REPO_URL="${REPO_URL:-https://ashlaros.download/packages}"
 
 # pacman 7 drops privileges to the 'alpm' user and confines downloads with
 # Landlock. A container whose seccomp profile blocks the landlock syscalls

@@ -27,8 +27,8 @@ readonly ROOTFS_SIG_URL="${ROOTFS_SIG_URL:-${ROOTFS_URL}.sig}"
 # The key that signs it, pinned by fingerprint rather than fetched by ID:
 # asking a keyserver for whatever calls itself the signer is not a check.
 readonly ALARM_KEY_FPR="${ALARM_KEY_FPR:-68B3537F39A313B3E574D06777193F152BDBE6A6}"
-readonly REPO_URL="${REPO_URL:-https://packages.ashlaros.download}"
-readonly KEY_URL="${KEY_URL:-https://packages.ashlaros.download/ashlaros.gpg}"
+readonly REPO_URL="${REPO_URL:-https://ashlaros.download/packages}"
+readonly KEY_URL="${KEY_URL:-https://ashlaros.download/packages/ashlaros.gpg}"
 
 # Sized to fit a 8 GB card with room to spare; the root partition grows to
 # fill whatever it is written to on first boot, so this is a floor and not

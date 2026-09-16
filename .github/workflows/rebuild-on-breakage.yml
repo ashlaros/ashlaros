@@ -62,7 +62,7 @@ jobs:
 
       - name: add the published repository
         env:
-          REPO_URL: ${{ vars.REPO_URL || 'https://packages.ashlaros.download' }}
+          REPO_URL: ${{ vars.REPO_URL || 'https://ashlaros.download/packages' }}
         run: |
           pacman -Sy --noconfirm --needed curl binutils python >/dev/null
           curl -fsSL "${REPO_URL}/ashlaros.gpg" -o /tmp/ashlaros.gpg
