@@ -12,7 +12,7 @@ license=('GPL-3.0-or-later')
 # cannot edit; backup keeps their version and drops a .pacnew beside it
 backup=('etc/pacman.d/ashlaros-mirrorlist')
 source=('ashlaros-mirrorlist')
-sha256sums=('b3492816bd8a4ff021cea7f7bace405d8bed31e1c2e88ce1adf363447735bcf2')
+sha256sums=('500ed4880eec7ce3cd58c2146eea7bd7b8ec82f307293bc9be6f930e8a9b8fb0')
 package() {
   install -Dm644 ashlaros-mirrorlist "${pkgdir}/etc/pacman.d/ashlaros-mirrorlist"
 }
