@@ -1,6 +1,10 @@
 The AshlarOS installer starts on its own. If you closed it or chose to
 stay here, run ashlaros-install to start it again.
 
+A desktop session with Firefox is on tty2, for looking something up
+during the install: switch with Ctrl+Alt+F2, and Ctrl+Alt+F1 to come
+back. The installer keeps running either way.
+
 For Wi-Fi, authenticate to the wireless network using the iwctl utility.
 For mobile broadband (WWAN) modems, connect with the mmcli utility.
 Ethernet, WLAN and WWAN interfaces using DHCP should work automatically.

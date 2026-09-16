@@ -62,11 +62,24 @@ tpm2-tools
 tpm2-tss
 chwd
 
-# a live session, for looking something up mid-install
+# a live session, for looking something up mid-install. Started on tty2 by
+# root/.live_session.sh; the installer keeps tty1 (#83). The wlroots and
+# mesa stack behind sway was already on the medium for these four, so the
+# ones below cost single-digit MiB on top of it.
 sway
 foot
 foot-terminfo
 firefox
+# sway's default config names wmenu-run as $menu and brightnessctl as an
+# optional dependency for its brightness keys
+wmenu
+brightnessctl
+# copy and paste between the browser and the installer's questions, which
+# is most of why someone switches to this VT
+wl-clipboard
+# firefox still has X11-only dialogues; without xwayland they open onto
+# nothing
+xorg-xwayland
 
 # filesystems the installer can create or repair
 btrfs-progs

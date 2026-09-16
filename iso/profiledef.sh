@@ -25,5 +25,8 @@ file_permissions=(
   ["/etc/shadow"]="0:0:400"
   ["/root"]="0:0:750"
   ["/root/.automated_script.sh"]="0:0:755"
+  # .zlogin invokes it directly, so a non-executable copy is a silent
+  # "permission denied" and no live session at all
+  ["/root/.live_session.sh"]="0:0:755"
   ["/usr/local/bin/choose-mirror"]="0:0:755"
 )

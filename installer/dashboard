@@ -146,6 +146,10 @@ render() {
     centre "$(draw_bar "$permille")" "$width"
     printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
     centre "${DIM}step $((INDEX + 1)) of ${TOTAL}${RESET}" "$width"
+    printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
+    # the session is on another VT, so this screen is the only place
+    # anyone would learn it exists (#83)
+    centre "${DIM}Ctrl+Alt+F2 for a browser - the install keeps running${RESET}" "$width"
     printf '%s\n' "$CLEAR_LINE"
   })
   printf '%s%s%s%s' "$CURSOR_HOME" "$HIDE_CURSOR" "$frame" "$CLEAR_BELOW" >"$TTY_PATH"
