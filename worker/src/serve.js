@@ -7,6 +7,8 @@
  */
 
 import { FAVICON } from './favicon.js';
+import { BACKGROUND } from './background.js';
+import { STYLESHEET } from './style.js';
 
 export const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -26,70 +28,7 @@ export function humanSize(bytes) {
  * Manjaro green replaced by our stone accent. Both sites render with it,
  * which is the point of having one worker.
  */
-const STYLE = `
-* { color: #eee; text-decoration: none; }
-body {
-  background: #282828;
-  margin: 0;
-  font-family: Roboto, Helvetica, Arial, sans-serif;
-}
-h1 {
-  background: #141a1b;
-  color: #8a8f98;
-  font-size: 0.8rem;
-  font-weight: 500;
-  line-height: 30px;
-  padding: 0 20px;
-  margin: 0;
-}
-main { margin: 20px; max-width: 60rem; }
-h2 {
-  color: #8a8f98;
-  font-size: 0.8rem;
-  font-weight: 500;
-  margin: 1.6rem 0 0.3rem;
-}
-/* the machine a download is for, under the version it belongs to: dimmer
-   than the version and closer to the rows it labels, so the grouping reads
-   as a subdivision rather than a second list */
-h3 {
-  color: #6b7280;
-  font-size: 0.75rem;
-  font-weight: 500;
-  margin: 0.7rem 0 0.2rem;
-}
-table { border-collapse: collapse; font-family: monospace; }
-td { padding: 2px 20px 2px 0; white-space: nowrap; }
-td:not(:first-child) { color: #8a8f98; }
-.row {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.15rem 0;
-  font-family: monospace;
-}
-a:hover, .row:hover { color: #c9ccd1; }
-p { color: #8a8f98; font-size: 0.85rem; line-height: 1.6; }
-code { font-family: monospace; color: #c9ccd1; }
-/* width and height are on the element too: the page ships no external css,
-   so a late-loading image would otherwise reflow the downloads under it */
-.shots { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1rem 0; }
-/* max-width, the same thing .tour below already had: a fixed 480px on a
-   390px phone put the right edge of every shot 112px past the viewport
-   and scrolled the whole page sideways. aspect-ratio rather than a fixed
-   height, because once the width is allowed to shrink a fixed height
-   makes object-fit crop more of the picture the smaller the screen gets -
-   scaling it down is what a reader wants. */
-.shot {
-  width: 480px;
-  max-width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  border: 1px solid #3a4043;
-}
-.tour { max-width: 100%; height: auto; border: 1px solid #3a4043; margin: 1rem 0; }
-`;
+
 
 export function page(title, body) {
   return `<!DOCTYPE html>
@@ -98,7 +37,7 @@ export function page(title, body) {
     <title>${escapeHtml(title)}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <style>${STYLE}</style>
+    <link rel="stylesheet" href="/site.css" />
   </head>
   <body>
     <h1>${escapeHtml(title)}</h1>
@@ -210,6 +149,30 @@ export function handler(site) {
 
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return new Response('method not allowed', { status: 405 });
+    }
+
+    // Every hostname serves the stylesheet, so a page on packages. or iso.
+    // links it from its own origin rather than reaching for the apex. Same
+    // reasoning as the favicon below: one file, no cross-origin fetch.
+    // site.css asks every page for this, so it has to answer on every
+    // hostname too - otherwise a listing on packages. renders on a flat
+    // field while the apex has the mark behind it.
+    if (requested === 'background.svg') {
+      return new Response(BACKGROUND, {
+        headers: {
+          'content-type': 'image/svg+xml',
+          'cache-control': 'public, max-age=86400',
+        },
+      });
+    }
+
+    if (requested === 'site.css') {
+      return new Response(STYLESHEET, {
+        headers: {
+          'content-type': 'text/css; charset=utf-8',
+          'cache-control': 'public, max-age=86400',
+        },
+      });
     }
 
     if (requested === 'favicon.svg' || requested === 'favicon.ico') {

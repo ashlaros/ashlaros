@@ -5,94 +5,11 @@
     <title>AshlarOS — Privacy</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <style>
-      /* Same design language as index.html, and deliberately a second copy
-         rather than a shared stylesheet: both pages ship as static assets
-         with no build step, and one extra file to fetch is worse than a
-         few duplicated rules. */
-      * {
-        color: #eee;
-        text-decoration: none;
-      }
-
-      body {
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-        background-size: cover;
-        background-position: center right;
-        margin: 0;
-        font-family: Roboto, Helvetica, Arial, sans-serif;
-        display: flex;
-        flex-direction: column;
-        min-height: 100vh;
-        background-image: url("background.svg");
-        background-color: #282828;
-      }
-
-      h1 {
-        background: #141a1b;
-        color: #8a8f98;
-        font-size: 0.8rem;
-        font-weight: 500;
-        line-height: 30px;
-        padding: 0 20px;
-        margin: 0;
-      }
-
-      h2 {
-        color: #8a8f98;
-        font-size: 0.8rem;
-        font-weight: 500;
-        margin: 2rem 0 0.4rem;
-      }
-
-      #content {
-        margin: 20px;
-        max-width: 46rem;
-      }
-
-      a.link {
-        font-family: monospace;
-        text-shadow: 2px 2px #282828;
-      }
-
-      a.link:hover {
-        color: #c9ccd1;
-      }
-
-      p {
-        line-height: 1.6;
-        max-width: 40rem;
-      }
-
-      pre,
-      code {
-        color: #c9ccd1;
-      }
-
-      ul {
-        line-height: 1.8;
-        padding-left: 1.2rem;
-        max-width: 40rem;
-      }
-
-      .muted {
-        color: #8a8f98;
-      }
-      /* body is a flex column with min-height 100vh, so margin-top auto
-         puts this at the bottom of short pages and after the content on
-         long ones */
-      footer {
-        margin-top: auto;
-        background: #141a1b;
-        padding: 0.7rem 20px;
-        font-size: 0.8rem;
-      }
-    </style>
+    <link rel="stylesheet" href="/site.css" />
   </head>
   <body>
     <h1>AshlarOS — Privacy</h1>
-    <main id="content">
+    <main class="prose">
       <p>
         AshlarOS is a Linux distribution. It runs on your machine, and the
         parts of it that touch a network do so between your machine and

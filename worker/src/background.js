@@ -1,4 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160" width="3840" height="2160">
+// Generated from docs/background.svg by scripts/generate_style_module.py.
+// Edit background.svg, not this file.
+//
+// The worker serves this on every hostname, because docs/ is bound as
+// static assets on the apex alone and packages. and iso. need the same
+// bytes from their own origin.
+export const BACKGROUND = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160" width="3840" height="2160">
   <rect fill="#141a1b" width="3840" height="2160"/>
   <!-- the mark at 20x, anchored bottom-right the way manjaro-sway placed its own.
        Recessed, not raised: this is a background, and text is laid over it.
@@ -22,3 +28,4 @@
     <rect fill="#1b2122" x="24" y="30" width="20" height="8"/>
   </g>
 </svg>
+`;

@@ -135,6 +135,11 @@ jobs:
           # pre-existing findings, and fixing those is not this job.
           ruff check scripts installer/orchestrator test/vm \
             packages/ashlaros-settings/payload/usr/share/sway/scripts/weather.py
+      - name: the worker's style copies match docs/
+        # docs/site.css is the one stylesheet; the worker carries its bytes
+        # because docs/ is bound as assets on the apex alone. A stale copy
+        # means packages. and iso. render with last week's design.
+        run: python3 scripts/generate_style_module.py --check
       - name: the landing page matches shots.yaml
         # the gallery is generated, so a shot added to the capture list
         # without a re-run would be published and never shown
