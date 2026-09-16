@@ -36,7 +36,8 @@ ensure_image() {
 # able to write to a checkout
 sync_scripts() {
   mkdir -p "$workspace/out"
-  cp "$here/boot.sh" "$here/qmp.py" "$here/install.py" "$workspace/"
+  cp "$here/boot.sh" "$here/qmp.py" "$here/install.py" "$here/unlock.py" \
+    "$workspace/"
 }
 
 start() {
