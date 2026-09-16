@@ -49,17 +49,6 @@ ever flashed unattended: applying an update is an explicit `fwupdmgr
 update`. A bad capsule bricks a board and there is no rollback from the OS
 side, so that stays a decision someone makes.
 
-### yay is installed
-
-An AUR helper ships with the desktop: every shipped theme lists the
-packages it needs, and the catppuccin themes name AUR-only ones, so the
-theme switcher cannot do its job without one.
-
-Worth stating rather than leaving implicit: the AUR is arbitrary code from
-arbitrary maintainers, built and run on your machine. `pacman -R yay`
-removes it, and the theme switcher then tells you which packages it would
-have needed.
-
 ## Download stats
 
 [`ashlaros.download/iso/stats`](https://ashlaros.download/iso/stats)
