@@ -170,6 +170,3 @@ packages:
   idlehack:
     upstream: https://github.com/manjaro-contrib/idlehack
     arch: both
-  sway-services:
-    upstream: https://github.com/manjaro-contrib/sway-services
-    arch: any

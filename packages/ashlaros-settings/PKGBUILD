@@ -21,8 +21,8 @@ depends=(
     'ashlaros-snapshot'
     'sway'                    # window manager
     'swaybg'                  # wallpaper setter
-    'swayidle'                # idle management daemon
-    'sway-services'           # systemd units for sway and friends
+    'swayidle'                # idle management daemon, configured through
+                              # etc/swayidle/config which it reads itself
     'waybar'                  # configurable bar
     'foot'                    # terminal application
     'foot-terminfo'           # terminal info for foot

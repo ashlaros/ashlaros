@@ -1,0 +1,20 @@
+[Unit]
+Description=Idle manager for Wayland
+Documentation=man:swayidle(1)
+PartOf=wayland-session.target
+Requires=wayland-session.target
+After=wayland-session.target
+
+[Service]
+Type=simple
+# swayidle reads /etc/swayidle/config itself, so there is no translator
+# in front of it. A user file at $XDG_CONFIG_HOME/swayidle/config takes
+# precedence, which is swayidle's own search order rather than ours.
+#
+# No -w: idle.yaml had `wait: false`, and swayidle-conf only passed the
+# flag when the key was true.
+ExecStart=/usr/bin/swayidle
+Restart=always
+
+[Install]
+WantedBy=wayland-session.target

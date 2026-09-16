@@ -1,0 +1,34 @@
+# swayidle reads this format itself, so there is no translation step: the
+# keywords here are the same ones swayidle takes on the command line.
+#
+# Quoting is load-bearing. swayidle runs each command through wordexp()
+# before handing it to `sh -c`, and an unquoted `&&`, `|` or `"` fails
+# with WRDE_BADCHAR. Single quotes make wordexp return the contents
+# verbatim, which is what the shell then receives.
+#
+# The lock command is `swaymsg exec \$locking`, where the backslash keeps
+# `$locking` as a literal for sway to expand from its own config rather
+# than something the shell expands to nothing here.
+
+# dim the screen, and put the brightness back on any activity
+timeout 240 'brightnessctl -s && brightnessctl set 10' resume 'brightnessctl -r'
+
+# lock
+timeout 300 'swaymsg exec \$locking'
+
+# keyboard backlight off, and back on with the screen
+timeout 600 '/usr/share/sway/scripts/keyboard-backlight-switch.sh off' resume '/usr/share/sway/scripts/keyboard-backlight-switch.sh on'
+
+# outputs off
+timeout 600 'swaymsg "output * power off"' resume 'swaymsg "output * power on"'
+
+# suspend sooner on battery than on mains
+timeout 900 "acpi --ac-adapter | grep -v 'on-line' && systemctl sleep"
+timeout 3600 "acpi --ac-adapter | grep 'on-line' && systemctl sleep"
+
+before-sleep 'swaymsg exec \$locking'
+after-resume 'swaymsg "output * power on" && brightnessctl -r'
+lock 'swaymsg exec \$locking'
+
+# tell logind the session is idle at the same point the screen dims
+idlehint 240
