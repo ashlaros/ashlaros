@@ -9,11 +9,10 @@ from [manjaro-sway](https://github.com/manjaro-sway/manjaro-sway).
 
 ## Installing
 
-The ISO is **UEFI only**: `bootmodes=('uefi.systemd-boot')`, so the image
-carries one El Torito entry and no BIOS one. A machine in legacy or CSM
-mode does not see it as bootable at all. That is deliberate — the package
-stack is `x86_64_v3`, which already excludes every machine old enough to
-need a BIOS path — but the firmware has to be in UEFI mode.
+The ISO is **UEFI only**. A machine in legacy or CSM mode will not see it
+as bootable at all, so put the firmware in UEFI mode. The package stack is
+`x86_64_v3` anyway, which already rules out machines old enough to need a
+BIOS path.
 
 Write it with `dd` or `cp` straight to the device; it is a hybrid image
 with a protective MBR and a GPT, so it needs no preparation. A writer that
@@ -34,7 +33,7 @@ Both TPM options bind to **PCR 7**, which measures the Secure Boot policy
 and key databases. A vendor firmware update that ships new `dbx` or `KEK`
 contents changes it, and the enrolled keyslot stops matching.
 
-Nothing is lost when that happens — the passphrase still unlocks the disk,
+Nothing is lost when that happens. The passphrase still unlocks the disk,
 which is why there is always one. But the prompt arrives with no
 explanation, and it is easy to read as a corrupted disk. It is not.
 Re-enrol from the settings entry, or by hand:
@@ -58,20 +57,24 @@ a resumed download counts once and a checksum file does not count at all.
 
 ## Settings
 
-`ashlaros-settings-tui` (`Super+,`) is one entry point for the settings
-that are otherwise commands you have to know: locale and keyboard layout,
-time and timezone, kernel variants, hardware profiles, fingerprint
-enrolment, face unlock, adaptive brightness, power profiles, how the disk
-unlocks, snapshots, the wallpaper, packages nothing needs any more, and a
-door to the things that need setting up before they do anything — mail, a
+`ashlaros-settings-tui` (`Super+,`) collects the settings that are
+otherwise commands you have to know:
+
+- locale, keyboard layout, time and timezone
+- kernel variants and hardware profiles
+- fingerprint enrolment, face unlock, adaptive brightness, power profiles
+- how the disk unlocks, and snapshots
+- the wallpaper, and packages nothing needs any more
+
+It also opens the things that do nothing until configured: mail, a
 calendar, notes, chat clients, web apps and a model. Displays and package
 installation open `ashlaros-displays` and `pacseek`.
 
 **A launcher, not a control panel.** Every entry runs an existing tool, or
-collects what it needs and runs one command. An entry whose program is not
-installed is absent rather than present and broken, and so is one whose
-hardware is missing — an entry that cannot finish is worse than one that
-is not there. Root is asked for per action, not for the whole menu.
+collects what it needs and runs one command. Entries hide themselves when
+their program is missing, or when the machine has no hardware for them, so
+nothing on screen can fail halfway. Root is asked for per action, not for
+the whole menu.
 
 Installing a kernel is an entry; **which kernel boots stays the boot
 menu's own choice**. After an install it checks that the new kernel can
@@ -86,8 +89,8 @@ and can turn it on for `sudo`.
 **It is weaker than a password**, and upstream says so first: a similar
 face or a photo may work. This is 2D infrared matching, not Windows Hello.
 
-It is used for `sudo` only — never the lock screen, never the greeter —
-and is never enabled until a recognition test has passed. A face that
+It is used for `sudo` only, never the lock screen and never the greeter,
+and it is never enabled until a recognition test has passed. A face that
 fails, in a dark room or at an odd angle, falls through to the password
 that always worked. Turning it off restores the original configuration
 exactly. The disk passphrase is untouched either way.
@@ -97,14 +100,13 @@ pays for it.
 
 ## Notes
 
-`zk` is installed. Settings → **Notes** creates a notebook — in your
-documents directory, so `~/Documents/notes` on an English system — and
+`zk` is installed. Settings → **Notes** creates a notebook in your
+documents directory, so `~/Documents/notes` on an English system, and
 offers to make it a git repository.
 
-The notes are plain Markdown files in a directory, which is the whole
-reason for choosing it: there is no format of ours to export and nothing
-to sync, so "my notes are backed up" is `git init` and nothing more. A
-note is readable, and editable, with or without `zk`.
+The notes are plain Markdown files in a directory. There is no format of
+ours to export and nothing to sync, so backing them up is `git init`. A
+note stays readable and editable with or without `zk`.
 
 **Nothing is ever committed for you.** A tool that commits notes by itself
 is one that can push a private notebook somewhere you did not choose. The
@@ -137,11 +139,11 @@ signs in through your browser rather than a password, and the token stays
 on the machine. Gmail needs one extra step the calendar does not: the
 first token comes from Google's OAuth 2.0 Playground.
 
-**Subscribed calendars** read a published `.ics` link — a timetable, a
-fixture list, Proton Calendar's "share via link" — into the same calendar,
-named by you and removable one at a time. They are read-only. This is also
-the only way to reach **Proton**, which speaks no CalDAV at all. Anyone
-holding such a link can read that calendar.
+**Subscribed calendars** read a published `.ics` link into the same
+calendar: a timetable, a fixture list, or Proton Calendar's "share via
+link". You name each one and can remove them individually. They are
+read-only, and they are the only way to reach **Proton**, which speaks no
+CalDAV. Anyone holding such a link can read that calendar.
 
 Settings → **Mail** configures [`aerc`](https://aerc-mail.org)
 (`pacman -S aerc`) against IMAP and SMTP. Both clients keep the password
@@ -153,8 +155,8 @@ CalDAV for Outlook.com in favour of Graph, which nothing here speaks.
 
 ## Office documents
 
-Nothing here opens a `.docx` out of the box — no suite, no viewer. A
-deliberate floor: LibreOffice is 147 MB and looks nothing like the rest of
+Nothing here opens a `.docx` out of the box: no suite, no viewer. That is
+a floor we chose. LibreOffice is 147 MB and looks nothing like the rest of
 the desktop. Install `libreoffice-still` if you need Office formats to
 round-trip faithfully; it is the only thing that really does.
 
@@ -179,11 +181,11 @@ a public URL first.
 
 `t` and `q` run locally. `ASHLAROS_OCR_LANGS` selects OCR languages once
 the data is installed; English ships. A decoded QR is copied but never
-shown, because QR codes routinely carry secrets — 2FA URIs above all.
+shown, because QR codes routinely carry secrets, 2FA URIs above all.
 
 **`a` is the one that sends your screen somewhere.** It needs `aichat`,
-which is not installed by default, and a provider you configure yourself —
-there is no default and no bundled key. Nothing is sent unless you press
+which is not installed by default, and a provider you configure yourself.
+There is no default provider and no bundled key. Nothing is sent unless you press
 that key, and the notification names the model before the request goes
 out.
 
@@ -202,20 +204,19 @@ clients:
 ```
 
 Configure a hosted provider instead and a picture of part of your screen
-goes to that company — which is why this is a separate key, an optional
-package, and unconfigured by default.
+goes to that company. That is why this sits behind its own key, in an
+optional package, unconfigured.
 
 ## AppImages
 
-They run — `fuse2` and `fuse3` are installed, which is the whole
-requirement. Nothing integrates them into the launcher by itself:
+They run. `fuse2` and `fuse3` are installed, which is all an AppImage
+needs. Nothing integrates them into the launcher by itself:
 download, `chmod +x`, run. [Gear Lever](https://gearlever.mijorus.it) is
 the current tool for managing and updating them.
 
 `flatpak` is installed but **no remote is configured**. Adding Flathub is
-one command and is deliberately left to you — it is a third-party software
-source, and enabling one without asking is not something an installer
-should do.
+one command, and it is left to you. Flathub is a third-party software
+source, and an installer should not enable one without asking.
 
 ```sh
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -241,15 +242,14 @@ and formatting are destroyed** the next time anything saves a change.
 
 ## Snapshots, and what recovery actually involves
 
-The default layout is btrfs, with `snapper` and `snap-pac` installed, so
-every pacman transaction is bracketed by a snapshot without anyone asking
-for one: the snapshot exists *before* the upgrade that broke things.
-`ashlaros-snapshot create` takes one on demand, `list` shows what is
-there. Twelve are kept, following package transactions rather than the
-clock.
+The default layout is btrfs, with `snapper` and `snap-pac` installed.
+Every pacman transaction takes a snapshot first, so one always exists from
+*before* the upgrade that broke things. `ashlaros-snapshot create` takes
+one on demand and `list` shows what is there. Twelve are kept, one per
+package transaction rather than one per hour.
 
 **Rollback is a rescue-media procedure, not a boot-menu one**, and
-`snapper rollback` is not the command — on this layout it can report
+`snapper rollback` is not the command. On this layout it can report
 success while leaving the machine still broken. What works is replacing
 the root subvolume. Verified end to end: a machine with a deliberately
 destroyed `/etc/os-release` came back reading `AshlarOS` with `$HOME`
@@ -280,9 +280,9 @@ intact and a deleted binary restored.
 replaced. The journal recording the failure and the package cache both
 outlive the rollback for the same reason.
 
-On an ext4 install none of this exists, and `ashlaros-snapshot` says so
-rather than pretending — a snapshot tool that quietly does nothing turns
-"I have no backups" into "I think I have backups".
+On an ext4 install none of this exists, and `ashlaros-snapshot` tells you
+so. A snapshot tool that stays quiet when it cannot work leaves you
+believing you have backups.
 
 ## Using the repository on an existing system
 
@@ -321,10 +321,10 @@ above can be replaced with `Include = /etc/pacman.d/ashlaros-mirrorlist`.
 
 There is a prebuilt disk image for the Pi 5, published at
 [`latest/ashlaros-rpi5.img.xz`](https://ashlaros.download/iso/latest/ashlaros-rpi5.img.xz).
-It is **not the ISO for another architecture** — four of the ISO's
+It is **not the ISO for another architecture**. Four of the ISO's
 defining properties cannot exist on an ARM board:
 
-| | x86_64 ISO | Pi 5 image |
+| what | x86_64 ISO | Pi 5 image |
 | --- | --- | --- |
 | kernel | `linux-cachyos` | `linux-rpi` (the board kernel) |
 | userland | CachyOS `x86_64_v3` | plain Arch Linux ARM |
@@ -335,13 +335,12 @@ defining properties cannot exist on an ARM board:
 What carries over is what you see: sway, the settings TUI, the theming,
 the waybar config.
 
-Write it to a card and boot it. With no installer to ask anything, setup
-happens on first boot: the root filesystem grows to fill the card, ssh
-host keys are generated for that machine, and you create an account on
-tty1 **before the network comes up**. Arch Linux ARM's default `alarm` and
-`root` logins are removed, and `sshd` stays off until there is an account
-to reach it — a prebuilt image with published credentials on a network is
-the failure this avoids.
+Write it to a card and boot it. There is no installer, so setup happens on
+first boot. The root filesystem grows to fill the card, ssh host keys are
+generated for that machine, and you create an account on tty1 **before the
+network comes up**. Arch Linux ARM's default `alarm` and `root` logins are
+removed, and `sshd` stays off until an account exists. Otherwise the image
+would reach the network carrying credentials that are published.
 
 ## Contributing
 
