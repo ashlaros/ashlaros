@@ -37,7 +37,6 @@
         // connecting
         "network",
         "bluetooth",
-        "custom/valent",
         // media
         "custom/playerctl",
         "custom/idle_inhibitor",
@@ -356,24 +355,6 @@
         "on-click": "/usr/share/sway/scripts/wluma.sh toggle",
         "exec-if": "/usr/share/sway/scripts/wluma.sh check",
         "signal": 12
-    },
-    "custom/valent": {
-        "format": "{icon}",
-        "tooltip": true,
-        "interval": 60,
-        "exec": "/usr/share/sway/scripts/valent.py",
-        "exec-if": "[ -x \"$(command -v valent)\" ]",
-        "return-type": "json",
-        "format-icons": {
-            "no-devices": "",
-            "dangerously-empty": "󰂃",
-            "no-signal": "󰞃",
-            "connected": "",
-            "disconnected": ""
-        },
-        "on-click": "valent",
-        "on-click-middle": "waybar-signal valent",
-        "signal": 13
     },
     "custom/idle_inhibitor": {
         "interval": 60,

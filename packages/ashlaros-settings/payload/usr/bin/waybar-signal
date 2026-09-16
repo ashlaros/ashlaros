@@ -17,7 +17,6 @@ signal[recorder]=8
 signal[clipboard]=9
 signal[dnd]=11
 signal[adaptive_brightness]=12
-signal[valent]=13
 signal[pacman]=14
 signal[idle]=15
 signal[weather]=16
