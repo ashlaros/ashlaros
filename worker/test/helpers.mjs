@@ -63,6 +63,11 @@ export function bucketOf(keys, { etag = '"e"', pageSize = 1000 } = {}) {
         const offset = Number(match[1]);
         const end = match[2] === '' ? size - 1 : Number(match[2]);
         object.range = { offset, length: end - offset + 1 };
+      } else {
+        // R2 reports a range for a full read as well - offset 0, the whole
+        // length - and a stub that left it undefined could not see the bug
+        // where every plain GET was answered 206.
+        object.range = { offset: 0, length: size };
       }
       return object;
     },

@@ -195,6 +195,21 @@ test('a media file carries the length and range support a player needs', async (
   assert.equal(res.headers.get('content-length'), '334986');
 });
 
+test('a download nobody asked to resume is a 200, so it is counted', async () => {
+  // R2 reports a range for a full read too, so keying off the object
+  // answered 206 to every plain GET. Two things broke: 206 without a
+  // request range is not what RFC 9110 allows, and stats.js excludes 206
+  // to avoid counting a resume many times - so downloads counted as none.
+  const res = await worker.fetch(
+    req('2026.09.10/ashlaros-2026.09.10-x86_64.iso'),
+    env(),
+    {},
+  );
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-range'), null);
+  assert.equal(res.headers.get('content-length'), '334986');
+});
+
 test('a ranged request reports which bytes it answered with', async () => {
   // the versioned key, because latest/ is a pointer now and answers 302
   const request = new Request(

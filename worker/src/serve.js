@@ -128,7 +128,14 @@ export async function serveObject(request, bucket, key, extraHeaders = {}) {
   // load with a format error even though the bytes are perfect and a
   // range request would have been answered.
   headers.set('accept-ranges', 'bytes');
-  const ranged = object.range && 'offset' in object.range;
+  // What the client asked for, not what R2 reports. R2 fills in `range`
+  // for a full read too - offset 0, the whole length - so testing the
+  // object alone answered 206 to every plain GET. That is wrong twice
+  // over: 206 without a request range violates RFC 9110, and stats.js
+  // excludes 206 so it does not count a resume as many downloads, which
+  // meant no download was counted at all.
+  const asked = wanted.get('range');
+  const ranged = Boolean(asked) && object.range && 'offset' in object.range;
   if (ranged) {
     const { offset, length } = object.range;
     headers.set('content-range', `bytes ${offset}-${offset + length - 1}/${object.size}`);
@@ -138,7 +145,7 @@ export async function serveObject(request, bucket, key, extraHeaders = {}) {
   }
   for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
 
-  // `ranged`, not the request header: a range dropped by the If-Range
+  // `wanted`, not the original request: a range dropped by the If-Range
   // check above must be answered 200 with the whole object, and saying
   // 206 there would tell the client its stale offsets were honoured.
   const status = object.body ? (ranged ? 206 : 200) : 304;
