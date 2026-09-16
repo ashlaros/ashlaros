@@ -32,6 +32,8 @@
 
 packages:
   # authored here
+  ashlaros-arcade:
+    arch: any
   ashlaros-branding:
     arch: any
   ashlaros-browser-settings:
@@ -42,20 +44,14 @@ packages:
     arch: any
   ashlaros-mirrorlist:
     arch: any
+  ashlaros-osinfo:
+    arch: any
   ashlaros-snapshot:
     arch: any
   ashlaros-release:
     arch: any
   ashlaros-settings:
     arch: any
-
-  # Arch's own extra/autotiling-rs, patched. No upstream entry on purpose:
-  # that PKGBUILD lives on gitlab.archlinux.org and source_of() reads the
-  # AUR and github only. What wants watching is not the PKGBUILD anyway but
-  # ammgws/autotiling-rs#29 landing, after which this is deleted rather
-  # than updated.
-  autotiling-rs-ashlaros:
-    arch: both
 
   # vendored from the AUR
   bluetuith:
@@ -109,11 +105,13 @@ packages:
     # toolchain and the module is untested on that kernel (#65).
     arch: x86_64
   kvantum-theme-matchama:
-    # The Qt half of the matcha themes. Manjaro ships this as
-    # kvantum-theme-matcha, but what it installs is Matchama - cscs's
-    # upstream, not the GTK theme's - so ours is named for its contents
-    # (#84). Pinned to a commit: upstream publishes no tags.
-    upstream: https://gitlab.com/cscs/matchama-kde.git
+    # The pkgbase, not the pkgname: upstream is a six-way split package and
+    # the AUR serves its PKGBUILD under matchama-kde. Ours builds only the
+    # kvantum-theme-matchama output - the other five are Plasma, Konsole,
+    # Yakuake and Konversation themes for software we do not ship - and
+    # pins the commit upstream's pkgver() would otherwise count from live
+    # HEAD, so the merge base is the file that rewrite started from.
+    upstream: https://aur.archlinux.org/matchama-kde.git
     arch: any
   matcha-gtk-theme:
     # The four dark variants the matcha sway themes name. The AUR package
