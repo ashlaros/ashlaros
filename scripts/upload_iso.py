@@ -18,27 +18,10 @@ import os
 import re
 import sys
 
-import boto3
-from botocore.config import Config
+from pathlib import Path
 
-
-def log(message: str) -> None:
-    print(message, file=sys.stderr, flush=True)
-
-
-def s3_client():
-    # R2 copies an object server-side, and a 1.7 GB image takes minutes -
-    # well past botocore's 60s default, which failed the build after a
-    # successful upload with "Read timeout on .../latest/ashlaros.iso".
-    # The copy itself had started; only the client gave up waiting.
-    return boto3.client(
-        "s3",
-        endpoint_url=os.environ["R2_ENDPOINT"],
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
-        region_name="auto",
-        config=Config(read_timeout=900, connect_timeout=60, retries={"max_attempts": 3}),
-    )
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from r2 import log, s3_client
 
 
 def main() -> int:

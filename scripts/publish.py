@@ -25,28 +25,18 @@ import subprocess
 import tarfile
 import sys
 
-import boto3
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError
+
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from r2 import log, s3_client
 
 DB_NAME = "ashlaros"
 # repo-add writes .db and .files as symlinks to the .tar.gz; both names are
 # published because pacman fetches the short one and tooling reads the long
 DB_SUFFIXES = (".db", ".db.tar.gz", ".files", ".files.tar.gz")
-
-
-def log(message: str) -> None:
-    print(message, file=sys.stderr, flush=True)
-
-
-def s3_client():
-    return boto3.client(
-        "s3",
-        endpoint_url=os.environ["R2_ENDPOINT"],
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
-        region_name="auto",
-    )
 
 
 # Never multipart. boto3 switches to it above 8 MiB by default, and a

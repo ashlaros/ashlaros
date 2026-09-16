@@ -20,8 +20,12 @@ import re
 import sys
 import tarfile
 
-import boto3
 from botocore.exceptions import ClientError
+
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from r2 import log, s3_client
 
 DB_NAME = "ashlaros"
 
@@ -30,20 +34,6 @@ PKG_SUFFIXES = (".pkg.tar.zst", ".pkg.tar.xz")
 
 # a database entry records its own filename and size; both must match
 FIELD = re.compile(r"%([A-Z0-9]+)%\n([^\n]*)")
-
-
-def log(message: str) -> None:
-    print(message, file=sys.stderr, flush=True)
-
-
-def s3_client():
-    return boto3.client(
-        "s3",
-        endpoint_url=os.environ["R2_ENDPOINT"],
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
-        region_name="auto",
-    )
 
 
 def fetch(s3, bucket: str, key: str) -> bytes | None:

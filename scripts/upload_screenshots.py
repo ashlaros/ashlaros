@@ -15,16 +15,15 @@ import os
 import subprocess
 import sys
 
-import boto3
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from r2 import log, s3_client
 
 
 # The tour is three scenes with holds, so a whole recording has hundreds
 # of packets; a handful means it stopped early whatever the header claims.
 MIN_FRAMES = 30
-
-
-def log(message: str) -> None:
-    print(message, file=sys.stderr, flush=True)
 
 
 def video_is_whole(path: str) -> tuple[bool, str]:
@@ -94,13 +93,7 @@ def main() -> int:
     videos = sorted(glob.glob(os.path.join(args.shot_dir, "*.webm")))
 
     bucket = os.environ["R2_BUCKET"]
-    s3 = boto3.client(
-        "s3",
-        endpoint_url=os.environ["R2_ENDPOINT"],
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
-        region_name="auto",
-    )
+    s3 = s3_client()
 
     for shot in shots:
         key = f"latest/screenshots/{os.path.basename(shot)}"
