@@ -71,6 +71,21 @@ class InstallContext:
         return bool(self.ashlaros_install.get("encrypt"))
 
     @property
+    def needs_typed_passphrase(self) -> bool:
+        """Whether the boot stops for a passphrase somebody has to read.
+
+        Only the plain-passphrase path. TPM-only types nothing, and TPM+PIN
+        is answered by systemd-cryptsetup's own prompt rather than by the
+        `encrypt` hook that defers to plymouth.
+
+        What this gates is the splash: the hook hands the prompt to
+        plymouth whenever it answers a ping and skips the console fallback,
+        so a plymouth that cannot render turns a waiting machine into an
+        apparently dead one (#86).
+        """
+        return self.encrypt and self.tpm_unlock == "none"
+
+    @property
     def tpm_unlock(self) -> str:
         """How the disk unlocks: "none", "tpm", or "pin".
 

@@ -53,8 +53,24 @@ def main():
             print("typed the passphrase", flush=True)
             return 0
     print("no passphrase prompt appeared", flush=True)
-    # Not a failure: a TPM-unlocked machine never shows one, and the
-    # desktop wait after this is what actually decides the test.
+
+    # Type it anyway. A TPM-unlocked machine shows no prompt and the
+    # characters land on a tty nobody reads, which costs nothing. But an
+    # invisible prompt takes them and the boot continues - and that is the
+    # difference between "plymouth is hiding the prompt" and "the initramfs
+    # never asked", which a black frame alone cannot tell apart (#86).
+    #
+    # The encrypt hook hands the prompt to plymouth whenever `plymouth
+    # --ping` answers, skipping the console fallback that would have
+    # printed it. A plymouth that is alive but renders nothing therefore
+    # produces exactly this: a live machine, waiting, on a blank screen.
+    q.type(PASSWORD)
+    q.key("ret")
+    print("typed it blind, in case the prompt is drawn but not visible", flush=True)
+
+    # Not a failure either way: the desktop wait after this decides the
+    # test, and it now reports a frozen screen rather than waiting out the
+    # clock.
     return 0
 
 
