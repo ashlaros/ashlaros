@@ -2358,6 +2358,68 @@ tpm_enroll() {
   pause
 }
 
+flashing_entry() {
+  local unit=flashfocus
+  local user_config="${XDG_CONFIG_HOME:-$HOME/.config}/sway/flashfocus.conf"
+  local choice
+
+  while true; do
+    screen "Focus flashing"
+    say "A window dips in opacity for a moment when it takes focus, so the"
+    say "eye can follow where focus went."
+    echo
+
+    # Masked is the off state, not disabled: etc/sway/autostart runs
+    # `systemctl --user enable --now flashfocus` on every login, so a
+    # disable is undone by the next one. A mask makes that enable fail
+    # loudly instead. Do not "simplify" this back to disable.
+    if systemctl --user is-enabled "$unit" 2>/dev/null | grep -q masked; then
+      warn "! off - and it stays off across logins"
+    elif systemctl --user is-active "$unit" >/dev/null 2>&1; then
+      say "✓ on"
+    else
+      warn "! not running, but not switched off either"
+      say "  it starts with the next sway session"
+    fi
+
+    echo
+    if [[ -f $user_config ]]; then
+      say "Your settings: $user_config"
+    else
+      say "Timing and opacity live in /etc/sway/flashfocus.conf."
+      say "Copy it to $user_config to change them."
+    fi
+
+    echo
+    choice=$(gum choose --header "Focus flashing" \
+      "Turn on" "Turn off" "Edit my settings" "Back") || return 0
+
+    case $choice in
+      "Turn on")
+        systemctl --user unmask "$unit" >/dev/null 2>&1
+        if systemctl --user enable --now "$unit" 2>&1 | sed "s/^/  /"; then
+          say "On."
+        fi
+        pause
+        ;;
+      "Turn off")
+        systemctl --user mask --now "$unit" 2>&1 | sed "s/^/  /"
+        say "Off, and it will stay off after a login."
+        pause
+        ;;
+      "Edit my settings")
+        mkdir -p "$(dirname "$user_config")"
+        if [[ ! -f $user_config ]] && [[ -f /etc/sway/flashfocus.conf ]]; then
+          cp /etc/sway/flashfocus.conf "$user_config"
+        fi
+        "${EDITOR:-vim}" "$user_config"
+        systemctl --user try-restart "$unit" 2>/dev/null
+        ;;
+      "Back") return 0 ;;
+    esac
+  done
+}
+
 wluma_entry() {
   local user_config="${XDG_CONFIG_HOME:-$HOME/.config}/wluma/config.toml"
   local choice
@@ -2494,6 +2556,9 @@ main() {
       [[ -n $(ls -A /sys/class/backlight 2>/dev/null) ]]; then
       entries+=("Adaptive brightness")
     fi
+    # No hardware predicate: any sway session can flash a window. The script
+    # ships with this package, so the entry is always offerable.
+    entries+=("Focus flashing")
     # Built only where the daemon answers. power-profiles-daemon is
     # installed on every desktop, so the binary existing proves nothing;
     # asking it is what distinguishes a machine it can drive from one it
@@ -2535,6 +2600,7 @@ main() {
       "Time and date") time_menu ;;
       "Hardware profiles") hardware_menu ;;
       "Adaptive brightness") wluma_entry ;;
+      "Focus flashing") flashing_entry ;;
       "Snapshots") snapshots_entry ;;
       "Power") power_entry ;;
     "Disk unlock") disk_unlock_entry ;;
