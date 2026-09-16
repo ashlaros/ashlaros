@@ -163,7 +163,6 @@ footer {
 
 /* Images carry width and height attributes too: no external stylesheet
    means a late-loading image would otherwise reflow everything under it. */
-.shot,
 .frame {
   width: 100%;
   height: auto;
@@ -255,16 +254,8 @@ footer {
   display: none;
 }
 
-.shots {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  margin: 1rem 0;
-}
-
-/* max-width rather than a fixed width: 480px on a 390px phone put the
-   right edge of every shot off the screen. */
-.shots img,
+/* max-width rather than a fixed width: a fixed 960px on a 390px phone put
+   the right edge off the screen. */
 .tour {
   max-width: 100%;
   border: 1px solid var(--edge);

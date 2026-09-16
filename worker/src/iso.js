@@ -37,9 +37,9 @@ export function versionOf(key) {
 /**
  * Whether a key is one of the `latest/` pointers upload_iso.py writes.
  *
- * Only the image aliases. `latest/screenshots/` and `latest/video/` live
- * under the same prefix and are real files the page renders, so matching
- * the whole prefix would turn every screenshot into a broken redirect.
+ * Only the image aliases. `latest/video/` lives under the same prefix and is
+ * a real file the page renders, so matching the whole prefix would turn the
+ * tour into a broken redirect.
  */
 export function isAlias(key) {
   return key === 'latest/ashlaros.iso' || key === 'latest/ashlaros-rpi5.img.xz';
@@ -59,20 +59,13 @@ export function aliasTarget(version, aliasName) {
 }
 
 /**
- * The strip of desktop shots above the downloads.
- *
- * A picture of what you are about to download belongs on the page offering
- * it. They are never listed as rows: the listing skips `latest/` entirely,
- * which is where the screenshot job publishes.
- */
-/**
- * The desktop tour, above the stills.
+ * The desktop tour.
  *
  * preload="metadata" rather than auto: the file is a few hundred KB and
  * every visitor to the download page would otherwise pay for it unasked.
  * muted and playsinline so it can autoplay at all, loop because it is a
- * few seconds long, and width/height set for the same no-reflow reason the
- * stills carry them.
+ * few seconds long, and width/height set so it does not reflow the
+ * downloads under it when it loads.
  */
 function renderTour(key) {
   if (!key) return '';
@@ -80,19 +73,6 @@ function renderTour(key) {
     `<video class="tour" src="/${escapeHtml(key)}" width="960" height="540"` +
     ' autoplay muted loop playsinline preload="metadata"></video>'
   );
-}
-
-function renderShots(shots) {
-  if (!shots.length) return '';
-  const images = shots
-    .map(
-      (key) =>
-        `<a href="/${escapeHtml(key)}"><img class="shot" src="/${escapeHtml(key)}"` +
-        ` alt="${escapeHtml(key.split('/').pop().replace(/\.png$/, ''))}"` +
-        ' width="480" height="270" loading="lazy" /></a>',
-    )
-    .join('\n');
-  return `<div class="shots">\n${images}\n</div>`;
 }
 
 /**
@@ -111,7 +91,7 @@ export function targetOf(name) {
   return 'PC (x86_64)';
 }
 
-export function renderIndex(byVersion, shots = [], tour = null) {
+export function renderIndex(byVersion, tour = null) {
   // version prefixes sort chronologically, so the newest is last
   const versions = [...byVersion.keys()].sort().reverse();
   const sections = versions
@@ -163,7 +143,6 @@ export function renderIndex(byVersion, shots = [], tour = null) {
         installer that sets up LUKS runs on x86_64 only, and the Pi's
         firmware boots directly from a FAT partition.</p>
 ${renderTour(tour)}
-${renderShots(shots)}
 ${sections || '<p>No images published yet.</p>'}`,
   );
 }
@@ -347,7 +326,7 @@ export const site = {
     // checksum and a signature, so the cap is reached by accumulation
     // rather than by anything going wrong - and R2 lists lexically, so
     // `latest/` sorts last and would be the first thing to vanish from
-    // the page, taking the screenshots and the tour with it.
+    // the page, taking the tour with it.
     const objects = [];
     let cursor;
     do {
@@ -357,31 +336,29 @@ export const site = {
     } while (cursor);
 
     const byVersion = new Map();
-    const shots = [];
     let tour = null;
     for (const object of objects) {
       const version = versionOf(object.key);
       if (!version) continue;
       // latest/ holds a pointer to a version already listed below, not an
       // image, so nothing under it becomes a download row - the
-      // screenshots there are shown as pictures instead
+      // tour there is rendered as a video instead
       if (version === 'latest') {
-        if (object.key.startsWith('latest/screenshots/')) shots.push(object.key);
         if (object.key.endsWith('.webm')) tour = object.key;
         continue;
       }
       if (!byVersion.has(version)) byVersion.set(version, []);
       byVersion.get(version).push(object);
     }
-    return html(renderIndex(byVersion, shots.sort(), tour));
+    return html(renderIndex(byVersion, tour));
   },
 
   headers: (key) => {
     const headers = {
       // A versioned image never changes. Under latest/ this now only
-      // reaches the screenshots and the tour - the image aliases are
-      // pointers the handler redirects before it gets here - and those are
-      // republished in place, so no-cache is still right for them.
+      // reaches the tour - the image aliases are pointers the handler
+      // redirects before it gets here - and it is republished in place, so
+      // no-cache is still right for it.
       'cache-control':
         versionOf(key) === 'latest'
           ? 'no-cache'

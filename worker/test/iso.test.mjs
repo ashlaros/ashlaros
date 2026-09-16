@@ -143,12 +143,13 @@ test('an empty bucket renders a page rather than failing', () => {
   assert.match(renderIndex(new Map()), /No images published yet/);
 });
 
-test('a screenshot is shown as a picture, never offered as a download', async () => {
-  // the index lists what is in the bucket, and the screenshots live in it -
-  // without this they read as things to download beside the images
+test('a screenshot is never offered as a download row', async () => {
+  // the page no longer shows the stills, but they are still in the bucket
+  // under latest/ - and latest/ is skipped, so they must not appear as
+  // rows either
   const body = await (await worker.fetch(req(''), env())).text();
-  assert.match(body, /<img class="shot" src="\/latest\/screenshots\/desktop\.png"/);
   assert.doesNotMatch(body, /class="row" href="\/latest\/screenshots/);
+  assert.doesNotMatch(body, /class="shot"/);
 });
 
 test('a screenshot renders in the browser rather than downloading', async () => {
@@ -259,19 +260,21 @@ test('a resumed download of an unchanged object still resumes', async () => {
 
 test('the index lists every version, not just the first page', async () => {
   // R2 caps a list at 1000 keys and lists lexically, so `latest/` sorts
-  // last: without pagination the screenshots and the tour are the first
-  // things to disappear, then the newest releases.
+  // last: without pagination the tour is the first thing to disappear,
+  // then the newest releases.
   const many = [];
   for (let i = 0; i < 400; i += 1) {
     const v = `2026.01.${String(i).padStart(3, '0')}`;
     many.push(`${v}/ashlaros-${v}-x86_64.iso`, `${v}/SHA256SUMS`, `${v}/SHA256SUMS.sig`);
   }
-  many.push('latest/ashlaros.iso', 'latest/screenshots/desktop.png');
+  many.push('latest/ashlaros.iso', 'latest/video/tour.webm');
 
   const bucket = bucketOf(many);
   const res = await worker.fetch(req(''), { PACKAGES: bucketOf([]), ISO: bucket });
   const body = await res.text();
   // the last version lexically, which is exactly what a truncated listing loses
   assert.match(body, /2026\.01\.399/);
-  assert.match(body, /screenshots\/desktop\.png/);
+  // the tour lives under latest/, which sorts after every version prefix,
+  // so it renders only if the listing walked the whole bucket
+  assert.match(body, /video\/tour\.webm/);
 });
