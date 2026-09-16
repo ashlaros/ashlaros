@@ -93,12 +93,19 @@ def iso_packages() -> list[str]:
 
 
 def download(packages: list[str], cache: Path, pacman_conf: Path) -> None:
-    """Populate `cache` with `packages` and everything they depend on.
+    """Populate `cache` with exactly `packages`, not their dependencies.
 
-    A private --dbpath is what makes this the full closure. Against the live
-    system's own database pacman counts everything already installed as
-    satisfied and downloads only the remainder - which on an ISO that
-    already carries half the desktop is most of what we want cached.
+    --nodeps twice, because the closure is the expensive half and buys
+    nothing here. Measured on a built ISO: the closure stages 686 packages,
+    of which 487 are already unpacked in the same squashfs - 1245 MiB of a
+    1454 MiB cache is a second copy of files the medium carries, and the
+    ISO grew 1.98 -> 3.52 GB for it.
+
+    That is issue #82's option 2, "a genuine judgement call ... decided
+    deliberately rather than by imitation", arrived at by accident. Option 1
+    is what it calls unambiguously worth doing: serve the overlap the live
+    ISO already has. Everything else keeps coming from the mirrors, as it
+    does today.
 
     Retried, because this fetches ~1.5 GB from mirrors and one slow file
     fails the whole transaction: build-iso failed twice in a row here, on
@@ -117,12 +124,14 @@ def download(packages: list[str], cache: Path, pacman_conf: Path) -> None:
         "--noconfirm",
         "--disable-download-timeout",
     ]
+    # on the download only: a database sync has no dependencies to skip
+    nodeps = ["--nodeps", "--nodeps"]
     subprocess.run(["pacman", "-Sy", *common], check=True)
 
     attempts = 3
     for attempt in range(1, attempts + 1):
         result = subprocess.run(
-            ["pacman", "-Sw", *common, "--cachedir", str(cache), *packages],
+            ["pacman", "-Sw", *common, *nodeps, "--cachedir", str(cache), *packages],
             check=False,
         )
         if result.returncode == 0:
