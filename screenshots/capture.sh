@@ -112,7 +112,11 @@ while read -r shot; do
     # Counted from sway rather than from the pixels: a window that opened
     # and closed leaves no trace in the image, and "is anything running"
     # is the question, not "is the picture dark".
-    if [ -n "$(lines "$shot" commands)" ]; then
+    # `layer: true` marks a shot whose subject is a layer surface - the
+    # help overlay is eww's, not an app_id window - so the count below
+    # would fail it for having launched nothing, when what it launched is
+    # exactly what is meant to be on screen.
+    if [ -n "$(lines "$shot" commands)" ] && [ "$(field "$shot" layer false)" != "True" ]; then
         windows=$(swaymsg -t get_tree |
             python3 -c 'import json,sys
 def walk(n):
@@ -127,6 +131,15 @@ print(walk(json.load(sys.stdin)))')
 
     grim "$out_dir/$name.png"
     log "  wrote $name.png ($(stat -c%s "$out_dir/$name.png") bytes)"
+
+    # Anything the shot has to undo. The per-shot cleanup kills app_id
+    # windows only, so a shot that opened a layer surface has to close it
+    # or it sits over every picture taken after this one.
+    while read -r cmd; do
+        [ -n "$cmd" ] || continue
+        log "  after: $cmd"
+        sh -c "$cmd" >/dev/null 2>&1 || true
+    done < <(lines "$shot" after)
 done < /tmp/shots.jsonl
 
 session_end

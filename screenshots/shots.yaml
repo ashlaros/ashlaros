@@ -129,3 +129,26 @@
     - '[app_id="foot"] floating enable'
     - '[app_id="foot"] resize set 1100 620'
     - '[app_id="foot"] move position center'
+
+# The keybinding overlay, which session.sh deliberately switches off for
+# every other shot - it covers half the screen and is the thing a new user
+# dismisses. Photographed here because nothing else renders it: eww needs a
+# GTK display, so a container without one cannot show whether the window
+# has a usable size, and it shipped ellipsized to a column of "…" for want
+# of a :width.
+- name: help-overlay
+  # eww draws it as a layer surface, not an app_id window
+  layer: true
+  description: the keybinding cheatsheet, which Super+? brings back
+  gallery: false
+  #
+  # Last in the file on purpose, and it puts the lockfile back. The
+  # per-shot cleanup kills app_id windows, and eww's overlay is a layer
+  # surface, so it is not one - left open it would sit over every shot
+  # taken after this one.
+  commands:
+    - rm -f $HOME/.local/help_disabled
+    - /usr/share/sway/scripts/help.sh
+  settle: 6
+  after:
+    - /usr/share/sway/scripts/help.sh --toggle
