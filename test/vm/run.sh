@@ -37,7 +37,7 @@ ensure_image() {
 sync_scripts() {
   mkdir -p "$workspace/out"
   cp "$here/boot.sh" "$here/qmp.py" "$here/install.py" "$here/unlock.py" \
-    "$here/live_session.py" "$workspace/"
+    "$here/live_session.py" "$here/verbose_boot.py" "$workspace/"
 }
 
 start() {
@@ -249,6 +249,18 @@ wait-installed)
   ;;
 boot)
   CDROM=no start
+  ;;
+# Boot what was installed on the verbose loader entry, which carries no
+# `quiet splash` and a serial console - so the initramfs says on the
+# host's log what the suppressed framebuffer will not (#86).
+verbose-boot)
+  CDROM=no start
+  docker exec "$container" python3 /vm/verbose_boot.py | sed 's/^/   /'
+  for shot in verbose-menu verbose-prompt verbose-after; do
+    png "$shot" 2>/dev/null || true
+  done
+  echo "## serial log from the verbose boot"
+  docker exec "$container" sh -c 'cat /vm/out/serial.log' | sed 's/^/   /'
   ;;
 # The live session lives on tty2 and the installer keeps tty1 (#83).
 # Needs a VM already sitting on the installer, so it follows install-start.
