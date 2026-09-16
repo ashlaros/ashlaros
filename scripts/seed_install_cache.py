@@ -99,17 +99,41 @@ def download(packages: list[str], cache: Path, pacman_conf: Path) -> None:
     system's own database pacman counts everything already installed as
     satisfied and downloads only the remainder - which on an ISO that
     already carries half the desktop is most of what we want cached.
+
+    Retried, because this fetches ~1.5 GB from mirrors and one slow file
+    fails the whole transaction: build-iso failed twice in a row here, on
+    'speexdsp ... Operation too slow' from mirror.cachyos.org and on a
+    file that vanished mid-publish. --disable-download-timeout relaxes the
+    first; a retry covers the rest, and already-fetched files stay in the
+    cache so an attempt resumes rather than restarts.
     """
     cache.mkdir(parents=True, exist_ok=True)
     dbpath = cache.parent / "db"
     dbpath.mkdir(parents=True, exist_ok=True)
 
-    common = ["--config", str(pacman_conf), "--dbpath", str(dbpath), "--noconfirm"]
+    common = [
+        "--config", str(pacman_conf),
+        "--dbpath", str(dbpath),
+        "--noconfirm",
+        "--disable-download-timeout",
+    ]
     subprocess.run(["pacman", "-Sy", *common], check=True)
-    subprocess.run(
-        ["pacman", "-Sw", *common, "--cachedir", str(cache), *packages],
-        check=True,
-    )
+
+    attempts = 3
+    for attempt in range(1, attempts + 1):
+        result = subprocess.run(
+            ["pacman", "-Sw", *common, "--cachedir", str(cache), *packages],
+            check=False,
+        )
+        if result.returncode == 0:
+            return
+        if attempt == attempts:
+            raise subprocess.CalledProcessError(result.returncode, result.args)
+        # -Sy again: a failure can be a package that was republished under a
+        # new version while this ran, and the stale database would keep
+        # asking for the name that no longer exists.
+        print(f"  download failed ({attempt}/{attempts}); resyncing and retrying")
+        subprocess.run(["pacman", "-Sy", *common], check=True)
 
 
 def main() -> int:
