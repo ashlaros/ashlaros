@@ -43,7 +43,7 @@ set $initialize_scratchpad_urgent_watch '[ -x "$(command -v waybar)" ] && system
 # autostarts
 
 set $initialize_dex '[ -x "$(command -v dex)" ] && gdbus wait --session org.kde.StatusNotifierWatcher && dex -a -e SWAY'
-set $help_menu '[ -x "$(command -v nwg-wrapper)" ] && [ -f $HOME/.config/nwg-wrapper/help.sh ] && /usr/share/sway/scripts/help.sh'
+set $help_menu '[ -x "$(command -v eww)" ] && [ -f $HOME/.config/eww/eww.yuck ] && /usr/share/sway/scripts/help.sh'
 set $initialize_xdg_dirs '[ -x "$(command -v xdg-user-dirs-update)" ] && exec xdg-user-dirs-update'
 # /etc/skel is copied once at user creation, so a change to a shipped
 # config reaches new installs only. This is what carries those changes to

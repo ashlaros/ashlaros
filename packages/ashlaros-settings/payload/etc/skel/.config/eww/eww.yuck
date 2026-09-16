@@ -1,0 +1,28 @@
+; The keybinding help overlay.
+;
+; Replaces nwg-wrapper, which needed one process per output, a manual
+; `swaymsg -t get_outputs` loop to spawn them, and a pkill over an argv
+; pattern to toggle them. eww's daemon owns the window, so `eww open
+; --toggle help` is the whole toggle and a reload does not respawn anything.
+;
+; :monitor 0 rather than a name: eww takes either, and the overlay belongs
+; on one screen rather than every screen at once - which is also what the
+; old per-output loop got wrong when a display was hotplugged.
+
+(defpoll help-text
+  :interval "1h"
+  :initial ""
+  ; sbdp.sh parses the sway config and emits JSON; jq turns it into the
+  ; Pango markup that label :markup renders. Sorting is stable, so entries
+  ; within a category keep the order the parser produced them in.
+  `/usr/share/sway/scripts/sbdp.sh $HOME/.config/sway/config | jq --raw-output 'sort_by(.category) | .[] | .action + ": <b>" + .keybinding + "</b>"' | tr '\n' '\r' | sed 's/\r/\\n/g'`)
+
+(defwidget help-box []
+  (box :class "help" :orientation "vertical" :halign "start" :valign "end"
+    (label :markup help-text :xalign 0 :wrap false)))
+
+(defwindow help
+  :monitor 0
+  :stacking "bg"
+  :geometry (geometry :x "20px" :y "20px" :anchor "bottom left")
+  (help-box))

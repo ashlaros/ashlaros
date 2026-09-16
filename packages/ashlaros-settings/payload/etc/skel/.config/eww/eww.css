@@ -1,0 +1,18 @@
+/* The help overlay. Carried over from the nwg-wrapper stylesheet: a
+ * transparent window with shadowed text, so the keybindings read over
+ * whatever wallpaper is behind them.
+ *
+ * eww refuses to start when both eww.css and eww.scss exist, so there is
+ * exactly one of them. */
+
+window {
+  background-color: rgba(0, 0, 0, 0);
+  font-size: medium;
+  font-family: "JetBrainsMono NF";
+}
+
+.help {
+  background-color: rgba(0, 0, 0, 0);
+  padding: 10px;
+  text-shadow: 2px 2px 4px #282828;
+}

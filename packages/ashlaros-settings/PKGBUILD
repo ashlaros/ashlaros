@@ -55,7 +55,7 @@ depends=(
                               # autostart entry and the skel cfg.yaml here
                               # all assume it, and without it the desktop
                               # loses auto-scale, hotplug and lid handling
-    'nwg-wrapper'             # conky like onscreen information
+    'eww'                     # widget system; draws the keybinding help overlay
     'dex'                     # executes desktop entries on autostart
     'gum'                     # the TUI toolkit ashlaros-settings-tui and
                               # ashlaros-displays are built from; without

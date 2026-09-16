@@ -116,10 +116,6 @@ packages:
     # build and this PKGBUILD already selects per arch, so vendoring is
     # the whole fix rather than a patch.
     arch: both
-  nwg-wrapper:
-    upstream: https://aur.archlinux.org/nwg-wrapper.git
-    # pure python; the AUR's x86_64 is an oversight, widened here
-    arch: both
   phinger-cursors:
     upstream: https://aur.archlinux.org/phinger-cursors.git
     arch: any
@@ -157,6 +153,12 @@ packages:
     # upstream releases often - expect this to be one of the noisier
     # tracker entries, one PR per Zen release
     upstream: https://aur.archlinux.org/zen-browser-bin.git
+    arch: both
+  eww:
+    upstream: https://aur.archlinux.org/eww.git
+    # arch is widened to aarch64 here and the lockfile patch is vendored
+    # rather than pulled from a raw nixpkgs URL, so the three-way merge
+    # against .upstream/ is expected to conflict on both.
     arch: both
   grimshot:
     upstream: https://github.com/manjaro-contrib/grimshot

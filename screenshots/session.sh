@@ -56,8 +56,8 @@ log() { printf '%s\n' "$*" >&2; }
 # The keybinding cheatsheet is shown on a first login and covers half the
 # screen. It is a real part of the desktop, and Super+? brings it back, but
 # it is not what a screenshot should advertise - it is the thing a new user
-# dismisses. Set via the lockfile help.sh reads rather than by killing
-# nwg-wrapper, so this uses the desktop's own off switch.
+# dismisses. Set via the lockfile help.sh reads rather than by killing the
+# overlay, so this uses the desktop's own off switch.
 mkdir -p "$HOME/.local"
 touch "$HOME/.local/help_disabled"
 

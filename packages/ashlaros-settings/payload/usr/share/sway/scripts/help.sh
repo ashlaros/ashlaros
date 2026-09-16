@@ -1,30 +1,36 @@
-#!/usr/bin/env sh
-# toggles the help wrapper state
+#!/bin/sh
+# Show or hide the keybinding help overlay.
+#
+# Was one nwg-wrapper process per output, spawned by a `swaymsg -t
+# get_outputs` loop and toggled by sending SIGPWR to a pkill argv match.
+# eww's daemon owns the window instead, so a toggle is one command and a
+# `swaymsg reload` does not respawn anything.
+#
+# $HOME/.local/help_disabled stays as the off switch. It is what
+# screenshots/session.sh touches to keep the overlay out of published
+# screenshots, and it is what remembers a dismissal across a logout.
 
-VISIBILITY_SIGNAL=30
-QUIT_SIGNAL=31
+set -eu
+
 LOCKFILE="$HOME/.local/help_disabled"
 
-if [ "$1" = "--toggle" ]; then
-    if [ -f "$LOCKFILE" ]; then
-        rm "$LOCKFILE"
-    else
-        touch "$LOCKFILE"
-    fi
-    # toggles the visibility
-    pkill -U $USER -f -${VISIBILITY_SIGNAL} 'nwg-wrapper.*-s help.sh'
+command -v eww >/dev/null || exit 0
 
-else
-    # makes sure no "old" wrappers are mounted (on start and reload)
-    pkill -U $USER -f -${QUIT_SIGNAL} 'nwg-wrapper.*-s help.sh'
-    # mounts the wrapper to all outputs
-    for output in $(swaymsg -t get_outputs --raw | jq -r '.[].name'); do
-        # sets the initial visibility
-        if [ -f "$LOCKFILE" ]; then
-            VISIBILITY="--invisible"
-        else
-            VISIBILITY="--no-invisible"
-        fi
-        nwg-wrapper ${VISIBILITY} -o "$output" -sv ${VISIBILITY_SIGNAL} -sq ${QUIT_SIGNAL} -s help.sh -p left -a end &
-    done
-fi
+case "${1:-}" in
+--toggle)
+	mkdir -p "$(dirname "$LOCKFILE")"
+	if [ -f "$LOCKFILE" ]; then
+		rm -f "$LOCKFILE"
+	else
+		touch "$LOCKFILE"
+	fi
+	eww open --toggle help >/dev/null 2>&1 || true
+	;;
+*)
+	# Session start. eww starts its own daemon on `open`, so there is no
+	# separate daemon line, and opening a window that is already open is a
+	# no-op rather than a second copy.
+	[ -f "$LOCKFILE" ] && exit 0
+	eww open help >/dev/null 2>&1 || true
+	;;
+esac
