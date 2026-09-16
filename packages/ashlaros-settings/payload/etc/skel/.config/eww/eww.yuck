@@ -21,8 +21,15 @@
   (box :class "help" :orientation "vertical" :halign "start" :valign "end"
     (label :markup help-text :xalign 0 :wrap false)))
 
+; :width is not optional. Omitted, eww's geometry defaults to Pixels(0)
+; and app.rs calls set_size_request(0, 0), so GTK allocates the minimum
+; and every label ellipsizes to a bare "…" - which is what the overlay
+; actually shipped as. The height is left to the content: the number of
+; keybindings changes with the config, and a fixed height would either
+; clip the list or leave a gap under it.
 (defwindow help
   :monitor 0
   :stacking "bg"
-  :geometry (geometry :x "20px" :y "20px" :anchor "bottom left")
+  :geometry (geometry :x "20px" :y "20px" :width "480px"
+                      :anchor "bottom left")
   (help-box))
