@@ -1,0 +1,32 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+pkgname=ashlaros-osinfo
+pkgver=20260916
+pkgrel=1
+pkgdesc="libosinfo entry so virtualisation tools recognise an AshlarOS medium"
+arch=('any')
+url="https://ashlaros.download"
+license=('GPL-2.0-or-later')
+# no depends on libosinfo: the file is inert without it, and requiring it
+# would pull a virtualisation stack onto every desktop that installs the
+# settings package
+optdepends=('libosinfo: what reads this entry')
+
+# The same document goes upstream to osinfo-db as
+# data/os/ashlaros.download/ashlaros-rolling.xml.in, so this is the one
+# copy and check_iso_osinfo.py is what keeps it matching the medium.
+source=('ashlaros-rolling.xml.in')
+sha256sums=('1e97ea915a1e173ff4ac45209bf2c4291126d496c5883eefbdc04d94d26a4322')
+
+package() {
+    # The path is derived from the os id by osinfo_loader_check_id(), which
+    # warns and drops the entry when the two disagree.
+    install -dm755 "$pkgdir/usr/share/osinfo/os/ashlaros.download"
+
+    # .xml.in is the upstream translation source; what gets installed is
+    # the same document with the gettext markers removed.
+    sed 's/<_\([a-z]*\)>/<\1>/g; s|</_\([a-z]*\)>|</\1>|g' \
+        "$srcdir/ashlaros-rolling.xml.in" \
+        > "$pkgdir/usr/share/osinfo/os/ashlaros.download/ashlaros-rolling.xml"
+    chmod 644 "$pkgdir/usr/share/osinfo/os/ashlaros.download/ashlaros-rolling.xml"
+}

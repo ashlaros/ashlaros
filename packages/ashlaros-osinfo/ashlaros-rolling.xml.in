@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Licensed under GPLv2+. -->
+<!--
+  What lets GNOME Boxes, virt-manager and anything else built on libosinfo
+  recognise an AshlarOS medium.
+
+  Boxes reads the ISO9660 primary volume descriptor at byte 0x8000 and
+  regex-matches these strings against every entry in osinfo-db. With no
+  entry the match fails, and a failed match is not cosmetic: Boxes hides
+  its firmware selector when the OS is unknown and falls back to BIOS,
+  which a UEFI-only ISO cannot boot (#85).
+
+  The same file is installed to /usr/share/osinfo/os/ashlaros.download/
+  by the ashlaros-osinfo package and submitted upstream, so the strings
+  live in one place.
+
+  The file name is load-bearing: osinfo_loader_check_id() derives the
+  expected path from the id and drops the entry with a warning if the two
+  disagree, so upstream this must be
+  data/os/ashlaros.download/ashlaros-rolling.xml.in.
+-->
+<libosinfo version="0.0.1">
+<os id="http://ashlaros.download/ashlaros/rolling">
+  <short-id>ashlaros</short-id>
+  <_name>AshlarOS</_name>
+  <version>rolling</version>
+  <_vendor>AshlarOS</_vendor>
+  <family>linux</family>
+  <distro>ashlaros</distro>
+  <!-- devices and firmwares are inherited through this, the same way
+       Manjaro's entry derives from Arch -->
+  <derives-from id="http://archlinux.org/archlinux/rolling"/>
+  <release-status>rolling</release-status>
+
+  <firmware arch="x86_64" type="efi"/>
+  <!-- the profile builds uefi.systemd-boot and nothing else, so a BIOS
+       VM never boots; saying so is what makes Boxes offer EFI -->
+  <firmware arch="x86_64" type="bios" supported="false"/>
+
+  <resources arch="x86_64">
+    <minimum>
+      <n-cpus>1</n-cpus>
+      <ram>2147483648</ram>
+      <!-- our own floor, not a guess: the configurator refuses to install
+           below 8 GiB root plus a 1 GiB ESP -->
+      <storage>10737418240</storage>
+    </minimum>
+    <recommended>
+      <n-cpus>2</n-cpus>
+      <ram>4294967296</ram>
+      <storage>32212254720</storage>
+    </recommended>
+  </resources>
+
+  <media arch="x86_64">
+    <url>https://ashlaros.download/iso/latest/ashlaros.iso</url>
+    <!-- no live="true": the medium is installer-only, and the flag drives
+         CD ejection after install -->
+    <iso>
+      <!-- the date rolls every build, so the month is matched as digits -->
+      <volume-id>ASHLAROS_\d{6}</volume-id>
+      <publisher-id>ASHLAROS &lt;HTTPS?://ASHLAROS.DOWNLOAD&gt;</publisher-id>
+      <application-id>ASHLAROS INSTALLER</application-id>
+      <!-- deliberately no volume-size: ours changes every build, and
+           libosinfo falls back to the probed size when the reference is
+           not positive -->
+    </iso>
+    <kernel>arch/boot/x86_64/vmlinuz-linux-cachyos</kernel>
+    <initrd>arch/boot/x86_64/initramfs-linux-cachyos.img</initrd>
+  </media>
+</os>
+</libosinfo>

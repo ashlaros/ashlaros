@@ -17,6 +17,9 @@ on:
       # nothing here exercised would surface as a broken nightly.
       - scripts/seed_install_cache.py
       - scripts/check_iso_packages.py
+      - scripts/check_iso_osinfo.py
+      # the entry the check matches the medium against
+      - packages/ashlaros-osinfo/**
   workflow_dispatch:
 
 concurrency:
@@ -78,6 +81,12 @@ jobs:
         # this the ISO is silently one commit behind and only an unsquashfs
         # would show it - see issue #25.
         run: python3 scripts/check_iso_packages.py --rootfs /tmp/work/x86_64/airootfs
+      - name: virtualisation tools still recognise the iso
+        # The osinfo entry matches on strings in the volume descriptor, so
+        # renaming the label un-detects us - and Boxes hides its firmware
+        # selector for an unknown OS, leaving a BIOS VM this ISO cannot
+        # boot (#85). Nothing else would notice until someone opened it.
+        run: python3 scripts/check_iso_osinfo.py --iso out/*.iso
       - name: checksum
         working-directory: out
         run: sha256sum ./*.iso > SHA256SUMS
