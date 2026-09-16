@@ -103,8 +103,16 @@ def main():
     q.key("ret")
     here = advance(q, here)
 
-    # screen 3: encryption & TPM, on by default
+    # screen 3: encryption, on by default
     q.shot("step-3-encryption")
+    q.key("ret")
+    here = advance(q, here)
+
+    # screen 3b: how the disk unlocks. First entry - passphrase only - is
+    # what Enter takes, and it is the one mode that asks nothing further:
+    # the two TPM modes would open a PIN field this driver has no answer
+    # for. Installing with a TPM is covered by the settings TUI, not here.
+    q.shot("step-3b-unlock")
     q.key("ret")
     here = advance(q, here)
 
@@ -125,6 +133,18 @@ def main():
     # identical from outside - a CI step that has printed nothing for forty
     # minutes says only that it has printed nothing - and the sampling is
     # the one place that knows the install is still being watched.
+    #
+    # A dashboard that is installing repaints - a package name, a counter, a
+    # progress bar. One that is waiting on a prompt this driver did not
+    # answer is a still picture, and it stays one until the loop gives up.
+    # That is how adding "How should this disk unlock?" to the configurator
+    # turned a 13-minute job into a 92-minute one that reported nothing
+    # useful: the driver was in step with a screen sequence that had moved.
+    # Ten identical samples is seven and a half minutes of a frozen screen,
+    # which no stage of a working install survives.
+    stuck_limit = 10
+    last = None
+    unchanged = 0
     for i in range(120):
         time.sleep(45)
         path = q.shot(f"install-{i:02d}")
@@ -133,6 +153,18 @@ def main():
             time.sleep(5)
             q.key("ret")
             print("rebooting", flush=True)
+            return
+        with open(path, "rb") as handle:
+            now = handle.read()
+        unchanged = unchanged + 1 if now == last else 0
+        last = now
+        if unchanged >= stuck_limit:
+            print(
+                f"install did not finish: the screen has not changed in "
+                f"{stuck_limit * 45}s, so it is waiting on something this "
+                f"driver did not answer",
+                flush=True,
+            )
             return
     print("install did not finish within the sampling window", flush=True)
 
