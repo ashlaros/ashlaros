@@ -72,8 +72,26 @@ jobs:
         # path of ours rather than pacman's.
         run: python3 scripts/seed_install_cache.py --rootfs iso/airootfs
       - name: build the iso
+        # Retried, because one slow mirror throws away the whole build.
+        # mkarchiso's pacstrap has no retry of its own, and CachyOS has
+        # stalled mid-download twice today with "Operation too slow" -
+        # once here, killing ten minutes of work for a transient.
+        #
+        # The same -w each time: _run_once stamps each stage in the work
+        # directory, so a second invocation skips what already completed
+        # and re-attempts only the part that failed.
         run: |
-          mkarchiso -v -w /tmp/work -o out iso/
+          for attempt in 1 2 3; do
+            if mkarchiso -v -w /tmp/work -o out iso/; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "## mkarchiso failed three times; not a transient" >&2
+              exit 1
+            fi
+            echo "## mkarchiso failed (attempt $attempt); retrying"
+            sleep 30
+          done
           ls -la out/
       - name: the iso carries this commit's packages
         # build-packages publishes to the same repository this pacstrap just
