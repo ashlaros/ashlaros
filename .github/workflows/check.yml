@@ -200,7 +200,13 @@ jobs:
           # git: several PKGBUILDs take git+ sources, which makepkg
           # refuses to even look at without it
           pacman -Sy --noconfirm --needed pacman-contrib git >/dev/null
-          git config --global --add safe.directory "$PWD"
+          # The container runs as root over a checkout the runner made, so
+          # git refuses it as dubiously owned and every later command fails
+          # in a way that looks like "the object is missing". '*' rather
+          # than $PWD because GITHUB_WORKSPACE and the container's cwd are
+          # not always the same path.
+          git config --global --add safe.directory '*'
+          echo "HEAD is $(git rev-parse HEAD 2>&1)"
 
           base="${{ github.event.pull_request.base.sha || github.event.before }}"
           if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
