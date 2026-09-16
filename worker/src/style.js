@@ -147,9 +147,15 @@ a.link:hover,
   color: var(--accent);
 }
 
+/* A package filename is one long unbreakable token - wrapping it mid-name
+   would make the listing unreadable and truncating it would hide the
+   version. So the table scrolls sideways on a narrow screen, the same
+   answer the pre rule already gives a long command. */
 table {
   border-collapse: collapse;
   font-family: monospace;
+  display: block;
+  overflow-x: auto;
 }
 
 td {
@@ -272,10 +278,19 @@ footer {
   display: none;
 }
 
+/* The canvas attributes are the simulation's coordinate space, not a
+   display size: the replay is verified server-side against those integers,
+   so the element scales in CSS and the geometry is untouched. Without the
+   cap Quarry's 480px field overflowed a 390px phone by 92px. */
 canvas {
   background: #0d1112;
   border: 1px solid var(--edge);
   touch-action: none;
+  /* border-box so the 1px border is inside the cap: under content-box the
+     element still measured 2px past a 390px viewport. */
+  box-sizing: border-box;
+  max-width: 100%;
+  height: auto;
 }
 
 /*
