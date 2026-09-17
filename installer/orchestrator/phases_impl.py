@@ -805,10 +805,10 @@ def use_plymouth_initramfs(ctx: InstallContext) -> bool:
     AFTER kms, because plymouth draws through KMS: with no DRM driver
     loaded and no EFI framebuffer it fails outright. On the TPM path that
     went unnoticed, since use_systemd_initramfs had already rewritten the
-    list into an order that happens to work. On a machine with no TPM the
-    list is the stock one, plymouth landed at index 2 - ahead of kms - and
-    the result was a blank screen exactly where the LUKS passphrase is
-    wanted (#61).
+    list into an order that happens to work. On a machine with no TPM
+    archinstall's own rewrite leaves no kms hook at all, plymouth landed at
+    index 2 - ahead of any DRM driver - and the result was a blank screen
+    exactly where the LUKS passphrase is wanted (#61, and again #86).
 
     Blank, not absent: plymouthd is running and merely cannot render, so
     the busybox encrypt hook's `plymouth --ping` succeeds, the prompt is
@@ -832,16 +832,33 @@ def use_plymouth_initramfs(ctx: InstallContext) -> bool:
             continue
         hooks = line[len("HOOKS=("):].rstrip(")").split()
 
-        # kms first, then the early-userspace hook, then the front. The
-        # list may or may not have been rewritten by use_systemd_initramfs
-        # already - the TPM and non-TPM paths differ in that - so this
-        # reads what is actually there rather than assuming either shape.
+        # The list may or may not have been rewritten by
+        # use_systemd_initramfs already - the TPM and non-TPM paths differ
+        # in that - so this reads what is actually there rather than
+        # assuming either shape.
+        #
+        # archinstall writes its own HOOKS line, and on the non-HSM path it
+        # reverts the whole list to the legacy busybox shape: systemd ->
+        # udev, sd-vconsole -> keymap consolefont. That rewrite drops kms
+        # entirely, so a passphrase-only install had no kms to anchor on and
+        # an earlier version fell back to udev - which put plymouth at index
+        # 2, ahead of any DRM driver, and is exactly the blank screen #61
+        # describes. Adding kms is the fix: falling back to an anchor that
+        # cannot satisfy the invariant only moves the failure out of sight.
         anchor = next((i for i, h in enumerate(hooks) if h == "kms"), None)
         if anchor is None:
-            anchor = next(
-                (i for i, h in enumerate(hooks) if h in ("systemd", "udev")),
-                -1,
-            )
+            # after modconf where Arch's own list puts it: kms loads the
+            # DRM driver, and modconf is what makes module options
+            # available to it. Falling back to udev would put both kms and
+            # plymouth ahead of autodetect, which is not an order any
+            # stock configuration uses.
+            anchor = -1
+            for candidate in ("modconf", "udev", "systemd"):
+                if candidate in hooks:
+                    anchor = hooks.index(candidate)
+                    break
+            hooks.insert(anchor + 1, "kms")
+            anchor += 1
         hooks.insert(anchor + 1, "plymouth")
 
         # The invariant the docstring claims, checked rather than trusted.
@@ -855,6 +872,15 @@ def use_plymouth_initramfs(ctx: InstallContext) -> bool:
             raise RuntimeError(
                 f"plymouth landed at {placed}, after the unlocker at "
                 f"{unlocker}: HOOKS=({' '.join(hooks)})"
+            )
+        # The other half of the invariant, which went unchecked and is the
+        # one that actually broke: plymouth after the unlocker is a prompt
+        # on a bare console, plymouth before kms is no prompt at all.
+        kms = hooks.index("kms")
+        if placed < kms:
+            raise RuntimeError(
+                f"plymouth landed at {placed}, before kms at {kms}: "
+                f"HOOKS=({' '.join(hooks)})"
             )
 
         lines.append(f"HOOKS=({' '.join(hooks)})")
