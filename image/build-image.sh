@@ -30,10 +30,14 @@ readonly ALARM_KEY_FPR="${ALARM_KEY_FPR:-68B3537F39A313B3E574D06777193F152BDBE6A
 readonly REPO_URL="${REPO_URL:-https://ashlaros.download/packages}"
 readonly KEY_URL="${KEY_URL:-https://ashlaros.download/packages/ashlaros.gpg}"
 
-# Sized to fit a 8 GB card with room to spare; the root partition grows to
-# fill whatever it is written to on first boot, so this is a floor and not
-# a budget.
-readonly IMAGE_MB="${IMAGE_MB:-7000}"
+# Sized to fit an 8 GB card, whose usable space is ~7456 MiB rather than the
+# 7629 the name suggests. The root partition grows to fill whatever it is
+# written to on first boot, so this is a floor and not a budget - but it has
+# to be a floor the package set actually fits in, and 7000 stopped being one
+# when mosh and tailscale landed: pacman refused the transaction 403 blocks
+# short, which is 1.6 MiB. 7500 restores the headroom without crossing what
+# a card that says 8 GB will take.
+readonly IMAGE_MB="${IMAGE_MB:-7500}"
 readonly BOOT_MB=512
 
 usage() { echo "usage: build-image.sh <output-dir> [version]" >&2; exit 2; }
