@@ -1,9 +1,50 @@
-#!/bin/sh
+#!/bin/bash
+# The clipboard history picker, and the one place it is implemented.
+#
+# This used to be an fzf variant with no callsites: every launched reference
+# - the sway bind at modes/default:17 and both waybar clicks - resolved to a
+# rofi one-liner in etc/sway/definitions, so the script shipped, was
+# chmod 755'd and was reachable only by typing `clipboard` in a shell. The
+# duplication was original rather than drift; both landed in the squashed
+# initial commit.
+#
+# rofi wins on merit as well as usage: it is a hard depend where fzf is an
+# optdepend listed for zsh's ^R/^T, it needs no terminal, and it matches the
+# idiom capture-ask.sh already names - "$clipboard and inhibit-idle use the
+# same shape". The body lives here rather than in the sway variable because
+# the Ctrl+S branch needs `case $?`, which a `set` line cannot express.
+set -uo pipefail
 
-if [ "$1" = "--select" ] || [ "$1" = "" ]; then
-    cliphist list | fzf | cliphist decode | wl-copy
+# The theme's font. rofi's own default is `mono 12`, so dropping this
+# regresses the menu from Roboto 11 - and reading it from gsettings rather
+# than taking $gui-font as an argument keeps one source of truth:
+# definitions:37 pushes the same value there on every reload, so it follows
+# a theme switch.
+font=$(gsettings get org.gnome.desktop.interface font-name 2>/dev/null | tr -d "'")
+fontarg=()
+[[ -n $font ]] && fontarg=(-font "$font")
+
+if [[ ${1:-} == --delete ]]; then
+  cliphist list |
+    rofi -dmenu "${fontarg[@]}" -p "Select item to delete" -lines 10 |
+    cliphist delete
+  exit 0
 fi
 
-if [ "$1" = "--delete" ]; then
-    cliphist list | fzf | cliphist delete
+# Ctrl+S sends the entry to a Tailscale device instead of copying it.
+# Offered only when tailscale is installed, so the hint never promises
+# something that cannot happen; -kb-custom-1 leaves accept(0) and cancel(1)
+# alone and returns 10.
+prompt="Select item to copy"
+custom=()
+if command -v tailscale >/dev/null && command -v taildrop-send >/dev/null; then
+  prompt="Select item to copy - Ctrl+S sends it"
+  custom=(-kb-custom-1 'ctrl-s')
 fi
+
+selection=$(cliphist list | rofi -dmenu "${custom[@]}" "${fontarg[@]}" -p "$prompt" -lines 10)
+case $? in
+  0) printf '%s' "$selection" | cliphist decode | wl-copy ;;
+  10) printf '%s' "$selection" | cliphist decode | taildrop-send ;;
+  *) exit 0 ;;
+esac

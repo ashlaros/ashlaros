@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Send files, or stdin, to one of your own Tailscale devices.
+#
+# Shared by the clipboard picker (Ctrl+S on a history entry) and the
+# file-manager action, so the device picker and the failure messages are
+# written once. Taildrop is `tailscale file cp` in the package the daemon
+# already comes from, which is why it costs nothing over KDE Connect or
+# LocalSend - and unlike them it crosses networks rather than needing a LAN.
+#
+# What it cannot do, and neither can anything else here: it reaches your own
+# devices only, not other users' on the same tailnet and not tagged nodes.
+set -euo pipefail
+
+notify() { command -v notify-send >/dev/null && notify-send "Taildrop" "$1" || printf '%s\n' "$1" >&2; }
+
+command -v tailscale >/dev/null || {
+  notify "Tailscale is not installed."
+  exit 1
+}
+
+# `file cp` needs PermitWrite, which is the operator pref - but `--targets`
+# needs only PermitRead. So the picker would list devices happily and then
+# fail on send, which looks like the clip vanished. Checked up front.
+targets=$(tailscale file cp --targets 2>&1) || {
+  case $targets in
+    *"file sharing not enabled"*)
+      notify "Taildrop is off for this tailnet. Enable it in the admin console under General → Send Files." ;;
+    *)
+      notify "Could not list devices: ${targets:-no output}" ;;
+  esac
+  exit 1
+}
+
+[[ -n $targets ]] || {
+  notify "No other devices on this tailnet to send to."
+  exit 1
+}
+
+# `--targets` prints "<100.x>\t<name>" per line: the address is what cp
+# wants, the name is what a human picks from.
+if [[ -t 2 ]] && command -v fzf >/dev/null; then
+  picked=$(printf '%s\n' "$targets" | fzf --with-nth=2.. --prompt='Send to: ') || exit 0
+else
+  # the theme's font, read back from the sink definitions:37 pushes it to on
+  # every reload - rofi's own default is mono 12, which would not match the
+  # rest of the menus
+  font=$(gsettings get org.gnome.desktop.interface font-name 2>/dev/null | tr -d "'")
+  fontarg=()
+  [[ -n $font ]] && fontarg=(-font "$font")
+  picked=$(printf '%s\n' "$targets" | cut -f2 |
+    rofi -dmenu "${fontarg[@]}" -p 'Send to' -lines 10) || exit 0
+  picked=$(printf '%s\n' "$targets" | grep -P "\t${picked}$" | head -1)
+fi
+
+[[ -n $picked ]] || exit 0
+target=$(printf '%s' "$picked" | cut -f1)
+name=$(printf '%s' "$picked" | cut -f2)
+
+# No arguments means the payload is on stdin - tailscale names it from the
+# sniffed content type, so a copied screenshot arrives as a viewable .png
+# rather than an extensionless blob.
+if (($# == 0)); then
+  if ! out=$(tailscale file cp - "${target}:" 2>&1); then
+    case $out in
+      *"permission denied"* | *"Access denied"*)
+        notify "Not allowed to send. Set this account as the Tailscale operator in the settings TUI." ;;
+      *) notify "Send to ${name} failed: ${out:-no output}" ;;
+    esac
+    exit 1
+  fi
+  notify "Sent to ${name}."
+  exit 0
+fi
+
+if ! out=$(tailscale file cp "$@" "${target}:" 2>&1); then
+  case $out in
+    *"permission denied"* | *"Access denied"*)
+      notify "Not allowed to send. Set this account as the Tailscale operator in the settings TUI." ;;
+    *) notify "Send to ${name} failed: ${out:-no output}" ;;
+  esac
+  exit 1
+fi
+notify "Sent $# file(s) to ${name}."

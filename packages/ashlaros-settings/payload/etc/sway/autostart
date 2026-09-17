@@ -39,6 +39,9 @@ set $initialize_calendar_daemon '[ -x "$(command -v khal)" ] && systemctl --user
 set $initialize_calendar_sync '[ -x "$(command -v vdirsyncer)" ] && systemctl --user enable --now --no-reload vdirsyncer.timer'
 set $initialize_watch_playerctl '[ -x "$(command -v playerctl)" ] && systemctl --user enable --now --no-reload watch-playerctl'
 set $initialize_scratchpad_urgent_watch '[ -x "$(command -v waybar)" ] && systemctl --user enable --now --no-reload scratchpad-urgent-watch'
+# Taildrop receives are pull-based: without this running, a file someone
+# sends sits in an invisible inbox while their end reports success
+set $initialize_taildrop_receive '[ -x "$(command -v tailscale)" ] && systemctl --user enable --now --no-reload taildrop-receive.service'
 
 # autostarts
 

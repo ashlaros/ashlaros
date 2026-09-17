@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Tailscale
+Comment=Tailscale status and controls in the tray
+Exec=tailscale systray
+TryExec=tailscale
+Icon=tailscale
+Terminal=false
+Categories=Network;
+X-GNOME-Autostart-enabled=true

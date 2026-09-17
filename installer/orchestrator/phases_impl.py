@@ -181,6 +181,18 @@ DESKTOP_PACKAGES = [
     # arch=('x86_64'), so ALARM will not inherit it later. A hard
     # dependency would make the settings package uninstallable there.
     "mise",
+    # Tailscale. The daemon has to be a system unit: a systemd --user unit
+    # cannot get the ambient capabilities, and the one unprivileged mode,
+    # --tun=userspace-networking, is a different product - no tailscale0, no
+    # 100.x on the host, no MagicDNS, reachable only through its own SOCKS5
+    # proxy that every application must be pointed at by hand.
+    #
+    # User-owned control comes from the operator pref instead: tailscaled's
+    # socket authorises by SO_PEERCRED, and `tailscale set --operator=$USER`
+    # grants rw without sudo or polkit. wheel grants nothing on Linux -
+    # isLocalAdmin() finds no system admin group - so the pref is the whole
+    # mechanism, and the settings TUI is what sets it.
+    "tailscale",
     # We run a third-party rolling kernel, so the window between a
     # linux-cachyos upgrade and a reboot is one a user will sit in: without
     # this the running kernel's modules are gone from disk, and plugging in
@@ -1228,6 +1240,16 @@ SERVICES = (
     "power-profiles-daemon.service",
     "linux-modules-cleanup.service",
     "ufw.service",
+    # The daemon, not tailscale-wait-online.service: that one blocks boot
+    # until the node is logged in, which on a fresh install never happens.
+    #
+    # A logged-out node peers with nothing, so enabling this by default
+    # exposes no surface. Once someone does log in, tailscale inserts its
+    # own ts-input jump at position 1 of INPUT and accepts anything arriving
+    # on tailscale0 - ahead of ufw's rules. That is tailscale working as
+    # designed and it is the point of joining a tailnet: an authenticated
+    # network whose peers are meant to reach you.
+    "tailscaled.service",
 )
 
 

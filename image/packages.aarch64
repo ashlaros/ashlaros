@@ -118,6 +118,9 @@ openssh
 # reachable is the other half and is not on - sshd is disabled here
 # deliberately, and mosh-server cannot start without it.
 mosh
+# same version as Arch's, and the daemon is a system unit for the ambient
+# capabilities a --user unit cannot get
+tailscale
 # FUSE, so a self-mounting SquashFS works rather than failing confusingly.
 # Not a claim that AppImages are a real option here: they are
 # overwhelmingly x86_64-only, and nothing on this image advertises them.

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Action
+Name=Send with Taildrop
+Icon=document-send
+Profiles=taildrop
+TryExec=tailscale
+MimeTypes=all/allfiles;
+
+[X-Action-Profile taildrop]
+Exec=taildrop-send %F

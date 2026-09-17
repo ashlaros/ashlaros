@@ -1527,7 +1527,98 @@ orphans_entry() {
   done
 }
 
-# 14. FACE
+# 14. TAILSCALE
+#
+# Login, logout and the operator pref only. Connect/disconnect and exit
+# nodes belong to `tailscale systray`, which the bar already hosts - two
+# UIs for one toggle is the rot #95 removed from this menu.
+#
+# The operator pref is what makes the tray usable without root. tailscaled
+# authorises its socket by SO_PEERCRED: uid 0 and the daemon's own uid get
+# read-write, anyone else gets read-only, and `wheel` grants nothing at all
+# on Linux - isLocalAdmin() finds no system admin group. Without the pref
+# the tray renders but every menu item sits behind "No permission to manage
+# Tailscale", and Taildrop lists devices happily and then fails on send,
+# because serveFileTargets needs only PermitRead while serveFilePut needs
+# PermitWrite.
+#
+# Login before operator, in that order: tailscale#18294 reports
+# `set --operator` not sticking on a logged-out node, so this checks that
+# the pref survived rather than assuming it.
+tailscale_entry() {
+  local choice
+  while true; do
+    screen "Tailscale"
+
+    local state
+    state=$(tailscale status --json 2>/dev/null | sed -n 's/.*"BackendState": *"\([^"]*\)".*/\1/p' | head -1)
+    if [[ -z $state ]]; then
+      oops "tailscaled is not answering."
+      say "  systemctl status tailscaled"
+      pause
+      return 0
+    fi
+
+    local operator
+    operator=$(tailscale debug prefs 2>/dev/null | sed -n 's/.*"OperatorUser": *"\([^"]*\)".*/\1/p' | head -1)
+
+    case $state in
+      Running) say "Connected." ;;
+      NeedsLogin) say "Not logged in. This machine is on no tailnet yet." ;;
+      Stopped) say "Logged in, but disconnected. The tray icon reconnects." ;;
+      *) say "State: $state" ;;
+    esac
+
+    if [[ $operator == "$USER" ]]; then
+      say "The tray can manage Tailscale without asking for a password."
+    else
+      say "The tray is read-only until you are set as the operator."
+    fi
+    echo
+
+    local -a entries=()
+    [[ $state == NeedsLogin ]] && entries+=("Log in")
+    [[ $state != NeedsLogin ]] && entries+=("Log out")
+    [[ $operator == "$USER" ]] || entries+=("Let this account manage Tailscale")
+    entries+=("Back")
+
+    choice=$(gum choose --header "Tailscale" "${entries[@]}") || return 0
+    case $choice in
+      "Log in")
+        # interactive by nature: `tailscale up` prints a URL a human has to
+        # open, so this hands the terminal over rather than capturing it
+        say "A browser link follows. Open it to finish."
+        echo
+        sudo tailscale up || oops "Login did not complete."
+        pause
+        ;;
+      "Log out")
+        root_run tailscale logout && say "Logged out."
+        pause
+        ;;
+      "Let this account manage Tailscale")
+        if [[ $state == NeedsLogin ]]; then
+          # the pref does not stick on a logged-out node (tailscale#18294)
+          oops "Log in first: the setting does not survive on a node that has never logged in."
+          pause
+          continue
+        fi
+        root_run tailscale set --operator="$USER" || { pause; continue; }
+        local now
+        now=$(tailscale debug prefs 2>/dev/null | sed -n 's/.*"OperatorUser": *"\([^"]*\)".*/\1/p' | head -1)
+        if [[ $now == "$USER" ]]; then
+          say "Done. The tray can manage Tailscale now."
+        else
+          oops "The setting did not stick (tailscale#18294). Try again after a reconnect."
+        fi
+        pause
+        ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+# 15. FACE
 #
 # Everything #39 settled about PAM applies here for a weaker factor, so
 # this follows the fingerprint entry exactly: sufficient before the
@@ -1680,7 +1771,7 @@ face_entry() {
   done
 }
 
-# 15. FINGERPRINT
+# 16. FINGERPRINT
 #
 # Installed everywhere, enabled nowhere. A fresh machine behaves exactly
 # as it did before; fingerprint auth turns on only when someone has
@@ -1820,7 +1911,7 @@ fingerprint_entry() {
   done
 }
 
-# 16. ADAPTIVE BRIGHTNESS
+# 17. ADAPTIVE BRIGHTNESS
 #
 # Report first, because the interesting failure is invisible: wluma
 # auto-detects the light sensor, the backlight and the keyboard LED, and
@@ -1832,7 +1923,7 @@ fingerprint_entry() {
 # there is a .pacnew conflict on the next upgrade. Overrides go to the
 # user's own config, which replaces the shipped one wholesale.
 
-# 17. POWER PROFILES
+# 18. POWER PROFILES
 #
 # power-profiles-daemon is installed and its service enabled, and until now
 # nothing offered it: GNOME and KDE ship switchers, sway does not, so the
@@ -1929,7 +2020,7 @@ power_entry() {
   done
 }
 
-# 18. SNAPSHOTS
+# 19. SNAPSHOTS
 #
 # snap-pac brackets every pacman transaction and configure_snapshots bounds
 # the retention, so snapshots happen without anyone asking. What was
@@ -2082,7 +2173,7 @@ snapshot_pick() {
   awk "$SNAPSHOT_NUMBER"' { print n }' <<<"$choice"
 }
 
-# 19. DISK UNLOCK
+# 20. DISK UNLOCK
 #
 # The installer enrols the LUKS passphrase into the TPM against PCR 7
 # whenever a TPM is present, and the machine then unlocks silently on
@@ -2524,6 +2615,7 @@ main() {
     entries+=("Background")
     command -v firefoxpwa >/dev/null && entries+=("Web apps")
     command -v aichat >/dev/null && entries+=("Model")
+    command -v tailscale >/dev/null && entries+=("Tailscale")
     entries+=("Quit")
 
     local choice
@@ -2551,6 +2643,7 @@ main() {
       "Background") background_entry ;;
       "Web apps") webapps_entry ;;
       "Model") model_entry ;;
+      "Tailscale") tailscale_entry ;;
       "Quit") exit 0 ;;
     esac
   done

@@ -1,0 +1,23 @@
+[Unit]
+# Taildrop receives are pull-based and Arch ships no unit for it: without
+# something running, files sit in an invisible inbox and the sender sees a
+# successful send. This is what makes "send a photo to the laptop" arrive.
+#
+# --conflict=rename rather than the `skip` default: silently dropping the
+# second copy of a filename is the worst failure mode here, because both
+# ends report success.
+#
+# There is no default receive directory on generic Linux - tailscale's
+# paths.go special-cases only Synology, TrueNAS, QNAP and Unraid - so the
+# XDG download dir is named explicitly.
+Description=Receive Taildrop files
+PartOf=sway-session.target
+After=sway-session-pre.target
+
+[Service]
+ExecStart=/bin/sh -c 'exec /usr/bin/tailscale file get --loop --conflict=rename "$(xdg-user-dir DOWNLOAD)"'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=sway-session.target

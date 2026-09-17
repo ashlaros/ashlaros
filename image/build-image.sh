@@ -199,6 +199,9 @@ systemctl enable bluetooth.service
 systemctl enable cups.service
 systemctl enable avahi-daemon.service
 systemctl enable ufw.service
+# not tailscale-wait-online.service, which blocks boot until the node is
+# logged in - on a card written from this image, that never happens
+systemctl enable tailscaled.service
 
 # Unlock the login keyring with the password firstboot's account already
 # asks for. Appended, not replaced: /etc/pam.d/greetd belongs to greetd
