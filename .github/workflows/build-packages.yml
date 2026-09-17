@@ -92,9 +92,16 @@ jobs:
   # but the check is a backstop: dispatching from here means the common case -
   # a push touching packages/ and iso/ together - is ordered rather than
   # racing, so the backstop never has to fire.
+  #
+  # `always()` for the same reason verify has it, and it is not optional:
+  # wave1 is skipped whenever one wave covers everything, which is most
+  # pushes, and a skipped job in the needs chain skips everything after it
+  # unless the condition is always(). Without it this job had never once
+  # run - every dispatch since it was written was silently skipped, and the
+  # nightly schedule was the only thing still building an ISO.
   iso:
     needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: always() && needs.verify.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -105,15 +112,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run build-iso.yml --repo "${{ github.repository }}" --ref main
 
-  # Same ordering problem as the iso job, and the same fix. screenshots'
-  # setup.sh installs ashlaros-settings from the published repository, so a
-  # run started by the same push as this one photographs the previous
-  # build: f013b8b fixed the help overlay and published a picture of it
-  # still broken, green. Dispatched here instead, once wave publishing has
-  # actually happened.
+  # Same ordering problem as the iso job, and the same fix - including the
+  # always(). screenshots' setup.sh installs ashlaros-settings from the
+  # published repository, so a run started by the same push as this one
+  # photographs the previous build: f013b8b fixed the help overlay and
+  # published a picture of it still broken, green.
   screenshots:
     needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: always() && needs.verify.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       actions: write
