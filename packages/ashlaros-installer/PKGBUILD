@@ -50,11 +50,15 @@ package() {
   # literal goes stale the first time a dependency changes, and the
   # staleness is invisible - the bar just fills to the wrong place.
   #
-  # A resolution failure must not ship a wrong number. The script exits
-  # non-zero below 100 packages, and without this file the dashboard falls
-  # back to whole-phase arithmetic, which is what it did before #94.
+  # Not fatal, deliberately. The builder syncs the full repository stack
+  # before this runs, so resolution works there - but a mirror hiccup must
+  # degrade the progress bar, not fail the package. Without the file the
+  # dashboard falls back to whole-phase arithmetic, which is exactly what it
+  # did before #94. The script itself refuses to emit a count below 100, so
+  # a partial resolution cannot ship a wrong denominator either.
   python3 "${startdir}/../../scripts/expected_package_count.py" \
     --pacman-conf "${startdir}/../../iso/pacman.conf" \
     --dbpath /var/lib/pacman \
-    --output "${pkgdir}/usr/share/ashlaros-installer/expected-packages"
+    --output "${pkgdir}/usr/share/ashlaros-installer/expected-packages" \
+    || warning "could not resolve the package count; the install bar will move per phase only"
 }
