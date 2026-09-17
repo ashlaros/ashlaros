@@ -11,6 +11,7 @@ next boot reports `Volume corrupt`, which looks like a bootloader bug and
 is not one.
 """
 
+import os
 import sys
 import time
 
@@ -140,9 +141,15 @@ def main():
     # That is how adding "How should this disk unlock?" to the configurator
     # turned a 13-minute job into a 92-minute one that reported nothing
     # useful: the driver was in step with a screen sequence that had moved.
-    # Ten identical samples is seven and a half minutes of a frozen screen,
-    # which no stage of a working install survives.
-    stuck_limit = 10
+    #
+    # How long a still screen is allowed to last depends on the accelerator.
+    # Step 2 pulls the package set, and the dashboard repaints per step, not
+    # per package: with KVM that download is a couple of minutes, but under
+    # TCG it ran past seven and a half and tripped this detector on an
+    # install that was working fine. The guest is the same either way, so
+    # the bound scales with the thing that actually changed.
+    kvm = os.access("/dev/kvm", os.R_OK | os.W_OK)
+    stuck_limit = 10 if kvm else 40
     last = None
     unchanged = 0
     for i in range(120):
