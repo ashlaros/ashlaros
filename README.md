@@ -343,6 +343,30 @@ network comes up**. Arch Linux ARM's default `alarm` and `root` logins are
 removed, and `sshd` stays off until an account exists. Otherwise the image
 would reach the network carrying credentials that are published.
 
+## Reaching other machines
+
+`mosh` is installed everywhere - the ISO, an installed system, and the Pi
+image. It is the client only. A session survives suspending the laptop,
+changing network and roaming, where `ssh` drops, and it needs no terminfo
+on the far end: `mosh-server` normalises `TERM` itself, which is the
+workaround `.zshrc` has to apply for plain `ssh`.
+
+**Nothing here is reachable by mosh out of the box**, and that is
+deliberate. `sshd` is not enabled on any of the three, and `mosh-server`
+is started over ssh. To make one machine reachable:
+
+```sh
+sudo systemctl enable --now sshd
+sudo ufw allow 60001:60999/udp   # mosh-server picks one port in this range
+```
+
+The firewall stays shut for outbound use: a session you start needs no
+rule at all, because the reply traffic is already `RELATED,ESTABLISHED`.
+
+One limitation worth knowing: `COLORTERM` does not survive the link, so
+programs that detect 24-bit colour from that variable rather than from
+terminfo will fall back to 256 colours. Truecolor itself works.
+
 ## Contributing
 
 Building the ISO and the packages, how versions are derived, and what the

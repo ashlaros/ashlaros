@@ -235,6 +235,16 @@ ufw --force default allow outgoing
 ufw --force enable
 
 echo ashlaros > /etc/hostname
+
+# ALARM ships LANG=C and compiles only C.utf8, so anything asking
+# nl_langinfo(CODESET) for UTF-8 gets US-ASCII: mosh-server refuses to
+# start outright, and gum, the settings TUI and the sway session all draw
+# their box characters through the same call. x86_64 never sees this - the
+# configurator collects a locale and archinstall generates it - so the
+# image is the only place that has to say so itself.
+sed -i 's/^#\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen
+locale-gen
+echo 'LANG=en_US.UTF-8' > /etc/locale.conf
 CHROOT
 
 say "writing os-release"

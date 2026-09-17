@@ -114,6 +114,10 @@ e2fsprogs
 # the image is written to a card; a user who wants to check it wants this
 rsync
 openssh
+# the client half: a Pi reaching elsewhere over a link that roams. Being
+# reachable is the other half and is not on - sshd is disabled here
+# deliberately, and mosh-server cannot start without it.
+mosh
 # FUSE, so a self-mounting SquashFS works rather than failing confusingly.
 # Not a claim that AppImages are a real option here: they are
 # overwhelmingly x86_64-only, and nothing on this image advertises them.

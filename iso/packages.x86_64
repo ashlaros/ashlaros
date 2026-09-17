@@ -127,6 +127,11 @@ gpm
 htop
 man-db
 man-pages
+# a rescue shell over a flaky link: mosh survives roaming and suspend where
+# ssh drops, which is the hotel-network case this environment exists for.
+# The cost is protobuf, not mosh itself - 4.4 MiB of package files for the
+# four of them. Client only: mosh-server needs sshd, which nothing enables.
+mosh
 tmux
 zsh
 grml-zsh-config

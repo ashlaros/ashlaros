@@ -161,6 +161,12 @@ DESKTOP_PACKAGES = [
     "bat",
     "eza",
     "tldr",
+    # The client half of mosh. .zshrc already aliases ssh to force
+    # TERM=xterm-256color because foot's terminfo is absent on most
+    # servers; mosh needs no such workaround, since mosh-server normalises
+    # TERM itself. Being reachable is a separate decision and is not taken
+    # here: no sshd in SERVICES, and no ufw hole for 60001-60999.
+    "mosh",
     # plocate rather than mlocate: it enables its own updatedb timer
     "plocate",
     # The boot splash. In DESKTOP_PACKAGES rather than as a dependency of
