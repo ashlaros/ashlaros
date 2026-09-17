@@ -137,16 +137,15 @@
     - '[app_id="foot"] move position center'
 
 # The keybinding overlay, which session.sh deliberately switches off for
-# every other shot - it covers half the screen and is the thing a new user
-# dismisses. Photographed here because nothing else renders it: eww needs a
-# GTK display, so a container without one cannot show whether the window
-# has a usable size, and it shipped ellipsized to a column of "…" for want
-# of a :width.
+# every other shot - it covers half the screen, so a picture of anything
+# else becomes a picture of this instead. Photographed here because
+# nothing else renders it: eww needs a GTK display, so a container without
+# one cannot show whether the window has a usable size, and it shipped
+# ellipsized to a column of "…" for want of a :width.
 - name: help-overlay
   # eww draws it as a layer surface, not an app_id window
   layer: true
-  description: the keybinding cheatsheet, which Super+? brings back
-  gallery: false
+  description: every keybinding on screen at once, which Super+? brings back
   #
   # Last in the file on purpose, and it puts the lockfile back. The
   # per-shot cleanup kills app_id windows, and eww's overlay is a layer
