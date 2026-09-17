@@ -827,10 +827,20 @@ def use_plymouth_initramfs(ctx: InstallContext) -> bool:
     changed = False
 
     for line in conf.read_text().splitlines():
-        if not line.startswith("HOOKS=") or "plymouth" in line:
+        if not line.startswith("HOOKS="):
             lines.append(line)
             continue
         hooks = line[len("HOOKS=("):].rstrip(")").split()
+
+        # Re-place an existing plymouth rather than treating its presence as
+        # proof the list is right. An earlier version skipped any line that
+        # already said "plymouth", which made this function a no-op on
+        # exactly the systems it exists to fix: a list carrying plymouth at
+        # index 2 with no kms at all kept it, and no later run could ever
+        # correct it. Measured on a disk installed from an ISO that did
+        # carry the kms fix - the hooks were still udev, plymouth, keymap,
+        # encrypt.
+        hooks = [h for h in hooks if h != "plymouth"]
 
         # The list may or may not have been rewritten by
         # use_systemd_initramfs already - the TPM and non-TPM paths differ
@@ -883,8 +893,12 @@ def use_plymouth_initramfs(ctx: InstallContext) -> bool:
                 f"HOOKS=({' '.join(hooks)})"
             )
 
-        lines.append(f"HOOKS=({' '.join(hooks)})")
-        changed = True
+        rewritten = f"HOOKS=({' '.join(hooks)})"
+        lines.append(rewritten)
+        # compared against the line as read: now that an existing plymouth
+        # is re-placed rather than skipped, a list that was already correct
+        # comes out identical and owes no rebuild
+        changed = changed or rewritten != line
 
     if changed:
         conf.write_text("\n".join(lines) + "\n")
