@@ -6,9 +6,18 @@ on:
   push:
     branches: [main]
     paths:
-      - packages/ashlaros-settings/**
       - screenshots/**
       - .github/workflows/screenshots.yml
+  # build-packages dispatches this once the packages it built are published.
+  #
+  # A push touching packages/ used to start this job and build-packages at
+  # the same moment, and setup.sh installs ashlaros-settings from the
+  # published repository - so the picture showed the *previous* build. The
+  # fix for the help overlay in f013b8b was photographed that way: the job
+  # went green over a screenshot of the bug it had just fixed.
+  #
+  # Same reasoning and same mechanism as the iso job in build-packages.yml,
+  # which is dispatched from there for exactly this reason.
   workflow_dispatch:
 
 concurrency:

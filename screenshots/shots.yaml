@@ -156,5 +156,23 @@
     - rm -f $HOME/.local/help_disabled
     - /usr/share/sway/scripts/help.sh
   settle: 6
+  # Taking the picture is not checking it. f013b8b shipped an overlay that
+  # broke every line at each n and r - "window" as "wi/dow" - and this shot
+  # photographed exactly that, twice, while the job stayed green: a picture
+  # nobody looks at asserts nothing.
+  #
+  # So assert on the text eww holds. `eww get` returns the variable the
+  # label renders from - the poll command's output after eww has been
+  # through it - so a mangled command fails here as surely as a mangled
+  # config would.
+  #
+  # The invariant, rather than the symptom: every line the parser emits is
+  # one `action: <b>binding</b>` pair, so a line that is not one is a line
+  # something split. That is what any future mangling produces, not just
+  # this bug's n and r. The count guards the other direction - an empty
+  # variable passes a test that only asks what the lines look like.
+  assert:
+    - test "$(eww get help-text | wc -l)" -ge 40
+    - '! eww get help-text | grep -qvx ''.*: <b>.*</b>'''
   after:
     - /usr/share/sway/scripts/help.sh --toggle

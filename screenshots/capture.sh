@@ -129,8 +129,28 @@ print(walk(json.load(sys.stdin)))')
         fi
     fi
 
+    # A shot may state what has to be true of what it photographed. The
+    # window count above only asks whether something is on screen; an
+    # overlay can be on screen and rendering nonsense, which is how a
+    # broken help overlay was published twice by a green job.
+    #
+    # Run before grim rather than after: a shot that fails still writes its
+    # picture, and the picture is the evidence for the failure.
+    assert_failed=""
+    while read -r check; do
+        [ -n "$check" ] || continue
+        if ! (cd "$HOME" && sh -c "$check") >/dev/null 2>&1; then
+            log "  ERROR: $name failed its check: $check"
+            assert_failed=yes
+        fi
+    done < <(lines "$shot" assert)
+
     grim "$out_dir/$name.png"
     log "  wrote $name.png ($(stat -c%s "$out_dir/$name.png") bytes)"
+
+    if [ -n "$assert_failed" ]; then
+        failed="$failed $name"
+    fi
 
     # Anything the shot has to undo. The per-shot cleanup kills app_id
     # windows only, so a shot that opened a layer surface has to close it
@@ -145,7 +165,7 @@ done < /tmp/shots.jsonl
 session_end
 
 if [ -n "${failed# }" ]; then
-    echo "shots with no windows:$failed" >&2
+    echo "shots that failed:$failed" >&2
     exit 1
 fi
 

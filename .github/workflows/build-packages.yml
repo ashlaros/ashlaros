@@ -104,3 +104,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run build-iso.yml --repo "${{ github.repository }}" --ref main
+
+  # Same ordering problem as the iso job, and the same fix. screenshots'
+  # setup.sh installs ashlaros-settings from the published repository, so a
+  # run started by the same push as this one photographs the previous
+  # build: f013b8b fixed the help overlay and published a picture of it
+  # still broken, green. Dispatched here instead, once wave publishing has
+  # actually happened.
+  screenshots:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: photograph the desktop the packages just published make
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run screenshots.yml --repo "${{ github.repository }}" --ref main
