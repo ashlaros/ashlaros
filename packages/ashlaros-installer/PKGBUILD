@@ -31,7 +31,7 @@ source=()
 # scripts/discover_packages.py and scripts/package_version.py, which
 # otherwise see only the package directory and would never notice an edit
 # to installer/ - the package would keep its version and stay skipped.
-_source_trees=(installer scripts/expected_package_count.py)
+_source_trees=(installer)
 
 package() {
   local installer="${startdir}/../../installer"
@@ -56,7 +56,7 @@ package() {
   # dashboard falls back to whole-phase arithmetic, which is exactly what it
   # did before #94. The script itself refuses to emit a count below 100, so
   # a partial resolution cannot ship a wrong denominator either.
-  python3 "${startdir}/../../scripts/expected_package_count.py" \
+  python3 "${installer}/expected_package_count.py" \
     --pacman-conf "${startdir}/../../iso/pacman.conf" \
     --dbpath /var/lib/pacman \
     --output "${pkgdir}/usr/share/ashlaros-installer/expected-packages" \

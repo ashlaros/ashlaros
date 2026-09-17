@@ -27,7 +27,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+# installer/, not the checkout root: this lives beside the lists it reads
+INSTALLER = Path(__file__).resolve().parent
+ROOT = INSTALLER.parent
 
 DESKTOP_PACKAGES_RE = re.compile(
     r"^DESKTOP_PACKAGES\s*[:=].*?[\(\[](.*?)[\)\]]\s*$",
@@ -38,7 +40,7 @@ ENTRY = re.compile(r"""^\s*["']([\w.+@-]+)["']\s*,\s*$""", re.MULTILINE)
 
 def desktop_packages() -> list[str]:
     """The names install_system() adds after the base system."""
-    source = (ROOT / "installer" / "orchestrator" / "phases_impl.py").read_text()
+    source = (INSTALLER / "orchestrator" / "phases_impl.py").read_text()
     match = DESKTOP_PACKAGES_RE.search(source)
     if not match:
         raise SystemExit("expected_package_count: DESKTOP_PACKAGES not found")
@@ -47,7 +49,7 @@ def desktop_packages() -> list[str]:
 
 def configurator_packages() -> list[str]:
     """The kernel and packages archinstall pacstraps before that."""
-    source = (ROOT / "installer" / "configurator").read_text()
+    source = (INSTALLER / "configurator").read_text()
     names: list[str] = []
     for key in ("kernels", "packages"):
         match = re.search(rf'"{key}"\s*:\s*\[(.*?)\]', source, re.DOTALL)
