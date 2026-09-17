@@ -127,6 +127,24 @@ centre() {
   printf '%*s%s' "$pad" "" "$text"
 }
 
+# What the step line says. The package count is the only thing on this
+# screen that moves during the long phase, and it is driven by real state:
+# it advances when libalpm writes another directory under the target and
+# stops dead when pacman does. That distinction is load-bearing - the VM
+# harness decides an install is stuck by comparing framebuffer dumps
+# (test/vm/install.py `_same`), so an unconditional clock or spinner would
+# make every frame differ and silently disable it (#94).
+step_line() {
+  local step="step $((INDEX + 1)) of ${TOTAL}"
+  ((EXPECTED > 0)) || { printf '%s' "$step"; return; }
+
+  local installed
+  installed=$(count_packages)
+  ((installed > 0)) || { printf '%s' "$step"; return; }
+  ((installed > EXPECTED)) && installed=$EXPECTED
+  printf '%s · %s of %s packages' "$step" "$installed" "$EXPECTED"
+}
+
 render() {
   local width permille
   width=$(term_width)
@@ -145,7 +163,7 @@ render() {
     printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
     centre "$(draw_bar "$permille")" "$width"
     printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
-    centre "${DIM}step $((INDEX + 1)) of ${TOTAL}${RESET}" "$width"
+    centre "${DIM}$(step_line)${RESET}" "$width"
     printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
     # the session is on another VT, so this screen is the only place
     # anyone would learn it exists (#83)

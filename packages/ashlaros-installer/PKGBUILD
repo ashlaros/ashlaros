@@ -31,7 +31,7 @@ source=()
 # scripts/discover_packages.py and scripts/package_version.py, which
 # otherwise see only the package directory and would never notice an edit
 # to installer/ - the package would keep its version and stay skipped.
-_source_trees=(installer)
+_source_trees=(installer scripts/expected_package_count.py)
 
 package() {
   local installer="${startdir}/../../installer"
@@ -43,4 +43,18 @@ package() {
   install -d "${pkgdir}/usr/share/ashlaros-installer/orchestrator"
   install -Dm644 "${installer}"/orchestrator/*.py \
     "${pkgdir}/usr/share/ashlaros-installer/orchestrator/"
+
+  # The denominator the dashboard fills its progress band from. Resolved at
+  # build time rather than written by hand, for the reason
+  # ashlaros-branding generates its plymouth script from logo.txt: a
+  # literal goes stale the first time a dependency changes, and the
+  # staleness is invisible - the bar just fills to the wrong place.
+  #
+  # A resolution failure must not ship a wrong number. The script exits
+  # non-zero below 100 packages, and without this file the dashboard falls
+  # back to whole-phase arithmetic, which is what it did before #94.
+  python3 "${startdir}/../../scripts/expected_package_count.py" \
+    --pacman-conf "${startdir}/../../iso/pacman.conf" \
+    --dbpath /var/lib/pacman \
+    --output "${pkgdir}/usr/share/ashlaros-installer/expected-packages"
 }
