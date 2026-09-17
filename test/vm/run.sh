@@ -94,6 +94,11 @@ follow_install() {
   while ((SECONDS < deadline)); do
     sleep 30
     lines=$(docker exec "$container" sh -c 'wc -l < /vm/out/install.log' 2>/dev/null || echo 0)
+    # docker prints its own errors on stdout when the container is gone -
+    # "DeadlineExceeded" landed in $lines and killed the watcher under
+    # `set -u` with "unbound variable", which reads as a harness bug in a
+    # script that was only trying to report progress
+    [[ $lines =~ ^[0-9]+$ ]] || lines=$seen
     if ((lines > seen)); then
       docker exec "$container" sh -c "tail -n +$((seen + 1)) /vm/out/install.log" 2>/dev/null |
         sed 's/^/   /'
