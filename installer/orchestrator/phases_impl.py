@@ -1070,6 +1070,25 @@ def configure_splash(ctx: InstallContext) -> None:
         ["arch-chroot", str(ctx.target), "plymouth-set-default-theme", "ashlaros"]
     )
     use_plymouth_initramfs(ctx)
+
+    # No splash where a passphrase has to be typed. plymouthd starts, claims
+    # the console and answers `plymouth --ping` - which is what makes the
+    # encrypt hook hand it the prompt and skip the console fallback - and
+    # then renders nothing at all under the ISO's own -vga std adapter.
+    # Measured on an install that reached the desktop: the probe frame at the
+    # passphrase moment is one colour, (0,0,0), across all 1024000 pixels,
+    # where a splash that drew even its own background would be #141A1B.
+    #
+    # A prompt nobody can see is worse than no splash, so encrypted installs
+    # that ask for a secret boot bare and get the hook's own text prompt.
+    # Everything else - TPM, TPM+PIN, unencrypted - keeps the splash, since
+    # nothing there waits on a human.
+    if ctx.needs_typed_passphrase:
+        info("› no splash: the disk asks for a passphrase, which has to be visible")
+        add_verbose_entry(ctx)
+        run_command(["arch-chroot", str(ctx.target), "mkinitcpio", "-P"])
+        return
+
     add_splash_cmdline(ctx)
     # after the flags are on, so the copy is of the final entry
     add_verbose_entry(ctx)

@@ -71,6 +71,15 @@ class InstallContext:
         return bool(self.ashlaros_install.get("encrypt"))
 
     @property
+    def needs_typed_passphrase(self) -> bool:
+        """Whether the boot stops for a secret somebody has to type.
+
+        Only the plain-passphrase path. TPM-only types nothing, and TPM+PIN
+        is answered by systemd's own prompt rather than the encrypt hook's.
+        """
+        return self.encrypt and self.tpm_unlock == "none"
+
+    @property
     def tpm_unlock(self) -> str:
         """How the disk unlocks: "none", "tpm", or "pin".
 
