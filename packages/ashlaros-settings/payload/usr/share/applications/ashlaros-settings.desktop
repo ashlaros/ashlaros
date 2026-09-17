@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=AshlarOS Settings
+
+Comment=Lets you change locale, keyboard, time, kernels and hardware
+
+Exec=ashlaros-settings-tui
+Icon=preferences-system
+Terminal=true
+Type=Application
+Categories=Settings;DesktopSettings;
+Keywords=settings;locale;keyboard;kernel;display;

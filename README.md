@@ -57,8 +57,9 @@ a resumed download counts once and a checksum file does not count at all.
 
 ## Settings
 
-`ashlaros-settings-tui` (`Super+,`) collects the settings that are
-otherwise commands you have to know:
+`ashlaros-settings-tui` (`Super+,`, or "AshlarOS Settings" in the
+launcher) collects the settings that are otherwise commands you have to
+know:
 
 - locale, keyboard layout, time and timezone
 - kernel variants and hardware profiles
