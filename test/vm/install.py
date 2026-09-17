@@ -92,6 +92,23 @@ def advance(q, before, timeout=120):
     raise SystemExit("the screen never settled after a keystroke")
 
 
+def dump_install_log(q, lines=40):
+    """Put the tail of the installer's own log on the serial console.
+
+    The log is written to /var/log/ashlaros-install.log on the live ISO,
+    which is thrown away with the VM - so a phase that raises leaves CI
+    with a screenshot of "Installation failed" and no reason.
+
+    A failed install drops back to the shell that launched it, on tty1,
+    which the screenshot of the failure shows as `root@archiso #`. That is
+    where this types; the live session on tty2 (#83) is left alone.
+    """
+    q.type(f"tail -n {lines} /var/log/ashlaros-install.log > /dev/ttyS0")
+    q.key("ret")
+    time.sleep(8)
+    q.shot("install-log")
+
+
 def main():
     q = Qmp()
 
@@ -191,6 +208,7 @@ def main():
                 f"driver did not answer",
                 flush=True,
             )
+            dump_install_log(q)
             return
     print("install did not finish within the sampling window", flush=True)
 
