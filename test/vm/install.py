@@ -35,6 +35,19 @@ PASSWORD = "correcthorse"
 SELECTED = bytes([0xAA, 0x00, 0xAA]) * 32
 
 
+def _same(a, b, tolerance=2000):
+    """Whether two framebuffer dumps show the same thing.
+
+    A blinking cursor rewrites a handful of pixels every frame, which is
+    enough to make two dumps of an identical screen compare unequal. The
+    PPMs are ~3 MB, so a few thousand differing bytes is a cursor and
+    anything larger is the screen actually doing something.
+    """
+    if len(a) != len(b):
+        return False
+    return sum(x != y for x, y in zip(a, b, strict=True)) <= tolerance
+
+
 def finished(path):
     """Whether the dashboard is showing its final Reboot? prompt.
 
@@ -163,7 +176,13 @@ def main():
             return
         with open(path, "rb") as handle:
             now = handle.read()
-        unchanged = unchanged + 1 if now == last else 0
+        # Not equality: the failed-install screen carries a blinking cursor,
+        # so consecutive frames differ by a few hundred bytes and an exact
+        # comparison never counts them as unchanged. One install died after
+        # 2m47s and was photographed 37 times over half an hour without this
+        # detector noticing. A screen that differs only by a cursor is a
+        # screen nobody is driving.
+        unchanged = unchanged + 1 if last is not None and _same(now, last) else 0
         last = now
         if unchanged >= stuck_limit:
             print(
