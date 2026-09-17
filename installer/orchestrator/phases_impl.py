@@ -1035,14 +1035,31 @@ def configure_splash(ctx: InstallContext) -> None:
     # drivers. Only bochs, which is what the ISO's own -vga std uses.
     #
     # use_systemd_initramfs drops it, but its one caller is
-    # add_crypttab_tpm_option, which runs only after a TPM enrolment. A
-    # passphrase-only install therefore shipped an initramfs with no
-    # driver for the display it was about to boot on, plymouth found no
-    # DRM device, and the splash - and with it the passphrase prompt the
-    # encrypt hook had already handed over - rendered nothing at all
-    # (#86). Measured: the probe frame was pure (0,0,0), where a splash
-    # that drew even its own background would have been #141A1B.
+    # add_crypttab_tpm_option, which runs only after a TPM enrolment.
     drop_autodetect(ctx)
+
+    # The busybox plymouth hook hangs the boot outright, which is the real
+    # #86 and has nothing to do with rendering. Its run_hook does
+    #
+    #     plymouthd --mode=boot --pid-file=... --attach-to-session
+    #
+    # and --attach-to-session needs a session leader on a live console. By
+    # then bochs-drm has run `vgaarb: deactivate vga console` and the
+    # console is the dummy device, so plymouthd never returns and `encrypt`
+    # - the next hook - never runs. Photographed frame by frame: the boot
+    # stops at ":: running hook [plymouth]" and is byte-identical for the
+    # next 140 seconds. No passphrase prompt is drawn because the initramfs
+    # never reaches the point of asking. plymouth.enable=0 does not help;
+    # that hook does not read it.
+    #
+    # The systemd initramfs has no such hook - plymouth is a unit there,
+    # started after udev has settled - so switching to it is the fix. It
+    # was already written for the TPM path; this runs it on every encrypted
+    # install, TPM or not.
+    device = luks_device(ctx) if ctx.encrypt else None
+    if device is not None:
+        use_systemd_initramfs(ctx)
+        use_sd_encrypt_cmdline(ctx, device)
 
     theme = ctx.target / "usr/share/plymouth/themes/ashlaros/ashlaros.plymouth"
     if not theme.exists():
