@@ -77,9 +77,27 @@ test('serving an iso counts it, serving a package does not', async () => {
   assert.equal(typeof isoSite.record, 'function');
 });
 
+test('a resume counts once, not once per chunk', async () => {
+  // An image is redirected now, and the hop is what gets counted - so a
+  // resume, which issues a range request per chunk, would report one
+  // download as dozens. Counting excluded 206 for exactly this reason when
+  // the range was answered here; the redirect must not lose that.
+  const key = '2026.09.11/ashlaros.iso';
+  const env = { ISO: bucketOf([key]), ANALYTICS_ENGINE: analytics() };
+  for (const range of ['bytes=0-999', 'bytes=1000-1999']) {
+    const request = new Request(`https://ashlaros.download/iso/${key}`, { headers: { range } });
+    const res = await worker.fetch(request, env, {});
+    assert.equal(res.status, 302);
+  }
+  assert.equal(env.ANALYTICS_ENGINE.written.length, 0);
+
+  await worker.fetch(get('iso.ashlaros.download', key), env, {});
+  assert.equal(env.ANALYTICS_ENGINE.written.length, 1);
+});
+
 test('counting never breaks the download it is counting', async () => {
-  // the versioned key: latest/ is a pointer that redirects, and a 302
-  // transfers nothing to count
+  // a versioned key, which is now answered with a hop to the bucket - the
+  // point being that a thrown analytics call must not cost the redirect
   const key = '2026.09.10/ashlaros-2026.09.10-x86_64.iso';
   const env = {
     ISO: bucketOf([key]),
@@ -90,7 +108,7 @@ test('counting never breaks the download it is counting', async () => {
     },
   };
   const response = await worker.fetch(get('iso.ashlaros.download', key), env, {});
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 302);
 });
 
 test('an unset token renders the page rather than a 500', async () => {

@@ -251,6 +251,47 @@ export function handler(site) {
 
     if (site.isListing(key)) return site.listing(bucket, key);
 
+    // An object the site marks fetchable direct from its bucket is
+    // redirected there instead of streamed through here. run_worker_first
+    // means this worker is invoked for every request on every route, so
+    // serving the bytes spends an invocation per request on an object that
+    // cannot change; the bucket hostname has no worker in front of it, so
+    // the hop costs one invocation and the transfer and every repeat fetch
+    // cost none.
+    //
+    // Ranges are redirected too. The bucket hostnames answer them natively
+    // - 206 with content-range and an etag - and a resume is the case that
+    // matters most, since excluding it would send a partial multi-gigabyte
+    // transfer back through the worker. The etag differs across the hop
+    // (a multipart upload's is a digest of digests), so a client resuming
+    // with a stale If-Range is served the whole object and starts over,
+    // which is what RFC 9110 asks for - and these objects are immutable,
+    // so it restarts on the same bytes.
+    const direct = site.direct?.(key);
+    if (direct && request.method === 'GET') {
+      // head first: without it an absent object answers 302 to a URL that
+      // is also absent, so a typo or a pruned version becomes a redirect
+      // into a 404 on another host rather than an honest 404 here. One
+      // metadata read, against a transfer this hands off entirely.
+      if (!(await bucket.head(key))) return notFound();
+      const hop = new Response(null, {
+        status: 302,
+        headers: {
+          location: direct,
+          // the object is immutable, so the hop to it is too - but keep it
+          // short enough that moving the bucket is not a year-long wait
+          'cache-control': 'public, max-age=3600',
+        },
+      });
+      // The last point at which this download is visible to us: the bytes
+      // move on a host that reports nothing back. Not a ranged hop: a
+      // resume issues one per chunk, and counting each would report one
+      // download as dozens - which is why 206 was never counted when the
+      // range was answered here.
+      if (!request.headers.get('range')) site.record?.(env, key, hop.status, request.method);
+      return hop;
+    }
+
     const response = await serveObject(request, bucket, key, site.headers(key));
     // after the response, because only its status says whether anything was
     // transferred. Optional and site-specific: the packages site defines no

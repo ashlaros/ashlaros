@@ -17,6 +17,9 @@ const KEYS = [
   'x86_64/ashlaros.db',
   'x86_64/ashlaros-settings-20260910-1-any.pkg.tar.zst',
   'x86_64/swayr-0.27.3-1-x86_64.pkg.tar.zst',
+  // the signature beside a package: it is rewritten whenever that package
+  // is republished, so it must never be redirected to a cacheable host
+  'x86_64/swayr-0.27.3-1-x86_64.pkg.tar.zst.sig',
   'aarch64/ashlaros.db.tar.gz',
   'aarch64/ashlaros-settings-20260910-1-any.pkg.tar.zst',
   'aarch64/idlehack-0.r21-1-aarch64.pkg.tar.xz',
@@ -60,23 +63,43 @@ test('the signing key is fetchable, because trusting it precedes installing anyt
   assert.equal(res.headers.get('content-type'), 'application/pgp-keys');
 });
 
-test('packages are immutable, the database is not', async () => {
-  // a cached database is a client that cannot see a package published
-  // since; a re-fetched package is bandwidth spent on bytes that cannot
-  // have changed
+test('a package is redirected to the bucket, the database is served here', async () => {
+  // The split that matters: a package cannot change under a client, so it
+  // is sent to the bucket hostname and costs this worker one invocation
+  // instead of one per request. The database is rewritten on every
+  // publish, so it stays here - a client pointed at a cacheable copy of it
+  // is a client installing against a package list it cannot verify.
   const pkg = await worker.fetch(req('x86_64/swayr-0.27.3-1-x86_64.pkg.tar.zst'), env());
-  assert.match(pkg.headers.get('cache-control'), /immutable/);
-
-  const db = await worker.fetch(req('x86_64/ashlaros.db.tar.gz'), env());
-  assert.equal(db.headers.get('cache-control'), 'no-cache');
+  assert.equal(pkg.status, 302);
+  assert.equal(
+    pkg.headers.get('location'),
+    'https://cdn.ashlaros.download/x86_64/swayr-0.27.3-1-x86_64.pkg.tar.zst',
+  );
 
   // Arch Linux ARM compresses with xz, and an xz package is no less
   // immutable than a zst one - its version is in its filename either way
   const xz = await worker.fetch(req('aarch64/idlehack-0.r21-1-aarch64.pkg.tar.xz'), env());
-  assert.match(xz.headers.get('cache-control'), /immutable/);
+  assert.equal(xz.status, 302);
+
+  const db = await worker.fetch(req('x86_64/ashlaros.db.tar.gz'), env());
+  assert.equal(db.status, 200);
+  assert.equal(db.headers.get('cache-control'), 'no-cache');
 });
 
-test('a range request is answered as a range', async () => {
+test('a signature is served here, never redirected', async () => {
+  // A .sig is rewritten when a package is republished at an unchanged
+  // version, so it is exactly the file that must not come from a host that
+  // may hold an older copy: a stale signature against a fresh package is
+  // "signature is invalid" on the client.
+  const sig = await worker.fetch(req('x86_64/swayr-0.27.3-1-x86_64.pkg.tar.zst.sig'), env());
+  assert.equal(sig.status, 200);
+  assert.equal(sig.headers.get('cache-control'), 'no-cache');
+});
+
+test('a range over the database is answered here, as a range', async () => {
+  // The database defines no direct(), so a resume against it never hops -
+  // it is rewritten in place and a cacheable copy is how a client installs
+  // against a package list it cannot verify.
   const request = new Request('https://ashlaros.download/packages/x86_64/ashlaros.db.tar.gz', {
     headers: { range: 'bytes=0-3' },
   });

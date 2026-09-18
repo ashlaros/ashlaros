@@ -85,7 +85,14 @@ def main() -> int:
     for path, content_type, _ in found:
         name = os.path.basename(path)
         key = f"{version}/{name}"
-        s3.upload_file(path, bucket, key, ExtraArgs={"ContentType": content_type})
+        extra = {"ContentType": content_type}
+        # Stored on the object, not added by the worker: a download now
+        # redirects to the bucket's own hostname, which serves whatever
+        # metadata the object carries and knows nothing about our handlers.
+        # Without it a browser saves the image under the last path segment
+        # or its own guess rather than the name the checksum refers to.
+        extra["ContentDisposition"] = f'attachment; filename="{name}"'
+        s3.upload_file(path, bucket, key, ExtraArgs=extra)
         log(f"uploaded {key} ({os.path.getsize(path)} bytes)")
 
     # SHA256SUMS from the ISO build, SHA256SUMS.<image> from the Pi one:

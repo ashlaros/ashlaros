@@ -10,5 +10,8 @@
     "core:build": "cargo build --release --manifest-path ../core/Cargo.toml --target wasm32-unknown-unknown && cp ../core/target/wasm32-unknown-unknown/release/ashlaros_games.wasm src/game/",
     "core:check": "cargo test --manifest-path ../core/Cargo.toml && node ../ci/cross-target.mjs",
     "deploy:prepare": "sh -c 'command -v cargo >/dev/null || (curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable && . \"$HOME/.cargo/env\"); PATH=\"$HOME/.cargo/bin:$PATH\" rustup target add wasm32-unknown-unknown; PATH=\"$HOME/.cargo/bin:$PATH\" npm run core:build && npm run game:sync'"
+  },
+  "devDependencies": {
+    "wrangler": "4.134.0"
   }
 }

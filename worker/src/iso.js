@@ -30,6 +30,10 @@ const TITLE = 'AshlarOS — Downloads';
 const PREFIX = 'iso';
 const href = (key) => `/${PREFIX}/${key}`;
 
+// The releases bucket's own custom domain. Keys are identical there to the
+// ones served through the worker, so a redirect is a hostname swap.
+const CDN = 'https://dl.ashlaros.download';
+
 /**
  * The version prefix a key belongs to.
  *
@@ -360,4 +364,18 @@ export const site = {
     }
     return headers;
   },
+
+  // Where a client can fetch this object without going through the worker.
+  // A versioned image is gigabytes streamed through an invocation billed
+  // per request - the most expensive thing this worker serves. The bucket
+  // hostname has no worker in front of it, so the hop costs one invocation
+  // and the transfer none.
+  //
+  // Never `latest/`: those keys are pointers repointed at every release,
+  // and the handler reads one and answers its own 302 to the versioned
+  // object - which is what keeps a resumed download aimed at an immutable
+  // URL. Redirecting the pointer would hand the client the moving target.
+  // The screenshots and the tour also live under latest/ and are
+  // republished in place, so they stay here too.
+  direct: (key) => (versionOf(key) === 'latest' ? null : `${CDN}/${encodeURI(key)}`),
 };

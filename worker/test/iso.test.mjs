@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import worker from '../src/index.js';
-import { renderIndex, versionOf } from '../src/iso.js';
+import { renderIndex, site as isoSite, versionOf } from '../src/iso.js';
 import { bucketOf, get } from './helpers.mjs';
 
 const KEYS = [
@@ -27,10 +27,20 @@ const KEYS = [
 const env = () => ({ PACKAGES: bucketOf([]), ISO: bucketOf(KEYS) });
 const req = (path) => get('iso.ashlaros.download', path);
 
-test('an iso is offered as a download, not rendered', async () => {
+test('a versioned image is redirected to the bucket that serves it', async () => {
+  // Gigabytes no longer stream through an invocation billed per request.
+  // What the worker still owes the client is the right target: the same
+  // key on the bucket's own hostname.
+  //
+  // content-disposition moved with it - upload_iso.py stores it on the
+  // object, because the bucket hostname serves the object's own metadata
+  // and knows nothing about this handler.
   const res = await worker.fetch(req('2026.09.10/ashlaros-2026.09.10-x86_64.iso'), env());
-  assert.equal(res.status, 200);
-  assert.match(res.headers.get('content-disposition'), /attachment/);
+  assert.equal(res.status, 302);
+  assert.equal(
+    res.headers.get('location'),
+    'https://dl.ashlaros.download/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
+  );
 });
 
 test('latest is never cached as immutable', async () => {
@@ -38,21 +48,34 @@ test('latest is never cached as immutable', async () => {
   // be current when a cache first saw it
   const latest = await worker.fetch(req('latest/ashlaros.iso'), env());
   assert.equal(latest.headers.get('cache-control'), 'no-cache');
-
-  const versioned = await worker.fetch(
-    req('2026.09.10/ashlaros-2026.09.10-x86_64.iso'),
-    env(),
-  );
-  assert.match(versioned.headers.get('cache-control'), /immutable/);
 });
 
-test('a range request is answered as a range, so a download resumes', async () => {
+test('the alias is served here and the version is not', async () => {
+  // latest/ is a pointer this worker reads and answers with its own 302 to
+  // the versioned object, so a resumed download aims at an immutable URL.
+  // Redirecting the pointer to the bucket instead would hand the client
+  // the moving target. The screenshots under latest/ are republished in
+  // place, so they stay here too.
+  assert.equal(isoSite.direct('latest/ashlaros.iso'), null);
+  assert.equal(isoSite.direct('latest/screenshots/desktop.png'), null);
+  assert.match(
+    isoSite.direct('2026.09.10/ashlaros-2026.09.10-x86_64.iso'),
+    /^https:\/\/dl\.ashlaros\.download\//,
+  );
+});
+
+test('a resumed download is redirected too, not streamed from here', async () => {
+  // A resume is the case worth handing off: excluding it would send a
+  // partial multi-gigabyte transfer back through the worker, which is the
+  // whole cost this redirect exists to avoid. The bucket hostname answers
+  // ranges natively, so the client gets its 206 from there.
   const request = new Request(
     'https://ashlaros.download/iso/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
     { headers: { range: 'bytes=1000-2000' } },
   );
   const res = await worker.fetch(request, env());
-  assert.equal(res.status, 206);
+  assert.equal(res.status, 302);
+  assert.match(res.headers.get('location'), /^https:\/\/dl\.ashlaros\.download\//);
 });
 
 test('an absent image is 404', async () => {
@@ -193,29 +216,19 @@ test('a media file carries the length and range support a player needs', async (
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('accept-ranges'), 'bytes');
   assert.equal(res.headers.get('content-length'), '334986');
-});
-
-test('a download nobody asked to resume is a 200, so it is counted', async () => {
   // R2 reports a range for a full read too, so keying off the object
-  // answered 206 to every plain GET. Two things broke: 206 without a
-  // request range is not what RFC 9110 allows, and stats.js excludes 206
-  // to avoid counting a resume many times - so downloads counted as none.
-  const res = await worker.fetch(
-    req('2026.09.10/ashlaros-2026.09.10-x86_64.iso'),
-    env(),
-    {},
-  );
-  assert.equal(res.status, 200);
+  // answered 206 to every plain GET - which RFC 9110 does not allow
+  // without a request range
   assert.equal(res.headers.get('content-range'), null);
-  assert.equal(res.headers.get('content-length'), '334986');
 });
 
 test('a ranged request reports which bytes it answered with', async () => {
-  // the versioned key, because latest/ is a pointer now and answers 302
-  const request = new Request(
-    'https://ashlaros.download/iso/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
-    { headers: { range: 'bytes=100-199' } },
-  );
+  // Something the worker still streams: a versioned image hops to the
+  // bucket, latest/ is a pointer, and the media under latest/ is what is
+  // left being served from here.
+  const request = new Request('https://ashlaros.download/iso/latest/video/tour.webm', {
+    headers: { range: 'bytes=100-199' },
+  });
   const res = await worker.fetch(request, env(), {});
   assert.equal(res.status, 206);
   assert.equal(res.headers.get('content-range'), 'bytes 100-199/334986');
@@ -245,24 +258,24 @@ test('the pi alias redirects to its own versioned name, not the iso one', async 
   );
 });
 
-test('a resumed download across a new release restarts instead of splicing', async () => {
-  // The versioned object is immutable, so this is the guarantee that
-  // survives: a validator that no longer matches drops the range rather
-  // than handing back the tail of a different file to append.
-  const stale = new Request(
-    'https://ashlaros.download/iso/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
-    { headers: { range: 'bytes=1000-2000', 'if-range': '"an-older-release"' } },
-  );
+test('a resume against a stale validator restarts instead of splicing', async () => {
+  // R2 does not apply If-Range itself - a stale validator still came back
+  // 206 - so serve.js evaluates it and drops the range. It matters for
+  // whatever is still served from here: the media under latest/ is
+  // republished in place, and a client resuming across a republish would
+  // otherwise stitch bytes from two different files.
+  const stale = new Request('https://ashlaros.download/iso/latest/video/tour.webm', {
+    headers: { range: 'bytes=1000-2000', 'if-range': '"an-older-recording"' },
+  });
   const res = await worker.fetch(stale, env());
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('content-range'), null);
 });
 
-test('a resumed download of an unchanged object still resumes', async () => {
-  const current = new Request(
-    'https://ashlaros.download/iso/2026.09.10/ashlaros-2026.09.10-x86_64.iso',
-    { headers: { range: 'bytes=1000-2000', 'if-range': '"e"' } },
-  );
+test('a resume against an unchanged object still resumes', async () => {
+  const current = new Request('https://ashlaros.download/iso/latest/video/tour.webm', {
+    headers: { range: 'bytes=1000-2000', 'if-range': '"e"' },
+  });
   const res = await worker.fetch(current, env());
   assert.equal(res.status, 206);
   assert.match(res.headers.get('content-range'), /^bytes 1000-2000\//);

@@ -47,6 +47,13 @@ directory = "../docs"
 binding = "DOCS"
 run_worker_first = true
 
+# Each bucket also carries a custom domain of its own - cdn. for packages,
+# dl. for the images - with no worker in front of it. An immutable object
+# is redirected there rather than streamed through here: run_worker_first
+# means every request on every route costs an invocation, and bytes that
+# cannot change are the ones not worth spending one on. The hostnames are
+# named in src/packages.js and src/iso.js, which is where the split
+# between what hops and what is served here lives.
 [[r2_buckets]]
 binding = "PACKAGES"
 bucket_name = "ashlaros"

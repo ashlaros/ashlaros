@@ -74,10 +74,10 @@ pushed straight to `main`.
 
 The bump is what makes the rebuild possible at all, not bookkeeping:
 `scripts/publish.py` refuses to replace an object the live database already
-names — the worker serves packages as `immutable, max-age=31536000`, so a
-reader mid-upload would get one build's package with another build's
-signature — which means a rebuild at an unchanged version cannot be
-published. There is deliberately no flag that forces one.
+names — a package is redirected to the bucket's own hostname and cached
+there for a year, so a reader mid-upload would get one build's package with
+another build's signature — which means a rebuild at an unchanged version
+cannot be published. There is deliberately no flag that forces one.
 
 The bump is decimal, `6` to `6.1`, because `track-upstreams.yml` takes
 upstream's PKGBUILD verbatim and the next upstream release resets `pkgrel` to

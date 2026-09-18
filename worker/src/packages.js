@@ -20,6 +20,11 @@ const href = (key) => `/${PREFIX}/${key}`;
 // answering 404 for it is cheaper than a bucket round trip.
 const ARCHES = ['x86_64', 'aarch64'];
 
+// The packages bucket's own custom domain. Object keys are the same there
+// as through the worker - <arch>/<file> - so a redirect is a hostname
+// swap, not a path rewrite.
+const CDN = 'https://cdn.ashlaros.download';
+
 /**
  * The stored key a request path refers to, or null if it names no tree.
  *
@@ -101,4 +106,19 @@ export const site = {
       ? 'public, max-age=31536000, immutable'
       : 'no-cache',
   }),
+
+  // Where a client can fetch this object without going through the worker.
+  // run_worker_first means this worker is invoked for every request on
+  // every route, so streaming a package spends an invocation on bytes that
+  // cannot change. The bucket hostname has no worker in front of it: one
+  // invocation for the hop, none for the transfer or a repeat fetch.
+  //
+  // Packages only, never their .sig: a signature is rewritten when a
+  // package is republished at an unchanged version, so it is exactly the
+  // file that must not come from a host that may hold an older copy - a
+  // stale signature against a fresh package is "signature is invalid" on
+  // the client. The database is rewritten on every publish for the same
+  // reason and is likewise served here.
+  direct: (key) =>
+    /\.pkg\.tar\.(zst|xz)$/.test(key) ? `${CDN}/${encodeURI(key)}` : null,
 };
