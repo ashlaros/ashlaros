@@ -5,8 +5,8 @@ fetched, before any of our edits.
 
 They exist so `scripts/track_upstreams.py` can do a real three-way merge.
 Without a base, "merging" an upstream change into our copy is just an
-overwrite: it silently reverts the local edits five of these packages carry
-(`arch=` widened to aarch64, wluma's broken man-page step removed) while
+overwrite: it silently reverts the local edits several of these packages
+carry (`arch=` widened to aarch64, an aarch64 patch added) while
 reporting success. Verified — that is what the first version of the script
 did before this directory existed.
 

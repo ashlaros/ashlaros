@@ -2519,18 +2519,20 @@ wluma_entry() {
         pause
         ;;
       "Edit my config")
-        # Seeded from the packaged example rather than from nothing: an
-        # empty file is a valid config that changes no behaviour, and a
-        # user who wanted to override something would have no idea what
-        # the sections are called.
+        # Seeded with a pointer rather than the packaged example: wluma 5.0.0
+        # deleted config.toml from its tarball and documents the sections in
+        # the README instead, which the package renders to man 7 wluma. An
+        # empty file is a valid config that changes no behaviour, so a user
+        # who wants to override something still has to be told where the
+        # section names are written down.
         mkdir -p "$(dirname "$user_config")"
-        if [[ ! -f $user_config ]] && [[ -f /usr/share/wluma/examples/config.toml ]]; then
+        if [[ ! -f $user_config ]]; then
           {
-            echo "# Everything below is OPTIONAL and every section you"
-            echo "# uncomment turns OFF auto-detection for what it names."
+            echo "# Everything you add below is OPTIONAL and every section"
+            echo "# you add turns OFF auto-detection for what it names."
             echo "# An empty file is the right config on most machines."
-            echo
-            sed "s/^/# /" /usr/share/wluma/examples/config.toml
+            echo "#"
+            echo "# The sections and their fields: man 7 wluma"
           } > "$user_config"
         fi
         "${EDITOR:-vim}" "$user_config"

@@ -15,7 +15,7 @@ Two kinds of upstream, one mechanism:
     checking meant cloning. It does not.)
 
 Several vendored PKGBUILDs carry deliberate local edits - `arch=` widened
-to aarch64, wluma's broken man-page step removed - so an update is never a
+to aarch64, an aarch64 compile patch added - so an update is never a
 blind overwrite. `packages/.upstream/<name>.PKGBUILD` holds the pristine
 upstream text each copy was made from, and that file is the merge base:
 with it, an upstream change to a line we never touched applies cleanly, and
