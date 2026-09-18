@@ -15,6 +15,8 @@ import {
   MAX_EVENTS_PER_TICK,
   MAX_PIECES,
   PIECE_NAMES,
+  TOTAL_HEIGHT,
+  WIDTH,
   applyAction,
   bagAt,
   createState,
@@ -387,3 +389,91 @@ test('the score path never touches the stats namespace', () => {
     assert.ok(!/\bSTATS\b/.test(source), `${file} references STATS`);
   }
 });
+
+test('the page and the verifier score a played-out run identically', () => {
+  // The third leg of the triangle. ci/cross-target.mjs proves native Rust
+  // and wasm Rust agree; nothing proved the JS the page plays agrees with
+  // either, and it did not: a rescan of the cleared row was dropped in the
+  // port, so a tetris scored as two lines, and MAX_PIECES was 600 against
+  // the page's 300. Both only show up once a stack is high enough to clear
+  // adjacent rows, which random logs never reach - so this plays properly.
+  for (const seed of [1, 2, 3, 4]) {
+    const events = wellPlayedRun(seed);
+    const page = replay(seed, events);
+    const server = verify('courses', seed, events);
+    assert.equal(server.score, page.score, `seed ${seed} scores differently`);
+    assert.equal(server.lines, page.lines, `seed ${seed} clears differently`);
+  }
+});
+
+/**
+ * An event log from a player good enough to clear lines.
+ *
+ * A greedy placement search over the JS rules: for each piece try every
+ * rotation and column, keep the one leaving the flattest, least-holed
+ * board. Random logs top out inside a dozen pieces and never reach the
+ * behaviour that differed, which is why the corpus has to play rather
+ * than flail.
+ */
+function wellPlayedRun(seed) {
+  const state = createState(seed);
+  spawn(state);
+  const events = [];
+  let tick = 0;
+
+  while (!state.over && state.index <= MAX_PIECES) {
+    let best = null;
+    for (let rotation = 0; rotation < 4; rotation++) {
+      for (let dx = -6; dx <= 6; dx++) {
+        const trial = { ...state, board: state.board.slice() };
+        for (let i = 0; i < rotation; i++) applyAction(trial, ACTIONS.ROTATE_CW);
+        for (let i = 0; i < Math.abs(dx); i++) {
+          applyAction(trial, dx < 0 ? ACTIONS.LEFT : ACTIONS.RIGHT);
+        }
+        const clearedBefore = trial.lines;
+        applyAction(trial, ACTIONS.HARD_DROP);
+        if (trial.over) continue;
+        const { height, holes, bumpiness } = shapeOf(trial.board);
+        const value =
+          (trial.lines - clearedBefore) * 3.5 - height * 0.51 - holes * 3.6 - bumpiness * 0.18;
+        if (!best || value > best.value) best = { rotation, dx, value };
+      }
+    }
+    if (!best) break;
+
+    const actions = [];
+    for (let i = 0; i < best.rotation; i++) actions.push(ACTIONS.ROTATE_CW);
+    for (let i = 0; i < Math.abs(best.dx); i++) {
+      actions.push(best.dx < 0 ? ACTIONS.LEFT : ACTIONS.RIGHT);
+    }
+    actions.push(ACTIONS.HARD_DROP);
+    for (const action of actions) {
+      events.push([action, tick]);
+      applyAction(state, action);
+      // two ticks apart: inside MAX_EVENTS_PER_TICK, and a shape a player
+      // could actually produce
+      tick += 2;
+    }
+  }
+  return events;
+}
+
+/** Aggregate height, buried holes and column-to-column roughness. */
+function shapeOf(board) {
+  const columns = [];
+  let holes = 0;
+  for (let col = 0; col < WIDTH; col++) {
+    let top = -1;
+    for (let row = 0; row < TOTAL_HEIGHT; row++) {
+      if (board[row * WIDTH + col]) {
+        if (top < 0) top = row;
+      } else if (top >= 0) {
+        holes += 1;
+      }
+    }
+    columns.push(top < 0 ? 0 : TOTAL_HEIGHT - top);
+  }
+  let bumpiness = 0;
+  for (let col = 1; col < WIDTH; col++) bumpiness += Math.abs(columns[col] - columns[col - 1]);
+  return { height: columns.reduce((a, b) => a + b, 0), holes, bumpiness };
+}

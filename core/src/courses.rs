@@ -11,7 +11,7 @@ pub const WIDTH: i32 = 10;
 pub const HEIGHT: i32 = 20;
 pub const SPAWN_ROWS: i32 = 2;
 pub const TOTAL_HEIGHT: i32 = HEIGHT + SPAWN_ROWS;
-pub const MAX_PIECES: u32 = 600;
+pub const MAX_PIECES: u32 = 300;
 
 pub const LINE_SCORES: [u32; 5] = [0, 100, 300, 500, 800];
 pub const SOFT_DROP_POINTS: u32 = 1;
@@ -212,10 +212,10 @@ impl State {
 
         // clear full rows, bottom up
         let mut cleared = 0u32;
-        // Scans upward once and does NOT re-check a row it just cleared -
-        // what shifts down into that row is examined on no further pass.
-        // That is the incumbent's behaviour and every score on the board
-        // was produced by it, so it is the behaviour to reproduce.
+        // A cleared row is re-examined, because what shifts down into it
+        // may be full as well - without that a tetris counts as two lines
+        // and LINE_SCORES[4] is unreachable. This is what logic.js has
+        // always done, and every score on the board was produced by it.
         let mut row = TOTAL_HEIGHT - 1;
         while row >= 0 {
             let full = (0..WIDTH).all(|col| self.board[(row * WIDTH + col) as usize] != 0);
@@ -232,6 +232,7 @@ impl State {
                 for col in 0..WIDTH {
                     self.board[col as usize] = 0;
                 }
+                row += 1;
             }
             row -= 1;
         }
