@@ -56,8 +56,14 @@ package() {
   # dashboard falls back to whole-phase arithmetic, which is exactly what it
   # did before #94. The script itself refuses to emit a count below 100, so
   # a partial resolution cannot ship a wrong denominator either.
+  # /etc/pacman.conf, not iso/pacman.conf: --dbpath below is the builder's
+  # own database, synced against the builder's own configuration. Handing
+  # pacman a different config names repositories those databases were never
+  # fetched for, and resolution fails with "database not valid" - which is
+  # how this silently fell back to no file at all and shipped an ISO whose
+  # progress bar still moved per phase.
   python3 "${installer}/expected_package_count.py" \
-    --pacman-conf "${startdir}/../../iso/pacman.conf" \
+    --pacman-conf /etc/pacman.conf \
     --dbpath /var/lib/pacman \
     --output "${pkgdir}/usr/share/ashlaros-installer/expected-packages" \
     || warning "could not resolve the package count; the install bar will move per phase only"

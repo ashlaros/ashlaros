@@ -71,8 +71,17 @@ def count(pacman_conf: Path, dbpath: Path) -> int:
         ],
         capture_output=True,
         text=True,
-        check=True,
+        check=False,
     )
+    if result.returncode != 0:
+        # capture_output hides why, and the PKGBUILD's fallback only prints
+        # "could not resolve the package count" - which is how this failed
+        # in the real builder while every build stayed green and the ISO
+        # shipped without the file. pacman names the package it cannot find.
+        raise SystemExit(
+            "expected_package_count: pacman could not resolve the install:\n"
+            + (result.stderr.strip() or "no stderr")
+        )
     return len({name for name in result.stdout.split() if name})
 
 
