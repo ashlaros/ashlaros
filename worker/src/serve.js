@@ -195,7 +195,16 @@ export function sharedAsset(pathname) {
 export function handler(site) {
   return async (request, env) => {
     const url = new URL(request.url);
-    const path = decodeURIComponent(url.pathname);
+    // A lone `%` is not a decodable escape and decodeURIComponent throws
+    // on one, which on Workers is a 1101 rather than a status - served to
+    // pacman, which expects an HTTP answer. A path that does not decode
+    // names no key, so it is a miss like any other.
+    let path;
+    try {
+      path = decodeURIComponent(url.pathname);
+    } catch {
+      return notFound();
+    }
     const base = `/${site.prefix}`;
     if (path !== base && !path.startsWith(`${base}/`)) return notFound();
     const requested = path.slice(base.length).replace(/^\//, '');

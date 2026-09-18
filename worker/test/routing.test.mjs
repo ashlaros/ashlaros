@@ -105,3 +105,13 @@ test('a shared asset is not also reachable under a prefix', async () => {
   const res = await worker.fetch(get('packages.ashlaros.download', 'site.css'), env());
   assert.equal(res.status, 404);
 });
+
+test('a path that is not decodable is a miss, not a crash', async () => {
+  // A lone `%` throws out of decodeURIComponent, and an uncaught throw on
+  // Workers is a 1101 error page - served to pacman, which is asking for
+  // a database and expects a status it can act on.
+  for (const path of ['%', 'x86_64/%zz', '%e0%a4%a']) {
+    const res = await worker.fetch(get('packages.ashlaros.download', path), env());
+    assert.equal(res.status, 404, path);
+  }
+});
