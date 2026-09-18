@@ -10,11 +10,13 @@
 #   $1     seconds before qemu is killed (default 180)
 #   TPM    no  - run without a TPM, for the passphrase-only path
 #   CDROM  no  - boot the installed disk instead of the installer
+#   NET    no  - no network device at all, for the offline install
 set -u
 
 seconds="${1:-180}"
 tpm="${TPM:-yes}"
 cdrom="${CDROM:-yes}"
+net="${NET:-yes}"
 lid="${LID:-no}"
 
 case "${VGA:-std}" in
@@ -71,6 +73,15 @@ args+=(
   -qmp "unix:/vm/qmp.sock,server=on,wait=off"
   -monitor none
 )
+
+if [[ $net == no ]]; then
+  # qemu attaches a user-mode NIC unless told not to, so "unplug the
+  # cable" is an explicit -nic none rather than an omission. This is the
+  # only way to test the promise the staged package closure makes: that an
+  # install completes with no mirrors reachable at all.
+  args+=(-nic none)
+  echo "## no network"
+fi
 
 if [[ $tpm == yes ]]; then
   # the commas here are qemu's own option syntax, not array separators

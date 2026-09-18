@@ -33,7 +33,12 @@ The workspace defaults to `/tmp/ashlaros-vm` and holds the ISO, the target
 disk, the firmware variables and `out/`. Set `WORKSPACE` to keep several.
 
 `TPM=no` installs without a TPM, which is the passphrase-at-every-boot
-path. `LID=yes` attaches an ACPI lid button, reporting closed.
+path. `LID=yes` attaches an ACPI lid button, reporting closed. `NET=no`
+removes the network device entirely, which is how the offline install is
+tested: the ISO stages every package an install needs, so a machine with
+no mirrors reachable must still finish. QEMU attaches a user-mode NIC
+unless told otherwise, so this is an explicit `-nic none` rather than
+leaving something out.
 
 The lid is worth explaining: QEMU has no lid device — `-device help` lists
 none — so the hardware predicates' positive lid path had never run against
