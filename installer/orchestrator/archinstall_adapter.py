@@ -38,12 +38,12 @@ from collections.abc import Iterator
 # orchestrator startup, not deep inside a phase.
 from archinstall.lib.args import ArchConfig, ArchConfigHandler
 from archinstall.lib.disk.filesystem import FilesystemHandler
-from archinstall.lib.disk.utils import get_parent_device_path, udev_sync
+from archinstall.lib.disk.utils import udev_sync
 from archinstall.lib.hardware import SysInfo
 from archinstall.lib.installer import Installer
 from archinstall.lib.mirror.mirror_handler import MirrorListHandler
 from archinstall.lib.models import Bootloader
-from archinstall.lib.models.device import DiskLayoutType, EncryptionType
+from archinstall.lib.models.device import EncryptionType
 from archinstall.lib.models.users import User
 
 from .ui import info
@@ -153,11 +153,6 @@ def is_encrypted(arch_config: ArchConfig) -> bool:
     return disk.disk_encryption.encryption_type != EncryptionType.NO_ENCRYPTION
 
 
-def is_pre_mount(arch_config: ArchConfig) -> bool:
-    disk = arch_config.disk_config
-    return bool(disk and disk.config_type == DiskLayoutType.Pre_mount)
-
-
 def bootloader(arch_config: ArchConfig) -> Bootloader | None:
     config = arch_config.bootloader_config
     if not config or config.bootloader == Bootloader.NO_BOOTLOADER:
@@ -171,10 +166,6 @@ def is_systemd_boot(arch_config: ArchConfig) -> bool:
 
 def has_uefi() -> bool:
     return SysInfo.has_uefi()
-
-
-def parent_device_path(dev_path: Path) -> Path:
-    return get_parent_device_path(dev_path)
 
 
 def encrypted_partitions(arch_config: ArchConfig) -> list:
