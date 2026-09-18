@@ -92,7 +92,7 @@ def advance(q, before, timeout=120):
     raise SystemExit("the screen never settled after a keystroke")
 
 
-def dump_install_log(q, lines=40):
+def dump_install_log(q):
     """Put the tail of the installer's own log on the serial console.
 
     The log is written to /var/log/ashlaros-install.log on the live ISO,
@@ -102,8 +102,18 @@ def dump_install_log(q, lines=40):
     A failed install drops back to the shell that launched it, on tty1,
     which the screenshot of the failure shows as `root@archiso #`. That is
     where this types; the live session on tty2 (#83) is left alone.
+
+    type_de, because by this point the configurator has set the keyboard to
+    the layout the user picked. The first attempt used type() and the US
+    minus keycode arrived as a backslash - the screenshot reads
+    `tail \n 40 ...` and tail answered "invalid option -- 'a'", so the one
+    diagnostic that exists for a failed install produced nothing.
+
+    And no dashes in the command: plain `tail` gives ten lines, which is
+    what a traceback's tail is, and it cannot be defeated by a layout this
+    driver has not anticipated.
     """
-    q.type(f"tail -n {lines} /var/log/ashlaros-install.log > /dev/ttyS0")
+    q.type_de("tail /var/log/ashlaros-install.log > /dev/ttyS0")
     q.key("ret")
     time.sleep(8)
     q.shot("install-log")
