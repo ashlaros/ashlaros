@@ -42,4 +42,8 @@ fi
 printf '%s' "$text" | wl-copy
 # The first line, truncated: enough to confirm it grabbed the right thing
 # without putting a paragraph in a notification.
-notify-send "OCR" "Copied: $(printf '%s' "$text" | head -c 60 | tr '\n' ' ')…"
+# -- because the body is OCR'd from whatever was on screen: text starting
+# with a dash is parsed as a flag and the notification is lost, and mako
+# renders pango markup in a body, which is why waybar's own config pipes
+# media metadata through markup_escape.
+notify-send "OCR" -- "Copied: $(printf '%s' "$text" | head -c 60 | tr '\n' ' ')…"

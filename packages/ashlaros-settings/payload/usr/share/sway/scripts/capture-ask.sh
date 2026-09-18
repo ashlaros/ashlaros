@@ -54,7 +54,7 @@ status=$?
 rm -f "$shot"
 
 if [ $status -ne 0 ]; then
-    notify-send "Ask" "$(printf '%s' "$answer" | head -c 200)"
+    notify-send "Ask" -- "$(printf '%s' "$answer" | head -c 200)"
     exit 1
 fi
 
@@ -62,4 +62,5 @@ fi
 # notification: it is prose, and unlike the QR path it is not a secret we
 # have to keep out of the notification history.
 printf '%s' "$answer" | wl-copy
-notify-send "Ask" "$(printf '%s' "$answer" | head -c 400)"
+# -- for the same reason as the error above: this is a remote model's prose
+notify-send "Ask" -- "$(printf '%s' "$answer" | head -c 400)"

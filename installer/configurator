@@ -522,6 +522,14 @@ write_config() {
   # already sudo, and this installer builds single-user machines, so it
   # concedes nothing that was not already conceded. It would matter on a
   # multi-user box; we do not build one.
+  # 077 before the write, not chmod after it: the heredoc below contains the
+  # plaintext LUKS passphrase, and between creating the file and chmod'ing
+  # it the content sits at whatever the umask allows. /root is 750 on the
+  # live ISO so the window is small, but OUTPUT_DIR is overridable and the
+  # ISO runs a browser session on tty2.
+  local previous_umask
+  previous_umask=$(umask)
+  umask 077
   cat >"$OUTPUT_DIR/user_credentials.json" <<-EOF
 	{
 	    "root_enc_password": $hash_json,
@@ -536,6 +544,9 @@ write_config() {
 	}
 	EOF
 
+  umask "$previous_umask"
+  # belt and braces: the umask above governs creation, this governs a file
+  # that already existed from an earlier run
   chmod 600 "$OUTPUT_DIR/user_credentials.json"
 }
 

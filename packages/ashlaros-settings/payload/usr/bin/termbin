@@ -1,17 +1,18 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-if [ "$1" == "-h" ] || [ "$1" == "--help" ]; then
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
   echo "termbin.com - Terminal pastebin"
-  echo "Usage: echo "test" | $(basename $0)"
+  echo "Usage: echo test | $(basename "$0")"
   exit 1
 fi
 
-if ! command -v nc &> /dev/null
-then
-    echo "nc could not be found (netcat). Please install `openbsd-netcat`."
-    exit
+if ! command -v nc >/dev/null 2>&1; then
+    # the package name was in backticks, so sh ran it as a command and the
+    # message read "Please install ." with the name swallowed
+    echo "nc could not be found (netcat). Please install openbsd-netcat." >&2
+    exit 1
 fi
 
 nc termbin.com 9999
 
-echo -e "\e[33mPlease switch to 'termpaste' for a better experience! 'termbin' will be removed eventually.\e[0m" >/dev/stderr
+printf '\033[33m%s\033[0m\n' "Please switch to 'termpaste' for a better experience! 'termbin' will be removed eventually.\e[0m" >/dev/stderr

@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 status() {
     ps -ef | grep -v grep | grep -m 1 -q "systemd-inhibit --what=idle"
@@ -11,13 +11,13 @@ inhibit() {
 
 case $1'' in
 'interactive')
-    MINUTES=$(echo -e "1\n10\n15\n20\n30\n45\n60\n90\n120\nUnlimited" | rofi -dmenu -p "Select how many minutes to inhibit idle:")
+    MINUTES=$(printf '%s\n' 1 10 15 20 30 45 60 90 120 Unlimited | rofi -dmenu -p "Select how many minutes to inhibit idle:")
     if [ "$MINUTES" = "Unlimited" ]; then
-        SECONDS=$((365 * 24 * 60 * 60))
+        seconds=$((365 * 24 * 60 * 60))
     else
-        SECONDS=$((MINUTES * 60))
+        seconds=$((MINUTES * 60))
     fi
-    inhibit $SECONDS
+    inhibit "$seconds"
     ;;
 'off')
     pkill -U $USER -f "systemd-inhibit --what=idle" || true

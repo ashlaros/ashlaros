@@ -11,7 +11,9 @@
 # devices only, not other users' on the same tailnet and not tagged nodes.
 set -euo pipefail
 
-notify() { command -v notify-send >/dev/null && notify-send "Taildrop" "$1" || printf '%s\n' "$1" >&2; }
+# -- because the body carries tailscale's own stderr and peer device names:
+# a message starting with a dash is otherwise parsed as a flag and lost.
+notify() { command -v notify-send >/dev/null && notify-send "Taildrop" -- "$1" || printf '%s\n' "$1" >&2; }
 
 command -v tailscale >/dev/null || {
   notify "Tailscale is not installed."
@@ -47,9 +49,16 @@ else
   font=$(gsettings get org.gnome.desktop.interface font-name 2>/dev/null | tr -d "'")
   fontarg=()
   [[ -n $font ]] && fontarg=(-font "$font")
-  picked=$(printf '%s\n' "$targets" | cut -f2 |
+  chosen=$(printf '%s\n' "$targets" | cut -f2 |
     rofi -dmenu "${fontarg[@]}" -p 'Send to' -lines 10) || exit 0
-  picked=$(printf '%s\n' "$targets" | grep -P "\t${picked}$" | head -1)
+  # A literal comparison, not a pattern: a device name is whatever its owner
+  # typed, and one containing a regex metacharacter - "lap(top" - made
+  # `grep -P` fail with "missing closing parenthesis" and the send silently
+  # do nothing.
+  picked=""
+  while IFS=$'\t' read -r address label; do
+    [[ $label == "$chosen" ]] && picked=$(printf '%s\t%s' "$address" "$label") && break
+  done <<<"$targets"
 fi
 
 [[ -n $picked ]] || exit 0
