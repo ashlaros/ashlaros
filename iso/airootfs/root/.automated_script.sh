@@ -28,8 +28,24 @@ export FORCE_COLOR=1
 
 # The keyring has to be usable before the installer fetches anything from
 # the cachyos or ashlaros repositories.
-systemctl is-active --quiet pacman-init.service ||
-  systemctl start pacman-init.service 2>/dev/null
+#
+# --no-block, and a timeout on the wait. pacman-init is ordered
+# After=time-sync.target, and systemd-time-wait-sync.service holds that
+# target with TimeoutStartSec=infinity - so on a machine with no network
+# the clock never syncs, the target never arrives, and a blocking start
+# here waits for it forever. Measured: the ISO sat on the login banner
+# with the installer never drawn, which reads as a hung boot rather than
+# as a missing network.
+#
+# Waiting at all is worth it: a keyring that is not yet populated fails
+# every signature check. But an install served entirely from the medium's
+# own cache needs no keyring at all, so a timeout is the right answer and
+# carrying on is better than stopping.
+systemctl start --no-block pacman-init.service 2>/dev/null
+for _ in $(seq 1 30); do
+  systemctl is-active --quiet pacman-init.service && break
+  sleep 1
+done
 
 cd /root || exit 1
 
