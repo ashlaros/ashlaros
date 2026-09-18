@@ -74,10 +74,12 @@ read_state() {
       ((.current_index // 0) | floor),
       ((.total_phases // 1) | floor),
       (.target // "/mnt"),
-      ((.expected_packages // 0) | floor)
+      ((.expected_packages // 0) | floor),
+      ((.floor_permille // 0) | floor),
+      ((.ceiling_permille // 1000) | floor)
     ] | @tsv' "$STATE_FILE" 2>/dev/null) || return 1
   [[ -n $raw ]] || return 1
-  IFS=$'\t' read -r PHASE INDEX TOTAL TARGET EXPECTED <<<"$raw"
+  IFS=$'\t' read -r PHASE INDEX TOTAL TARGET EXPECTED FLOOR CEILING <<<"$raw"
 }
 
 # libalpm makes one directory per package under <target>/var/lib/pacman/local,
@@ -88,11 +90,16 @@ count_packages() {
   find "$dir" -mindepth 1 -maxdepth 1 -type d -printf . 2>/dev/null | wc -c
 }
 
-# Per-mille, so the bar still moves inside a long phase: whole phases set the
-# floor, the package count fills the band up to the next phase's floor.
+# Per-mille, so the bar still moves inside a long phase: the phase's own
+# band sets the floor, the package count fills it up to the next phase's.
+#
+# The band comes from the orchestrator rather than from INDEX/TOTAL here.
+# Thirteen phases are not thirteen equal thirteenths - one is 77% of a
+# real install - and a bar linear in phase count sat in three cells for
+# most of the wall clock (#94). The weights live beside the phase list
+# they describe, in orchestrator/weights.py.
 progress_permille() {
-  local floor=$((INDEX * 1000 / (TOTAL > 0 ? TOTAL : 1)))
-  local ceiling=$(((INDEX + 1) * 1000 / (TOTAL > 0 ? TOTAL : 1)))
+  local floor="$FLOOR" ceiling="$CEILING"
 
   if ((EXPECTED > 0)); then
     local installed
@@ -198,6 +205,10 @@ INDEX=0
 TOTAL=1
 TARGET="/mnt"
 EXPECTED=0
+# an empty bar until the orchestrator says otherwise: the first frame is
+# drawn before any phase has started
+FLOOR=0
+CEILING=0
 
 "${INSTALL_CMD[@]}" >>"$LOG_FILE" 2>&1 &
 child_pid=$!

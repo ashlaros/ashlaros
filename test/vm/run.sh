@@ -5,6 +5,7 @@
 #   run.sh fetch [version]   download an ISO into the workspace
 #   run.sh install           boot the ISO and drive the installer
 #   run.sh install-start     boot the ISO and stop at the first screen
+#   run.sh collect-timing    per-phase install timings off the live ISO
 #   run.sh wait-installed [s]  wait for the installed system to reach sway
 #   run.sh boot              boot the installed disk
 #   run.sh shot <name>       screenshot the framebuffer, as PNG
@@ -37,7 +38,8 @@ ensure_image() {
 sync_scripts() {
   mkdir -p "$workspace/out"
   cp "$here/boot.sh" "$here/qmp.py" "$here/install.py" "$here/unlock.py" \
-    "$here/live_session.py" "$here/verbose_boot.py" "$workspace/"
+    "$here/live_session.py" "$here/verbose_boot.py" "$here/collect_timing.py" \
+    "$workspace/"
 }
 
 start() {
@@ -244,6 +246,12 @@ install-start)
 # exactly the failure a completion message cannot report.
 follow-install)
   follow_install "${2:-1800}"
+  ;;
+# The per-phase timings, off the live ISO while it is still up. Must run
+# before the reboot: /run/ is a tmpfs and the same document on the target
+# is inside the LUKS volume, which is a boot and an unlock away.
+collect-timing)
+  docker exec "$container" python3 /vm/collect_timing.py | sed 's/^/   /'
   ;;
 wait-installed)
   # The installed disk asks for the LUKS passphrase before anything else,

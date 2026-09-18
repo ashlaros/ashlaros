@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .context import InstallContext
 from .ui import error, info
+from .weights import bands
 
 PhaseFn = Callable[[InstallContext], None]
 
@@ -25,6 +26,12 @@ class PhaseError(Exception):
 def run(ctx: InstallContext, phases: list[tuple[str, PhaseFn]]) -> None:
     ctx.state_dir.mkdir(parents=True, exist_ok=True)
     state_path = ctx.state_dir / "state.json"
+    # The bar is linear in TIME, not in phase count: one phase is 77% of a
+    # real install and ten others share 1% between them, so equal
+    # thirteenths left the bar motionless for most of the wall clock (#94).
+    # Published per phase rather than computed in the dashboard, so the
+    # weights live beside the phase list they describe.
+    spans = bands([name for name, _ in phases])
     state = {
         "started_at": time.time(),
         # the dashboard counts packages under <target>/var/lib/pacman/local;
@@ -34,6 +41,8 @@ def run(ctx: InstallContext, phases: list[tuple[str, PhaseFn]]) -> None:
         "current_index": 0,
         "current_phase": "Starting installation",
         "expected_packages": expected_package_count(),
+        "floor_permille": spans[0][0] if spans else 0,
+        "ceiling_permille": spans[0][1] if spans else 1000,
         "phases": [],
     }
     write_state(state_path, state)
@@ -42,6 +51,7 @@ def run(ctx: InstallContext, phases: list[tuple[str, PhaseFn]]) -> None:
         state["current_index"] = index
         state["current_phase"] = name
         state["phase_started_at"] = time.time()
+        state["floor_permille"], state["ceiling_permille"] = spans[index]
         write_state(state_path, state)
 
         info(f"› {name}")
@@ -65,6 +75,10 @@ def run(ctx: InstallContext, phases: list[tuple[str, PhaseFn]]) -> None:
 
     state["current_index"] = max(len(phases) - 1, 0)
     state["current_phase"] = "Installation complete"
+    # a full bar, rather than the last phase's band: the install is done,
+    # and a bar that stops short of the end says otherwise
+    state["floor_permille"] = 1000
+    state["ceiling_permille"] = 1000
     state["finished_at"] = time.time()
     # expected against actual, so drift in the bar's denominator is visible
     # in an acceptance run rather than only by watching the bar creep
