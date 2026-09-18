@@ -298,8 +298,11 @@ def live_pacman_conf() -> str:
     return PACMAN_CONF.replace("[options]\n", added, 1)
 
 
-def write_live_repository_stack() -> None:
+def write_live_repository_stack() -> bool:
     """Give the LIVE system the repositories the target will be built from.
+
+    Returns whether the mirrors answered, so the caller knows whether this
+    install has a network or is being served entirely by the medium.
 
     archinstall pacstraps with `pacstrap -C /etc/pacman.conf`, so the base
     system is resolved against the live system's configuration, not the
@@ -313,10 +316,11 @@ def write_live_repository_stack() -> None:
     used for the live system and copied to the target.
 
     The live copy gains a CacheDir the target's does not. pacstrap resolves
-    against this file, so a package already on the ISO is copied from disk
-    instead of fetched again - seven of them are, firefox among them at
-    88 MB. The target keeps pacman's default cache, because /run/archiso
-    does not exist once the machine reboots.
+    against this file, so a package the ISO carries is copied from disk
+    rather than fetched - which since the cache holds the whole dependency
+    closure is every package an install needs. The target keeps pacman's
+    default cache, because /run/archiso does not exist once the machine
+    reboots.
     """
     live = Path("/etc")
     live.joinpath("pacman.conf").write_text(live_pacman_conf())
@@ -326,10 +330,21 @@ def write_live_repository_stack() -> None:
     (pacman_d / "cachyos-mirrorlist").write_text(CACHYOS_MIRRORLIST)
     (pacman_d / "ashlaros-mirrorlist").write_text(ASHLAROS_MIRRORLIST)
 
-    # the live ISO already trusts these keys - it installed packages from
-    # both repositories at build time - so only the databases need fetching
-    run_command(["pacman", "-Sy", "--noconfirm"])
-    info("› live repositories configured for the target's package stack")
+    # A database sync is how the install learns what the mirrors have, and
+    # it is the first thing that fails on a machine with no network. It is
+    # not fatal: the ISO carries every package an install needs, with
+    # dependencies, so a failed sync means "install what the medium has"
+    # rather than "give up". The live ISO already trusts these keys - it
+    # installed packages from both repositories at build time - so only the
+    # databases were ever being fetched here.
+    result = subprocess.run(
+        ["pacman", "-Sy", "--noconfirm"], capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        info("› live repositories configured for the target's package stack")
+        return True
+    info("› no usable mirrors; installing from the packages on this medium")
+    return False
 
 
 def prepare_live(ctx: InstallContext) -> None:
@@ -338,7 +353,9 @@ def prepare_live(ctx: InstallContext) -> None:
     ctx.state["arch_config_handler"] = handler
     ctx.state["mirror_handler"] = arch.make_mirror_handler()
 
-    write_live_repository_stack()
+    # Recorded, not acted on here: install_system decides what to do with
+    # it, and the dashboard has nothing to say about it either way.
+    ctx.state["online"] = write_live_repository_stack()
 
     config = handler.config
     if arch.is_systemd_boot(config) and not arch.has_uefi():
@@ -353,6 +370,7 @@ def install_system(ctx: InstallContext) -> None:
     handler = ctx.state["arch_config_handler"]
     mirror_handler = ctx.state["mirror_handler"]
     config = handler.config
+    online = ctx.state.get("online", True)
 
     info("› partitioning, formatting and encrypting")
     arch.perform_filesystem_operations(config)
@@ -365,7 +383,12 @@ def install_system(ctx: InstallContext) -> None:
         if arch.is_encrypted(config):
             installer.generate_key_files()
 
-        if config.mirror_config:
+        # set_mirrors ranks and rewrites the mirrorlist, which needs the
+        # network it is ranking. Offline it would spend a timeout per
+        # mirror to arrive at a list nothing can reach; the stack written
+        # by write_live_repository_stack already names servers, and the
+        # cache is what actually serves this install.
+        if config.mirror_config and online:
             installer.set_mirrors(mirror_handler, config.mirror_config, on_target=False)
 
         info("› installing the base system")
@@ -380,7 +403,11 @@ def install_system(ctx: InstallContext) -> None:
             locale_config=locale_config,
         )
 
-        if config.mirror_config:
+        # on_target writes the ranked list into the installed system. Same
+        # reason as above offline, and the installed machine gets the
+        # stack write_repository_stack puts there either way - so it boots
+        # with working mirrors and ranks them when it first has a network.
+        if config.mirror_config and online:
             installer.set_mirrors(mirror_handler, config.mirror_config, on_target=True)
 
         # the repository stack must be in place before any ashlaros-* or

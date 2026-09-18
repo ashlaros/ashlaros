@@ -89,29 +89,38 @@ def expected_versions() -> dict[str, str]:
     return expected
 
 
-def unstaged_overlap(rootfs: Path) -> list[str]:
-    """Packages on both lists that the staged cache does not carry.
+def unstaged_requests(rootfs: Path) -> list[str]:
+    """Packages the installer will ask for that the staged cache lacks.
 
-    Seven packages are installed on the live ISO and requested again by the
-    installer, so seed_install_cache.py stages them on the medium and the
-    install copies them instead of downloading them a second time (#82).
-    The overlap is derived from the two lists, so either changing moves it -
-    and a moved overlap nothing staged is a silent return to fetching
-    firefox twice, which only a timed install would reveal.
+    The ISO carries the whole dependency closure so an install works with
+    no network at all, which makes this the check that the promise is
+    true: every name the installer requests must be answerable from the
+    medium, or a machine with no mirrors stops partway through pacstrap
+    with a disk already partitioned.
+
+    Names only, not the closure. A name is what install_system asks for;
+    if pacman resolved a name at stage time it staged its dependencies
+    too, so a complete set of names with a complete stage behind each is
+    the whole invariant. Checking the closure here would mean resolving it
+    a second way and disagreeing with pacman about providers.
 
     The lists are read with seed_install_cache's own parsers: a second copy
     here would disagree with the staging the first time either file changed
     shape, and disagree silently.
     """
-    overlap = set(seed_install_cache.iso_packages()) & set(
-        seed_install_cache.desktop_packages()
-    )
-    if not overlap:
-        return []
+    requested = {
+        "base",
+        *seed_install_cache.iso_packages(),
+        *seed_install_cache.desktop_packages(),
+    }
 
     cache = rootfs / seed_install_cache.cache_path().relative_to("/")
-    cached = {path.name.rsplit("-", 3)[0] for path in cache.glob("*.pkg.tar.zst")}
-    return sorted(overlap - cached)
+    cached = {
+        path.name.rsplit("-", 3)[0]
+        for path in cache.glob("*.pkg.tar.*")
+        if path.suffix != ".sig"
+    }
+    return sorted(requested - cached)
 
 
 def main() -> int:
@@ -146,12 +155,12 @@ def main() -> int:
         print("no ashlaros-* packages in the rootfs", file=sys.stderr)
         return 2
 
-    missing = unstaged_overlap(args.rootfs)
+    missing = unstaged_requests(args.rootfs)
     if missing:
         print(
-            "these packages are on the ISO and in DESKTOP_PACKAGES but are not "
-            "staged in the ISO's cache, so the install will download them "
-            f"again: {', '.join(missing)}",
+            "these packages are requested by the installer but are not staged "
+            "in the ISO's cache, so an install with no network stops partway "
+            f"through with the disk already written: {', '.join(missing)}",
             file=sys.stderr,
         )
         return 1

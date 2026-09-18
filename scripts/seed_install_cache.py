@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """Stage the packages the installer will ask for into the live ISO.
 
-The install is network-bound: install_system() pacstraps the base system and
-then adds DESKTOP_PACKAGES, all from mirrors - including packages the live
-ISO already carries. firefox alone is ~88 MB fetched twice, once to build the
-live root and once to write it to the target (#82).
+The ISO carries every package an install needs, with dependencies, so the
+install is a local copy rather than a network download and a machine with
+no network can still be installed.
 
-phases_impl.py already points the live system's CacheDir at
-ISO_PACKAGE_CACHES and falls through to the mirrors on a miss. This is the
-other half: putting the packages there. Without it that CacheDir names an
-empty directory and every install downloads everything.
+That is a deliberate reversal of #82, which staged the named packages
+alone (--nodeps) and kept the install network-bound: 139 names against a
+719-package closure meant 594 packages - glibc and alsa-lib among them -
+were never on the medium, so the cache saved bandwidth and nothing more.
+The cost is the one #82 priced and declined at the time: roughly 1.1 GiB
+of packages and an ISO near 3.1 GB rather than 2.0, much of it a second
+copy of files already unpacked in the same squashfs.
+
+phases_impl.py points the live system's CacheDir at ISO_PACKAGE_CACHES and
+falls through to the mirrors on a miss. This is the other half: putting
+the packages there. Without it that CacheDir names an empty directory and
+every install downloads everything.
 
 The path is ISO_PACKAGE_CACHES, imported rather than repeated - the two
 halves agreeing is the whole mechanism, and a second literal beside it is one
@@ -93,26 +100,36 @@ def iso_packages() -> list[str]:
 
 
 def download(packages: list[str], cache: Path, pacman_conf: Path) -> None:
-    """Populate `cache` with exactly `packages`, not their dependencies.
+    """Populate `cache` with `packages` AND their whole dependency closure.
 
-    --nodeps twice, because the closure is the expensive half and buys
-    nothing here. Measured on a built ISO: the closure stages 686 packages,
-    of which 487 are already unpacked in the same squashfs - 1245 MiB of a
-    1454 MiB cache is a second copy of files the medium carries, and the
-    ISO grew 1.98 -> 3.52 GB for it.
+    With dependencies, deliberately. This used to pass --nodeps twice and
+    stage only the named packages, which made the cache a bandwidth
+    optimisation rather than a source: 139 names against a 719-package
+    closure, so 594 of the packages an install needs - glibc, alsa-lib,
+    accountsservice - were never on the medium and every install was bound
+    to the network whatever the cache held.
 
-    That is issue #82's option 2, "a genuine judgement call ... decided
-    deliberately rather than by imitation", arrived at by accident. Option 1
-    is what it calls unambiguously worth doing: serve the overlap the live
-    ISO already has. Everything else keeps coming from the mirrors, as it
-    does today.
+    The closure is what makes an offline install possible at all, and that
+    is now the point of the ISO rather than a saving on top of it. It costs
+    what #82 measured it would: ~1.1 GiB of packages, most of which is a
+    second copy of files already unpacked in the same squashfs, and an ISO
+    around 3.1 GB rather than 2.0.
 
-    Retried, because this fetches ~1.5 GB from mirrors and one slow file
-    fails the whole transaction: build-iso failed twice in a row here, on
-    'speexdsp ... Operation too slow' from mirror.cachyos.org and on a
+    Retried, because this fetches over a gigabyte from mirrors and one slow
+    file fails the whole transaction: build-iso failed twice in a row here,
+    on 'speexdsp ... Operation too slow' from mirror.cachyos.org and on a
     file that vanished mid-publish. --disable-download-timeout relaxes the
     first; a retry covers the rest, and already-fetched files stay in the
     cache so an attempt resumes rather than restarts.
+
+    --noconfirm is doing more than suppressing a prompt. Resolving the
+    closure asks which provider to take sixteen times - gawk, ncurses,
+    iptables, jack and the rest exist in both a v3 repository and core or
+    extra - and --noconfirm takes the default, which is the first
+    repository listed. That is the same rule the install itself resolves
+    by, so the cache holds the v3 build the target would have fetched
+    (verified: gawk staged as gawk-5.4.1-1.1-x86_64_v3). Reordering the
+    repositories in iso/pacman.conf would silently change what is cached.
     """
     cache.mkdir(parents=True, exist_ok=True)
     dbpath = cache.parent / "db"
@@ -124,14 +141,12 @@ def download(packages: list[str], cache: Path, pacman_conf: Path) -> None:
         "--noconfirm",
         "--disable-download-timeout",
     ]
-    # on the download only: a database sync has no dependencies to skip
-    nodeps = ["--nodeps", "--nodeps"]
     subprocess.run(["pacman", "-Sy", *common], check=True)
 
     attempts = 3
     for attempt in range(1, attempts + 1):
         result = subprocess.run(
-            ["pacman", "-Sw", *common, *nodeps, "--cachedir", str(cache), *packages],
+            ["pacman", "-Sw", *common, "--cachedir", str(cache), *packages],
             check=False,
         )
         if result.returncode == 0:
@@ -157,10 +172,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    packages = sorted(set(iso_packages() + desktop_packages()))
+    # `base` explicitly: minimal_installation() pacstraps it and it appears
+    # in neither list, so without it the one transaction that runs before
+    # any other is the one with nothing cached to serve it.
+    packages = sorted({"base", *iso_packages(), *desktop_packages()})
     cache = args.rootfs / cache_path().relative_to("/")
 
-    print(f"staging {len(packages)} requested packages into {cache}")
+    print(f"staging {len(packages)} requested packages, with dependencies, into {cache}")
     download(packages, cache, args.pacman_conf)
 
     staged = sorted(cache.glob("*.pkg.tar.*"))
