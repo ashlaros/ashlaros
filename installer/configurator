@@ -75,8 +75,15 @@ abort() {
 
 # STEP 1: LOCALE & KEYBOARD
 
-# en_US.UTF-8 with a de keymap is the EU default: an English system whose
+# en_US.UTF-8 with a de keyboard is the EU default: an English system whose
 # keyboard matches the hardware most of our users have.
+#
+# The LAYOUT is what gets chosen, not the console keymap. The desktop is
+# sway, which takes an XKB layout; the console keymap is a second namespace
+# that only the TTY and the initramfs use. Choosing the console one first
+# was backwards - it offered eleven include fragments as if they were
+# layouts, and a real install came back with KEYMAP=euro, which is six
+# lines binding Alt+E to the euro sign and defines no letters at all.
 locale_keymap_form() {
   step "Locale and keyboard"
 
@@ -84,16 +91,25 @@ locale_keymap_form() {
   choice=$(gum choose --header "Layout" --selected "EU (en_US.UTF-8, de keyboard)" \
     "EU (en_US.UTF-8, de keyboard)" \
     "US (en_US.UTF-8, us keyboard)" \
+    "EurKEY (en_US.UTF-8, eu keyboard)" \
     "Other...") || abort
 
   case "$choice" in
-  "EU"*)
+  "EU "*)
     locale="en_US.UTF-8"
-    keymap="de"
+    layout="de"
     ;;
   "US"*)
     locale="en_US.UTF-8"
-    keymap="us"
+    layout="us"
+    ;;
+  "EurKEY"*)
+    # A US layout with the western European letters on AltGr, so one
+    # keyboard writes English, German, French and the Nordics without
+    # switching. XKB only: xkeyboard-config ships symbols/eu and kbd has
+    # no console equivalent, so the TTY falls back below.
+    locale="en_US.UTF-8"
+    layout="eu"
     ;;
   *)
     # arguments rather than a pipe: gum reads piped choices from stdin and
@@ -103,16 +119,68 @@ locale_keymap_form() {
       en_US.UTF-8 en_GB.UTF-8 de_DE.UTF-8 fr_FR.UTF-8 es_ES.UTF-8 \
       it_IT.UTF-8 nl_NL.UTF-8 pt_PT.UTF-8 pl_PL.UTF-8 sv_SE.UTF-8 \
       da_DK.UTF-8 nb_NO.UTF-8 fi_FI.UTF-8 cs_CZ.UTF-8 ja_JP.UTF-8) || abort
-    keymap=$(localectl list-keymaps 2>/dev/null |
-      gum filter --header "Keymap" --placeholder "type to filter" --value "de") || abort
+    layout=$(xkb_layouts |
+      gum filter --header "Keyboard layout" --placeholder "type to filter" --value "de") || abort
     ;;
   esac
+
+  keymap=$(console_keymap_for "$layout")
+
+  # The console keymap is a separate namespace and not every layout has
+  # one - `eu` has none at all. Offered rather than assumed, because this
+  # is what the TTY, the initramfs and the LUKS passphrase prompt use, and
+  # a passphrase typed on the wrong keymap is a disk that will not open.
+  if [[ $choice == "Other..." ]] || [[ -z $keymap ]]; then
+    keymap=$(localectl list-keymaps 2>/dev/null |
+      keymaps_only |
+      gum filter --header "Console keymap (TTY, initramfs, disk unlock)" \
+        --placeholder "type to filter" --value "${keymap:-us}") || abort
+  fi
 
   # loadkeys only works on a virtual console, not in a terminal emulator
   [[ $(tty 2>/dev/null) == /dev/tty[0-9]* ]] && loadkeys "$keymap" 2>/dev/null
 
   timezone=$(timedatectl show --property=Timezone --value 2>/dev/null)
   [[ -n $timezone ]] || timezone="UTC"
+}
+
+# The XKB layouts sway can load: xkeyboard-config's own registry, plus the
+# ones it ships symbols for but does not register. `eu` is the reason that
+# second half exists - EurKEY is in symbols/eu and in no rules list, so a
+# registry-only reading of "what is supported" leaves it out.
+XKB_RULES_LST=/usr/share/X11/xkb/rules/evdev.lst
+XKB_SYMBOLS_DIR=/usr/share/X11/xkb/symbols
+XKB_UNREGISTERED=(eu)
+
+xkb_layouts() {
+  {
+    awk '/^! layout/ { inside = 1; next } /^! / { inside = 0 } inside && NF { print $1 }' \
+      "$XKB_RULES_LST" 2>/dev/null
+    local name
+    for name in "${XKB_UNREGISTERED[@]}"; do
+      [[ -f $XKB_SYMBOLS_DIR/$name ]] && echo "$name"
+    done
+  } | sort -u
+}
+
+# Fragments dropped. localectl lists everything under the keymap tree, and
+# eleven of those live in an include/ directory: they are pieces a layout
+# includes, not layouts, and selecting one leaves a console with no
+# letters.
+keymaps_only() {
+  grep -vxE 'euro[12]?|mac-euro2?|applkey|backspace|ctrl|keypad|unicode|windowkeys'
+}
+
+# The console keymap that matches an XKB layout, or empty when there is
+# none. systemd ships the table localectl itself uses; read backwards,
+# because here the layout is known and the keymap is wanted.
+console_keymap_for() {
+  local layout="$1"
+  [[ -r /usr/share/systemd/kbd-model-map ]] || { echo "$layout"; return; }
+  awk -v want="$layout" '
+    !/^#/ && NF >= 2 && $2 == want { print $1; found = 1; exit }
+    END { if (!found) exit 1 }
+  ' /usr/share/systemd/kbd-model-map 2>/dev/null || true
 }
 
 # STEP 2: USER
@@ -335,8 +403,8 @@ encryption_summary() {
 confirm_form() {
   clear_logo
   echo
-  printf 'Field,Value\nUser,%s\nHostname,%s\nAutologin,%s\nLocale,%s\nKeymap,%s\nTimezone,%s\nDisk,%s\nLayout,%s\nEncryption,%s\n' \
-    "$username" "$hostname" "$autologin" "$locale" "$keymap" "$timezone" \
+  printf 'Field,Value\nUser,%s\nHostname,%s\nAutologin,%s\nLocale,%s\nKeyboard,%s\nConsole keymap,%s\nTimezone,%s\nDisk,%s\nFilesystem,%s\nEncryption,%s\n' \
+    "$username" "$hostname" "$autologin" "$locale" "$layout" "$keymap" "$timezone" \
     "$disk" "$filesystem" "$(encryption_summary)" |
     gum table -s "," -p | sed "s/^/${PADDING_LEFT_SPACES}/"
   echo
@@ -429,7 +497,8 @@ write_config() {
 	        "tpm_unlock": "$tpm_unlock",
 	        "filesystem": "$filesystem",
 	        "root_obj_id": "$ROOT_OBJ_ID",
-	        "boot": { "esp_mount": "/boot" }
+	        "boot": { "esp_mount": "/boot" },
+	        "xkb_layout": "$layout"
 	    },
 	    "disk_config": {
 	        "config_type": "default_layout",

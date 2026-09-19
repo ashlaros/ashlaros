@@ -549,19 +549,29 @@ def install_bootloader(ctx: InstallContext, installer, config) -> bool:
 
 
 def configure_system(ctx: InstallContext) -> None:
-    """The settings archinstall does not own: the keymap, for both the
-    virtual console and X11/Wayland."""
+    """The settings archinstall does not own: the keyboard, for both the
+    virtual console and the desktop."""
     handler = ctx.state["arch_config_handler"]
     config = handler.config
 
     keymap = config.locale_config.kb_layout if config.locale_config else ""
     if keymap:
         (ctx.target / "etc/vconsole.conf").write_text(f"KEYMAP={keymap}\n")
-        write_x11_keymap(ctx, keymap)
+
+    # The configurator asks for the XKB layout, because that is what sway
+    # takes and it is the namespace with the layouts people name - EurKEY
+    # is `eu` there and has no console keymap at all. Derived from the
+    # keymap only for a configuration written before that question existed.
+    layout = ctx.ashlaros_install.get("xkb_layout") or ""
+    variant = ""
+    if not layout and keymap:
+        layout, variant = x11_layout_for(keymap)
+    if layout:
+        write_x11_keymap(ctx, layout, variant)
 
 
-def write_x11_keymap(ctx: InstallContext, keymap: str) -> None:
-    """Give the desktop the keymap the user chose, not just the console.
+def write_x11_keymap(ctx: InstallContext, layout: str, variant: str = "") -> None:
+    """Give the desktop the layout the user chose, not just the console.
 
     vconsole.conf sets the virtual console alone. The sway config asks
     localectl for the *X11 Layout* (see keyboard.sh) and that comes from
@@ -572,8 +582,6 @@ def write_x11_keymap(ctx: InstallContext, keymap: str) -> None:
     the chroot needs a dbus the target is not running. The file is small
     and its format is stable, so it is written directly.
     """
-    layout, variant = x11_layout_for(keymap)
-
     conf = ctx.target / "etc/X11/xorg.conf.d/00-keyboard.conf"
     conf.parent.mkdir(parents=True, exist_ok=True)
     options = [f'Option "XkbLayout" "{layout}"']
@@ -590,7 +598,7 @@ def write_x11_keymap(ctx: InstallContext, keymap: str) -> None:
         f"{body}\n"
         "EndSection\n"
     )
-    info(f"› keymap {keymap}: console and X11 layout {layout}")
+    info(f"› desktop layout {layout}{f' ({variant})' if variant else ''}")
 
 
 # Console keymaps and X11 layouts are different namespaces: `de-latin1` is a
