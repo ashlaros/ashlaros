@@ -378,7 +378,24 @@ def install_system(ctx: InstallContext) -> None:
     info("› opening the installer context")
     with arch.open_installer(config, ctx.target, silent=True) as installer:
         installer.mount_ordered_layout()
-        installer.sanity_check()
+        # Told whether this install has a network, rather than taking the
+        # defaults. sanity_check -> _verify_service_stop loops on
+        # `timedatectl show --property=NTPSynchronized` with a 1s sleep and
+        # NO ceiling, so with no route it never returns: measured on a
+        # NET=no run, the orchestrator sat in nanosleep for half an hour
+        # with the disk already partitioned and not one package written.
+        # `offline` also skips a 60s reflector wait that has nothing to
+        # wait for.
+        #
+        # Guarded, because archinstall adds and drops parameters between
+        # releases and passing one it does not take is a TypeError with a
+        # wiped disk behind it.
+        checks = {}
+        if arch.method_accepts(installer.sanity_check, "skip_ntp"):
+            checks["skip_ntp"] = not online
+        if arch.method_accepts(installer.sanity_check, "offline"):
+            checks["offline"] = not online
+        installer.sanity_check(**checks)
 
         if arch.is_encrypted(config):
             installer.generate_key_files()
