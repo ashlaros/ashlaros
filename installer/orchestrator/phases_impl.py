@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import uuid
 from dataclasses import replace
 from pathlib import Path
 
@@ -550,7 +551,7 @@ def install_bootloader(ctx: InstallContext, installer, config) -> bool:
 
 def configure_system(ctx: InstallContext) -> None:
     """The settings archinstall does not own: the keyboard, for both the
-    virtual console and the desktop."""
+    virtual console and the desktop, and the Wi-Fi the installer used."""
     handler = ctx.state["arch_config_handler"]
     config = handler.config
 
@@ -568,6 +569,61 @@ def configure_system(ctx: InstallContext) -> None:
         layout, variant = x11_layout_for(keymap)
     if layout:
         write_x11_keymap(ctx, layout, variant)
+
+    write_wifi_connection(ctx)
+
+
+def write_wifi_connection(ctx: InstallContext) -> None:
+    """Carry the installer's Wi-Fi into the installed system.
+
+    A user who typed a passphrase to reach the mirrors should not type it
+    again at the first desktop login, on the machine they just installed.
+
+    Translated rather than copied: the ISO associates with iwd, which keeps
+    its own state in /var/lib/iwd, and the installed system runs
+    NetworkManager, which reads keyfiles from
+    /etc/NetworkManager/system-connections. Copying iwd's file across would
+    leave it unread by anything.
+
+    0600 and owned by root, which NetworkManager requires: it refuses to
+    load a system connection any other user can read, and says so only in
+    its journal.
+    """
+    wifi = ctx.user_credentials.get("wifi") or {}
+    ssid = wifi.get("ssid")
+    if not ssid:
+        return
+
+    passphrase = wifi.get("passphrase") or ""
+    security = (
+        "\n[wifi-security]\nkey-mgmt=wpa-psk\npsk=" + passphrase + "\n" if passphrase else ""
+    )
+
+    directory = ctx.target / "etc/NetworkManager/system-connections"
+    directory.mkdir(parents=True, exist_ok=True)
+    # the filename is cosmetic to NetworkManager, which reads the id
+    # inside; a slash in an SSID would otherwise name a directory
+    connection = directory / f"{ssid.replace('/', '_')}.nmconnection"
+    connection.write_text(
+        "# Written by the AshlarOS installer: the network the install ran over.\n"
+        "[connection]\n"
+        f"id={ssid}\n"
+        # NetworkManager generates one when it is missing, but then rewrites
+        # the file to store it; writing it here keeps what ships identical
+        # to what runs. Derived from the SSID, so a reinstall onto the same
+        # network does not leave two connections that differ only by id.
+        f"uuid={uuid.uuid5(uuid.NAMESPACE_DNS, 'ashlaros-wifi:' + ssid)}\n"
+        "type=wifi\n"
+        "autoconnect=true\n"
+        "\n[wifi]\n"
+        "mode=infrastructure\n"
+        f"ssid={ssid}\n"
+        f"{security}"
+        "\n[ipv4]\nmethod=auto\n"
+        "\n[ipv6]\nmethod=auto\n"
+    )
+    connection.chmod(0o600)
+    info(f"› {ssid}: the installed system will reconnect on its own")
 
 
 def write_x11_keymap(ctx: InstallContext, layout: str, variant: str = "") -> None:

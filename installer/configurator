@@ -183,6 +183,113 @@ console_keymap_for() {
   ' /usr/share/systemd/kbd-model-map 2>/dev/null || true
 }
 
+# STEP 1b: NETWORK
+
+# The ISO carries every package an install needs, so this is optional by
+# design: skipping it installs the versions baked into the image. Taking
+# it means pacman resolves against the mirrors instead, and the machine
+# comes up current rather than as old as the medium.
+#
+# Offered before the rest because it changes what gets installed, not just
+# how: a user who connects here gets today's packages, and one who does
+# not still gets a working system.
+#
+# Ethernet needs nothing - systemd-networkd DHCPs any wired link on its
+# own - so this asks only when there is no route yet, and only about
+# Wi-Fi, which is the one that cannot configure itself.
+network_form() {
+  online && return 0
+  wireless_device || return 0
+
+  step "Network"
+  say "The install medium carries a complete set of packages, so this is"
+  say "optional: without a network you get the versions on the image, and"
+  say "with one you get today's."
+  echo
+
+  gum confirm --affirmative "Connect to Wi-Fi" --negative "Install offline" \
+    "Connect to a network?" || return 0
+
+  wifi_connect
+}
+
+# Whether anything answers. `ip route` rather than a ping: a machine can
+# have a default route and still sit behind a portal, and what matters
+# here is only whether pacman has somewhere to try.
+online() {
+  ip route show default 2>/dev/null | grep -q .
+}
+
+# The first wireless interface, or nothing. iwd names its devices after
+# the kernel's, so this is the name iwctl wants too.
+wireless_device() {
+  local device
+  for device in /sys/class/net/*/wireless; do
+    [[ -e $device ]] || continue
+    basename "$(dirname "$device")"
+    return 0
+  done
+  return 1
+}
+
+wifi_connect() {
+  local device ssid passphrase
+  device=$(wireless_device) || return 0
+
+  while true; do
+    step "Wi-Fi"
+
+    # iwd scans on its own once the device is up, but a fresh boot has
+    # usually not finished one by the time anybody reaches this screen.
+    gum spin --title "Scanning for networks..." -- \
+      sh -c "iwctl station '$device' scan >/dev/null 2>&1; sleep 3"
+
+    local networks
+    networks=$(iwctl station "$device" get-networks 2>/dev/null |
+      sed 's/\x1b\[[0-9;]*m//g' |
+      awk 'NR > 4 && NF { $NF = ""; $(NF - 1) = ""; sub(/^[[:space:]*>]+/, ""); sub(/[[:space:]]+$/, ""); if (length) print }')
+
+    if [[ -z $networks ]]; then
+      say --foreground 1 "No networks found."
+      gum confirm --affirmative "Scan again" --negative "Install offline" "" || return 0
+      continue
+    fi
+
+    ssid=$(printf '%s\n' "$networks" |
+      gum filter --header "Network" --placeholder "type to filter") || return 0
+    [[ -n $ssid ]] || return 0
+
+    passphrase=$(gum input --password --header "Passphrase for $ssid" \
+      --placeholder "leave empty for an open network") || return 0
+
+    local output
+    if [[ -n $passphrase ]]; then
+      output=$(iwctl --passphrase "$passphrase" station "$device" connect "$ssid" 2>&1)
+    else
+      output=$(iwctl station "$device" connect "$ssid" 2>&1)
+    fi
+
+    # Association is not a route. systemd-networkd still has to DHCP, and
+    # reporting success before it does would send the install at mirrors
+    # it cannot reach yet.
+    if gum spin --title "Getting an address..." -- \
+      sh -c 'for _ in $(seq 1 20); do ip route show default | grep -q . && exit 0; sleep 1; done; exit 1'; then
+      say "Connected to $ssid."
+      # Remembered for the installed system, which runs NetworkManager
+      # rather than the ISO's iwd: a user who typed a passphrase to get
+      # current packages should not have to type it again at the first
+      # desktop login.
+      wifi_ssid="$ssid"
+      wifi_passphrase="$passphrase"
+      sleep 1
+      return 0
+    fi
+
+    say --foreground 1 "Could not connect to $ssid.${output:+ $output}"
+    gum confirm --affirmative "Try again" --negative "Install offline" "" || return 0
+  done
+}
+
 # STEP 2: USER
 
 user_form() {
@@ -620,7 +727,7 @@ write_config() {
 	            "groups": ["input"],
 	            "sudo": true
 	        }
-	    ]$([[ $encrypt == true ]] && printf ',\n    "encryption_password": %s' "$password_json")$([[ -n $tpm_pin ]] && printf ',\n    "tpm_pin": %s' "$(printf '%s' "$tpm_pin" | jq -Rsa .)")
+	    ]$([[ $encrypt == true ]] && printf ',\n    "encryption_password": %s' "$password_json")$([[ -n $tpm_pin ]] && printf ',\n    "tpm_pin": %s' "$(printf '%s' "$tpm_pin" | jq -Rsa .)")$([[ -n $wifi_ssid ]] && printf ',\n    "wifi": { "ssid": %s, "passphrase": %s }' "$(printf '%s' "$wifi_ssid" | jq -Rsa .)" "$(printf '%s' "$wifi_passphrase" | jq -Rsa .)")
 	}
 	EOF
 
@@ -640,9 +747,14 @@ encrypt=true
 tpm_unlock=none
 tpm_pin=""
 filesystem="btrfs"
+# set by wifi_connect when a network was joined, and carried into the
+# installed system so the first desktop login is already online
+wifi_ssid=""
+wifi_passphrase=""
 
 while true; do
   locale_keymap_form
+  network_form
   user_form
   encryption_form
   disk_form
