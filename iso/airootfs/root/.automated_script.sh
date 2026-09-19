@@ -65,6 +65,4 @@ ashlaros-install-dashboard \
   "$ASHLAROS_INSTALL_LOG_FILE" \
   /run/ashlaros-install/state.json \
   -- \
-  ashlaros-install \
-  --config /root/user_configuration.json \
-  --creds /root/user_credentials.json
+  ashlaros-install

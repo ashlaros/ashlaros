@@ -3,6 +3,12 @@
 # Live-ISO entry point for the install orchestrator, invoked by the dashboard
 # after the configurator has written its JSON.
 #
+#   ashlaros-install [--config <path>] [--creds <path>]
+#
+# Both default to /root/user_configuration.json and
+# /root/user_credentials.json, which is where the configurator writes them -
+# so re-running a failed install is `ashlaros-install` and nothing else.
+#
 # The flags become environment variables before python starts: archinstall
 # parses sys.argv at import time and would reject flags of ours.
 set -eEo pipefail

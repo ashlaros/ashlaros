@@ -10,6 +10,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+# Where the configurator writes them, and the only place anything has ever
+# looked. Named here rather than in the wrapper so `python -m
+# orchestrator.main` behaves the same as `ashlaros-install`.
+DEFAULT_CONFIG = Path("/root/user_configuration.json")
+DEFAULT_CREDS = Path("/root/user_credentials.json")
+
 
 @dataclass
 class InstallContext:
@@ -30,18 +36,19 @@ class InstallContext:
 
     @classmethod
     def from_env(cls) -> InstallContext:
-        config_str = os.environ.get("ASHLAROS_INSTALL_CONFIG")
-        creds_str = os.environ.get("ASHLAROS_INSTALL_CREDS")
-        if not config_str or not creds_str:
-            raise RuntimeError(
-                "ASHLAROS_INSTALL_CONFIG and ASHLAROS_INSTALL_CREDS must both be set"
-            )
-
-        config_path = Path(config_str)
-        creds_path = Path(creds_str)
+        # The configurator writes both to /root, and nothing else has ever
+        # written them anywhere else - so default to that rather than make
+        # a re-run after a failed install remember two flags. The
+        # environment still wins, which is what OUTPUT_DIR in the
+        # configurator needs to stay overridable.
+        config_path = Path(os.environ.get("ASHLAROS_INSTALL_CONFIG") or DEFAULT_CONFIG)
+        creds_path = Path(os.environ.get("ASHLAROS_INSTALL_CREDS") or DEFAULT_CREDS)
         for path in (config_path, creds_path):
             if not path.is_file():
-                raise RuntimeError(f"{path} does not exist")
+                raise RuntimeError(
+                    f"{path} does not exist - run ashlaros-configurator first, "
+                    "or name another with --config/--creds"
+                )
 
         user_configuration = json.loads(config_path.read_text())
         user_credentials = json.loads(creds_path.read_text())
