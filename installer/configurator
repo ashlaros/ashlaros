@@ -367,8 +367,19 @@ write_config() {
   [[ $disk_size =~ ^[0-9]+$ ]] || abort "$disk reported a nonsensical size: $disk_size"
 
   root_start=$((esp_start + esp_size))
-  # leave a mebibyte for the GPT backup header
-  root_size=$((disk_size - root_start - 1024 * 1024))
+  # Rounded DOWN to a mebibyte, after leaving one for the GPT backup
+  # header. Both partitions start on a MiB boundary already, but the root
+  # SIZE came straight off blockdev, so its end landed wherever the disk
+  # happened to end - and a real disk is not a round number. parted warns
+  # "Partition is misaligned" and archinstall stops there, which is how
+  # this failed on a 512110190592-byte NVMe.
+  #
+  # Invisible in test/vm: the harness qcow2 is exactly 20 GiB, so every
+  # boundary divides cleanly and the bug cannot appear there.
+  #
+  # The lost bytes are under a mebibyte on a disk of hundreds of gigabytes.
+  # An end that a 4Kn drive can address is worth more than they are.
+  root_size=$(((disk_size - root_start - 1024 * 1024) / (1024 * 1024) * (1024 * 1024)))
 
   # 1 GiB ESP plus a root worth having; below this the install fills the
   # disk and fails at a random package instead of here
