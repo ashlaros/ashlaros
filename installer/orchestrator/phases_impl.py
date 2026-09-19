@@ -30,6 +30,17 @@ from .ui import error, info
 # other path survives, so the build stages one here.
 ISO_PACKAGE_CACHES = (Path("/var/cache/ashlaros/pkg"),)
 
+# The sync databases those packages were resolved against, staged beside
+# them by seed_install_cache.py.
+#
+# A cache of packages is not enough to install from. pacman resolves a
+# NAME against a database and only then looks for the file, so with no
+# database it answers "target not found" however full the cache is -
+# which is how an offline install failed two minutes in with the disk
+# already partitioned. Offline there is no `pacman -Sy` to build one, so
+# the databases have to come off the medium too.
+ISO_PACKAGE_DB = Path("/var/cache/ashlaros/db")
+
 PACMAN_CONF = """\
 #
 # /etc/pacman.conf
@@ -344,8 +355,46 @@ def write_live_repository_stack() -> bool:
     if result.returncode == 0:
         info("› live repositories configured for the target's package stack")
         return True
-    info("› no usable mirrors; installing from the packages on this medium")
+
+    staged = use_staged_databases()
+    if staged:
+        info("› no usable mirrors; installing from the packages on this medium")
+    else:
+        error(
+            "no usable mirrors and no databases staged on this medium: "
+            f"{result.stderr.strip() or result.stdout.strip()}"
+        )
     return False
+
+
+def use_staged_databases(sync: Path = Path("/var/lib/pacman/sync")) -> bool:
+    """Put the medium's sync databases where pacman will read them.
+
+    Returns whether any were found.
+
+    Without this an offline install has a full package cache and no way to
+    use it: pacman resolves a name against a database first, so every
+    target is "not found" and pacstrap dies with the disk already
+    partitioned. `pacman -Sy` is what normally writes these and it is
+    exactly what just failed, so they are copied off the medium instead.
+
+    Copied rather than pointed at with --dbpath: pacstrap runs inside
+    archinstall and takes no dbpath of ours, and /var/lib/pacman on the
+    live ISO is a tmpfs that is thrown away with the session anyway.
+
+    mkarchiso empties /var/lib/pacman/sync and /var/cache/pacman/pkg before
+    it packs the squashfs, which is why the staged copies live under
+    /var/cache/ashlaros - a path it does not touch.
+    """
+    staged = sorted(ISO_PACKAGE_DB.glob("sync/*.db"))
+    if not staged:
+        return False
+
+    sync.mkdir(parents=True, exist_ok=True)
+    for database in staged:
+        shutil.copy2(database, sync / database.name)
+    info(f"› {len(staged)} package databases from the medium")
+    return True
 
 
 def prepare_live(ctx: InstallContext) -> None:

@@ -123,6 +123,23 @@ def unstaged_requests(rootfs: Path) -> list[str]:
     return sorted(requested - cached)
 
 
+def staged_databases(rootfs: Path) -> list[str]:
+    """The sync databases staged beside the cache.
+
+    A cache of packages cannot be installed from on its own: pacman
+    resolves a name against a database before it looks for a file, so with
+    no database every target is "not found" however full the cache is.
+    That is not a theoretical gap - it is how an offline install failed two
+    minutes in with the disk already partitioned.
+
+    Checked here because the failure is invisible until someone installs
+    without a network: every CI test-install has mirrors and would pass
+    with an empty database directory.
+    """
+    database_dir = rootfs / seed_install_cache.cache_path().parent.relative_to("/") / "db"
+    return sorted(path.name for path in database_dir.glob("sync/*.db"))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -164,6 +181,17 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    databases = staged_databases(args.rootfs)
+    if not databases:
+        print(
+            "the ISO stages packages but no sync databases, so pacman cannot "
+            "resolve a single name without a network and an offline install "
+            "fails after partitioning the disk",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"{len(databases)} package databases staged: {', '.join(databases)}")
 
     stale = []
     for name, want in sorted(expected.items()):
