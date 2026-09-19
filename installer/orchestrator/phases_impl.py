@@ -356,7 +356,10 @@ def write_live_repository_stack() -> bool:
         info("› live repositories configured for the target's package stack")
         return True
 
-    staged = use_staged_databases()
+    # The live system's own copy, so anything run outside the target -
+    # pacman -Si, a hook, a retry - resolves too. The target gets its own
+    # in install_system, once there is a filesystem to put it on.
+    staged = use_staged_databases(Path("/"))
     if staged:
         info("› no usable mirrors; installing from the packages on this medium")
     else:
@@ -367,7 +370,7 @@ def write_live_repository_stack() -> bool:
     return False
 
 
-def use_staged_databases(sync: Path = Path("/var/lib/pacman/sync")) -> bool:
+def use_staged_databases(*roots: Path) -> bool:
     """Put the medium's sync databases where pacman will read them.
 
     Returns whether any were found.
@@ -378,6 +381,13 @@ def use_staged_databases(sync: Path = Path("/var/lib/pacman/sync")) -> bool:
     partitioned. `pacman -Sy` is what normally writes these and it is
     exactly what just failed, so they are copied off the medium instead.
 
+    Into each root's own `var/lib/pacman/sync`, and the TARGET's is the one
+    that matters: `pacman --root` defaults its dbpath to
+    `<root>/var/lib/pacman`, so the databases the live system holds are not
+    the databases a pacstrap of the target reads. Measured both ways - live
+    only reproduces `error: target not found`, and the target's copy
+    resolves.
+
     Copied rather than pointed at with --dbpath: pacstrap runs inside
     archinstall and takes no dbpath of ours, and /var/lib/pacman on the
     live ISO is a tmpfs that is thrown away with the session anyway.
@@ -386,14 +396,15 @@ def use_staged_databases(sync: Path = Path("/var/lib/pacman/sync")) -> bool:
     it packs the squashfs, which is why the staged copies live under
     /var/cache/ashlaros - a path it does not touch.
     """
-    staged = sorted(ISO_PACKAGE_DB.glob("sync/*.db"))
+    staged = sorted(ISO_PACKAGE_DB.glob("sync/*"))
     if not staged:
         return False
 
-    sync.mkdir(parents=True, exist_ok=True)
-    for database in staged:
-        shutil.copy2(database, sync / database.name)
-    info(f"› {len(staged)} package databases from the medium")
+    for root in roots:
+        sync = root / "var/lib/pacman/sync"
+        sync.mkdir(parents=True, exist_ok=True)
+        for database in staged:
+            shutil.copy2(database, sync / database.name)
     return True
 
 
@@ -446,6 +457,14 @@ def install_system(ctx: InstallContext) -> None:
         if arch.method_accepts(installer.sanity_check, "offline"):
             checks["offline"] = not online
         installer.sanity_check(**checks)
+
+        # The target's own databases, now that it is mounted. This is the
+        # copy pacstrap actually reads: `pacman --root` defaults its dbpath
+        # to <root>/var/lib/pacman, so the live system's are not consulted
+        # and an offline install without this fails "target not found" with
+        # the disk already written.
+        if not online:
+            use_staged_databases(ctx.target)
 
         if arch.is_encrypted(config):
             installer.generate_key_files()
