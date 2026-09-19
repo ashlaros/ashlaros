@@ -160,6 +160,53 @@ def download(packages: list[str], cache: Path, pacman_conf: Path) -> None:
         subprocess.run(["pacman", "-Sy", *common], check=True)
 
 
+def live_closure(dbpath: Path, pacman_conf: Path) -> set[str]:
+    """Every package the live medium will have unpacked, names only.
+
+    Resolved rather than read off the rootfs. This runs BEFORE mkarchiso
+    pacstraps - `iso/airootfs` is the profile, and it carries no pacman
+    database at all - so there is nothing to read yet. Asking pacman what
+    iso/packages.x86_64 resolves to gives the same answer the build will
+    reach, because it is the same question against the same databases.
+
+    The list names 91 packages; the closure behind them is 505, and it is
+    the closure that ends up on the medium.
+    """
+    result = subprocess.run(
+        [
+            "pacman", "-Sp", "--print-format", "%n",
+            "--config", str(pacman_conf),
+            "--dbpath", str(dbpath),
+            *iso_packages(),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return set()
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
+def prune_already_installed(cache: Path, installed: set[str]) -> int:
+    """Delete cached tarballs for packages the medium already carries.
+
+    The signature goes with the package: pacman verifies one against the
+    other, and a .sig with no .pkg beside it is a file nobody reads.
+    """
+    removed = 0
+    for package in sorted(cache.glob("*.pkg.tar.*")):
+        if package.suffix == ".sig":
+            continue
+        name = package.name.rsplit("-", 3)[0]
+        if name not in installed:
+            continue
+        signature = package.with_name(package.name + ".sig")
+        package.unlink()
+        signature.unlink(missing_ok=True)
+        removed += 1
+    return removed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -180,6 +227,22 @@ def main() -> int:
 
     print(f"staging {len(packages)} requested packages, with dependencies, into {cache}")
     download(packages, cache, args.pacman_conf)
+
+    # Drop what the medium already carries unpacked. The installer seeds
+    # the target by copying the live root (livecopy.py), so a package
+    # installed on the ISO does not need its tarball shipped beside it -
+    # and 505 of the 695 were, at 1256 MiB, 37% of the image (#104).
+    #
+    # Pruned after the download rather than before it: pacman resolves the
+    # closure, and asking it for a subset would drop dependencies the 190
+    # genuinely need. Cheaper to fetch everything once at build time and
+    # delete what the squashfs already has.
+    installed = live_closure(cache.parent / "db", args.pacman_conf)
+    if installed:
+        pruned = prune_already_installed(cache, installed)
+        print(f"pruned {pruned} packages the medium carries unpacked")
+    else:
+        print("could not resolve the live closure; staging everything")
 
     staged = sorted(cache.glob("*.pkg.tar.*"))
     signatures = [path for path in staged if path.suffix == ".sig"]
