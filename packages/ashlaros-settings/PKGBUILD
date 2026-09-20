@@ -127,6 +127,15 @@ depends=(
     # any install. The glyphs come from ttf-jetbrains-mono-nerd above, so
     # both halves are now dependencies of the thing that renders them.
     'sworkstyle'
+    # The screen lock. swayidle is a dependency above and /etc/swayidle/config
+    # runs `$locking` at timeout 300, before-sleep and on `lock` - all three
+    # reach lock.sh, which tries gtklock, waylock and swaylock in turn and
+    # exits 0 having locked nothing when none is installed. Measured against
+    # the real 594-package closure: none of the three was present, so the
+    # screen has never locked on idle or on suspend. A lock that silently
+    # does nothing is worse than one that is absent, because the lid closes
+    # either way.
+    'swaylock'
 )
 optdepends=(
     'gtklock: lockscreen based on gtkgreet'
