@@ -1,6 +1,14 @@
 # Maintainer: AshlarOS <build@ashlaros.download>
 
 # rebuilt once when source_hash began covering the executable bit
+#
+# Rebuilt again at -78: the published -77 recorded a PACKAGER mark
+# (1812c0a8...) that matches no commit in this tree, so a rebuild at that
+# name produced different bytes and publish.py refused it - correctly,
+# since a published object is immutable. pkgrel is a commit count over
+# _source_trees, so this comment is the fix: it gives the rebuild its own
+# name. Same failure as -70, and the same remedy; if it recurs, the thing
+# to find is what published a mark no tree produces, not another bump.
 pkgname=ashlaros-installer
 pkgver=20260910
 pkgrel=1
