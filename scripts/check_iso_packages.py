@@ -90,13 +90,18 @@ def expected_versions() -> dict[str, str]:
 
 
 def unstaged_requests(rootfs: Path) -> list[str]:
-    """Packages the installer will ask for that the staged cache lacks.
+    """Packages the installer will ask for that the medium cannot answer.
 
-    The ISO carries the whole dependency closure so an install works with
-    no network at all, which makes this the check that the promise is
-    true: every name the installer requests must be answerable from the
-    medium, or a machine with no mirrors stops partway through pacstrap
-    with a disk already partitioned.
+    The ISO must be able to install with no network at all, and it answers
+    a package from one of two places: unpacked in the live root, which the
+    installer copies onto the target (livecopy.py), or staged as a tarball
+    in the cache. Either satisfies a request; neither means an offline
+    install stops partway through with the disk already written.
+
+    Both halves, because the cache alone is no longer the whole story. It
+    used to be, and this check asserted exactly that - which is why it
+    failed the first build after the cache was pruned to what the medium
+    lacks, correctly by its own lights and wrongly by the design's.
 
     Names only, not the closure. A name is what install_system asks for;
     if pacman resolved a name at stage time it staged its dependencies
@@ -120,7 +125,23 @@ def unstaged_requests(rootfs: Path) -> list[str]:
         for path in cache.glob("*.pkg.tar.*")
         if path.suffix != ".sig"
     }
-    return sorted(requested - cached)
+    return sorted(requested - cached - installed_in_rootfs(rootfs))
+
+
+def installed_in_rootfs(rootfs: Path) -> set[str]:
+    """Package names libalpm unpacked into the medium.
+
+    These need no tarball: the installer copies the live root onto the
+    target rather than installing them a second time, which is what took
+    1256 MiB off the ISO (#104).
+    """
+    local = rootfs / "var/lib/pacman/local"
+    try:
+        entries = [path.name for path in local.iterdir() if path.is_dir()]
+    except OSError:
+        return set()
+    # <name>-<pkgver>-<pkgrel>, and a name may itself contain dashes
+    return {entry.rsplit("-", 2)[0] for entry in entries}
 
 
 def staged_databases(rootfs: Path) -> list[str]:
