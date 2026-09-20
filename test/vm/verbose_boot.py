@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """Boot the installed disk on its verbose loader entry.
 
-The default entry carries `quiet splash` and no serial console, so a boot
-that goes wrong prints nothing anywhere: the framebuffer is suppressed and
-the serial log ends at the loader countdown. add_verbose_entry writes a
-second entry beside it with both flags stripped and console=ttyS0 added,
-for exactly this.
+The default entry has no serial console, so a boot that goes wrong prints
+nothing the host can read: the serial log ends at the loader countdown.
+add_verbose_entry writes a second entry beside it with console=ttyS0
+added, for exactly this.
 
 That is what this selects. The menu lists the ordinary entry first and the
 verbose copy second - filename order, since neither carries a sort-key -
 so one Down and Enter picks it, and everything the initramfs says lands in
 the host's serial log.
 
-Written for #86: the passphrase prompt is invisible while the disk still
-unlocks, so plymouthd is running and rendering nothing. What it says on a
-console nobody suppressed is the evidence that question needs.
+Written for #86, when a splash was hiding the passphrase prompt. The
+splash is gone (#106), but a boot that stalls before the desktop still
+says nothing on the framebuffer worth reading, and this is where the
+initramfs gets to explain itself.
 """
 
 import sys

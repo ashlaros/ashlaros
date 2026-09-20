@@ -23,11 +23,11 @@ def build_phases():
     the initramfs around it, so it cannot precede either.
     """
     from .phases_impl import (
+        configure_boot_initramfs,
         configure_firewall,
         configure_login,
         configure_mdns,
         configure_snapshots,
-        configure_splash,
         configure_system,
         enable_services,
         enroll_tpm,
@@ -50,9 +50,9 @@ def build_phases():
         ("Configuring the firewall", configure_firewall),
         ("Configuring snapshots", configure_snapshots),
         # after the TPM work, which rewrites HOOKS and rebuilds the
-        # initramfs itself: this adds one more hook and rebuilds once more,
-        # rather than racing it
-        ("Configuring the boot splash", configure_splash),
+        # initramfs itself: this rebuilds once more for the target's own
+        # hardware, rather than racing it
+        ("Configuring the initramfs", configure_boot_initramfs),
         ("Locking the boot menu", lock_boot_editor),
         ("Validating boot", validate_boot),
     ]

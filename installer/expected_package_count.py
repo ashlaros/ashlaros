@@ -9,11 +9,11 @@ denominator, which it reads from
 file, so `expected_package_count()` returned 0, the band was skipped, and
 step 2 of 13 sat at three cells of forty for most of the install (#94).
 
-Resolved rather than hand-maintained, for the reason
-packages/ashlaros-branding generates its plymouth script from logo.txt: a
-literal checked in beside the package lists is one that goes stale the
-first time anybody adds a dependency, and the staleness is invisible - the
-bar simply fills to the wrong place.
+Resolved rather than hand-maintained, for the reason ashlaros-branding
+generates its animation frames from logo.txt: a literal checked in beside
+the package lists is one that goes stale the first time anybody adds a
+dependency, and the staleness is invisible - the bar simply fills to the
+wrong place.
 
 The closure is what the install writes, so it is what the dashboard
 divides by: `base`, the configurator's own kernels and packages, and

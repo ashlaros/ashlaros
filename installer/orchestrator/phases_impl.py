@@ -182,11 +182,6 @@ DESKTOP_PACKAGES = [
     "mosh",
     # plocate rather than mlocate: it enables its own updatedb timer
     "plocate",
-    # The boot splash. In DESKTOP_PACKAGES rather than as a dependency of
-    # ashlaros-branding, which is arch=any and holds assets, not machinery:
-    # the theme stays installable anywhere, the mechanism lands only where
-    # there is a boot to cover.
-    "plymouth",
     # Runtime version manager. Installed here rather than as a dependency
     # of ashlaros-settings because that package is arch=any and installs on
     # ARM, where mise does not exist at all - neither Arch Linux ARM's
@@ -969,7 +964,7 @@ def use_systemd_initramfs(ctx: InstallContext) -> None:
     is what the ISO's own -vga std adapter uses. A machine that boots on
     anything else (virtio_gpu under Gnome Boxes, i915, amdgpu) gets an
     initramfs with no driver for its display, and early KMS has nothing to
-    bring up - which is a black screen with quiet+splash on.
+    bring up.
 
     The cost is a larger initramfs, since every module ships rather than
     the detected subset. That is the right trade for an image built on one
@@ -1000,173 +995,19 @@ def use_systemd_initramfs(ctx: InstallContext) -> None:
     info("› initramfs: sd-encrypt, so the TPM keyslot is actually used")
 
 
-UNLOCK_HOOKS = ("encrypt", "sd-encrypt")
-
-
-def use_plymouth_initramfs(ctx: InstallContext) -> bool:
-    """Put the plymouth hook after kms and before whatever unlocks root.
-
-    Both halves are load-bearing, and an earlier version implemented only
-    the second - it anchored on systemd/udev and never looked at kms.
-
-    AFTER kms, because plymouth draws through KMS: with no DRM driver
-    loaded and no EFI framebuffer it fails outright. On the TPM path that
-    went unnoticed, since use_systemd_initramfs had already rewritten the
-    list into an order that happens to work. On a machine with no TPM
-    archinstall's own rewrite leaves no kms hook at all, plymouth landed at
-    index 2 - ahead of any DRM driver - and the result was a blank screen
-    exactly where the LUKS passphrase is wanted (#61, and again #86).
-
-    Blank, not absent: plymouthd is running and merely cannot render, so
-    the busybox encrypt hook's `plymouth --ping` succeeds, the prompt is
-    handed to plymouth, and the console fallback that would have printed
-    it is skipped. The machine is live and invisible, which reads as a
-    dead boot.
-
-    BEFORE the unlocker, or the passphrase prompt is drawn on a bare
-    console and the splash arrives once the disk is already open.
-
-    Returns whether the file changed, so the caller can decide whether an
-    initramfs rebuild is owed.
-    """
-    conf = ctx.target / "etc/mkinitcpio.conf"
-    lines = []
-    changed = False
-
-    for line in conf.read_text().splitlines():
-        if not line.startswith("HOOKS="):
-            lines.append(line)
-            continue
-        hooks = line[len("HOOKS=("):].rstrip(")").split()
-
-        # Re-place an existing plymouth rather than treating its presence as
-        # proof the list is right. An earlier version skipped any line that
-        # already said "plymouth", which made this function a no-op on
-        # exactly the systems it exists to fix: a list carrying plymouth at
-        # index 2 with no kms at all kept it, and no later run could ever
-        # correct it. Measured on a disk installed from an ISO that did
-        # carry the kms fix - the hooks were still udev, plymouth, keymap,
-        # encrypt.
-        hooks = [h for h in hooks if h != "plymouth"]
-
-        # The list may or may not have been rewritten by
-        # use_systemd_initramfs already - the TPM and non-TPM paths differ
-        # in that - so this reads what is actually there rather than
-        # assuming either shape.
-        #
-        # archinstall writes its own HOOKS line, and on the non-HSM path it
-        # reverts the whole list to the legacy busybox shape: systemd ->
-        # udev, sd-vconsole -> keymap consolefont. That rewrite drops kms
-        # entirely, so a passphrase-only install had no kms to anchor on and
-        # an earlier version fell back to udev - which put plymouth at index
-        # 2, ahead of any DRM driver, and is exactly the blank screen #61
-        # describes. Adding kms is the fix: falling back to an anchor that
-        # cannot satisfy the invariant only moves the failure out of sight.
-        anchor = next((i for i, h in enumerate(hooks) if h == "kms"), None)
-        if anchor is None:
-            # after modconf where Arch's own list puts it: kms loads the
-            # DRM driver, and modconf is what makes module options
-            # available to it. Falling back to udev would put both kms and
-            # plymouth ahead of autodetect, which is not an order any
-            # stock configuration uses.
-            anchor = -1
-            for candidate in ("modconf", "udev", "systemd"):
-                if candidate in hooks:
-                    anchor = hooks.index(candidate)
-                    break
-            hooks.insert(anchor + 1, "kms")
-            anchor += 1
-        hooks.insert(anchor + 1, "plymouth")
-
-        # The invariant the docstring claims, checked rather than trusted.
-        # An image that boots to a black screen at the passphrase prompt is
-        # worse than an install that stops here and says why.
-        placed = hooks.index("plymouth")
-        unlocker = next(
-            (i for i, h in enumerate(hooks) if h in UNLOCK_HOOKS), None
-        )
-        if unlocker is not None and placed > unlocker:
-            raise RuntimeError(
-                f"plymouth landed at {placed}, after the unlocker at "
-                f"{unlocker}: HOOKS=({' '.join(hooks)})"
-            )
-        # The other half of the invariant, which went unchecked and is the
-        # one that actually broke: plymouth after the unlocker is a prompt
-        # on a bare console, plymouth before kms is no prompt at all.
-        kms = hooks.index("kms")
-        if placed < kms:
-            raise RuntimeError(
-                f"plymouth landed at {placed}, before kms at {kms}: "
-                f"HOOKS=({' '.join(hooks)})"
-            )
-
-        rewritten = f"HOOKS=({' '.join(hooks)})"
-        lines.append(rewritten)
-        # compared against the line as read: now that an existing plymouth
-        # is re-placed rather than skipped, a list that was already correct
-        # comes out identical and owes no rebuild
-        changed = changed or rewritten != line
-
-    if changed:
-        conf.write_text("\n".join(lines) + "\n")
-        info("› initramfs: plymouth ahead of the unlocker")
-    return changed
-
-
-def add_splash_cmdline(ctx: InstallContext) -> None:
-    """Ask the kernel to be quiet and the splash to come up.
-
-    Without `splash` plymouth shows nothing, and without `quiet` the
-    kernel's own messages are drawn over it - the splash is there but
-    scrolled off by the time anyone looks.
-
-    The reason a splash could hide the passphrase prompt is fixed at its
-    source rather than here: ashlaros-branding now depends on ttf-dejavu,
-    the font its theme names. Without it fc-match answered with an empty
-    path at mkinitcpio time and plymouth had no font to draw with, so it
-    rendered nothing while still answering `plymouth --ping` - which is
-    what made the `encrypt` hook hand it the prompt and skip the console
-    fallback (#86).
-
-    Separate from use_sd_encrypt_cmdline, which does its own rewriting and
-    runs only on encrypted installs: an unencrypted machine has a boot to
-    cover too, and neither path may assume the other ran.
-    """
-    entries = sorted((ctx.target / "boot/loader/entries").glob("*.conf"))
-    if not entries:
-        error("no loader entries to amend; the boot shows no splash")
-        return
-
-    for entry in entries:
-        rewritten = []
-        for line in entry.read_text().splitlines():
-            if not line.startswith("options"):
-                rewritten.append(line)
-                continue
-            words = line.split()
-            for flag in ("quiet", "splash"):
-                if flag not in words:
-                    words.append(flag)
-            rewritten.append(" ".join(words))
-        entry.write_text("\n".join(rewritten) + "\n")
-    info("› boot entries: quiet splash")
-
-
 def add_verbose_entry(ctx: InstallContext) -> None:
     """A second boot entry that says what went wrong.
 
-    The shipped entry carries `quiet splash`, and nothing configures a
-    serial console, so a boot that dies after the menu prints nothing
-    anywhere: the framebuffer is suppressed and the serial log ends at the
-    countdown. A black screen is then the only symptom, on a machine whose
+    Nothing configures a serial console, so a boot that dies after the menu
+    prints nothing anywhere the owner can reach: the serial log ends at the
+    countdown and a black screen is the only symptom, on a machine whose
     owner has no way to get further.
 
-    This copies each entry, drops both flags, and keeps everything else -
-    the same kernel, the same initramfs, the same root and LUKS options -
-    so choosing it is the difference between a black screen and a readable
-    error. `console=ttyS0` goes on too: it costs nothing on hardware with
-    no serial port, and in a VM it puts the whole boot in the host's log,
-    which is where a bug report can come from.
+    This copies each entry and keeps everything else - the same kernel, the
+    same initramfs, the same root and LUKS options - adding a serial
+    console and stripping `quiet` if anything put it there. It costs
+    nothing on hardware with no serial port, and in a VM it puts the whole
+    boot in the host's log, which is where a bug report can come from.
 
     No sort-key on either: measured with `bootctl list`, an entry that has
     one sorts ahead of every entry that does not, so giving the verbose
@@ -1228,13 +1069,13 @@ def drop_autodetect(ctx: InstallContext) -> bool:
     return changed
 
 
-def configure_splash(ctx: InstallContext) -> None:
-    """Select the theme and make sure the initramfs carries it.
+def configure_boot_initramfs(ctx: InstallContext) -> None:
+    """Get the initramfs right for the machine that will boot it.
 
-    plymouth-set-default-theme -R would rebuild the initramfs itself, which
-    on an encrypted install is a second rebuild racing the one
-    add_crypttab_tpm_option already does. So the theme is set without -R
-    and the rebuild is done once, here, after every hook edit is in place.
+    This was configure_splash, and the splash is gone (#106). What is left
+    is the part that was never about branding: an initramfs built on the
+    installer's hardware, an encrypted disk that unlocks, and a verbose
+    entry to debug a boot that goes wrong.
     """
     # Before anything else, and on every install: autodetect prunes the
     # initramfs to the hardware mkinitcpio can see, and mkinitcpio runs
@@ -1245,65 +1086,24 @@ def configure_splash(ctx: InstallContext) -> None:
     # add_crypttab_tpm_option, which runs only after a TPM enrolment.
     drop_autodetect(ctx)
 
-    # The busybox plymouth hook hangs the boot outright, which is the real
-    # #86 and has nothing to do with rendering. Its run_hook does
-    #
-    #     plymouthd --mode=boot --pid-file=... --attach-to-session
-    #
-    # and --attach-to-session needs a session leader on a live console. By
-    # then bochs-drm has run `vgaarb: deactivate vga console` and the
-    # console is the dummy device, so plymouthd never returns and `encrypt`
-    # - the next hook - never runs. Photographed frame by frame: the boot
-    # stops at ":: running hook [plymouth]" and is byte-identical for the
-    # next 140 seconds. No passphrase prompt is drawn because the initramfs
-    # never reaches the point of asking. plymouth.enable=0 does not help;
-    # that hook does not read it.
-    #
-    # The systemd initramfs has no such hook - plymouth is a unit there,
-    # started after udev has settled - so switching to it is the fix. It
-    # was already written for the TPM path; this runs it on every encrypted
-    # install, TPM or not.
+    # The busybox initramfs asks for the passphrase from the `encrypt`
+    # hook; the systemd one uses sd-encrypt, which is what the TPM path
+    # already needed. Kept on every encrypted install, TPM or not: this is
+    # the configuration both paths are tested on.
     device = luks_device(ctx) if ctx.encrypt else None
     if device is not None:
         use_systemd_initramfs(ctx)
         use_sd_encrypt_cmdline(ctx, device)
 
-    theme = ctx.target / "usr/share/plymouth/themes/ashlaros/ashlaros.plymouth"
-    if not theme.exists():
-        info("› no ashlaros plymouth theme installed, leaving the boot bare")
-        return
-
-    run_command(
-        ["arch-chroot", str(ctx.target), "plymouth-set-default-theme", "ashlaros"]
-    )
-    use_plymouth_initramfs(ctx)
-
-    # No splash where a passphrase has to be typed. plymouthd starts, claims
-    # the console and answers `plymouth --ping` - which is what makes the
-    # encrypt hook hand it the prompt and skip the console fallback - and
-    # then renders nothing at all under the ISO's own -vga std adapter.
-    # Measured on an install that reached the desktop: the probe frame at the
-    # passphrase moment is one colour, (0,0,0), across all 1024000 pixels,
-    # where a splash that drew even its own background would be #141A1B.
-    #
-    # A prompt nobody can see is worse than no splash, so encrypted installs
-    # that ask for a secret boot bare and get the hook's own text prompt.
-    # Everything else - TPM, TPM+PIN, unencrypted - keeps the splash, since
-    # nothing there waits on a human.
-    if ctx.needs_typed_passphrase:
-        info("› no splash: the disk asks for a passphrase, which has to be visible")
-        add_verbose_entry(ctx)
-        run_command(["arch-chroot", str(ctx.target), "mkinitcpio", "-P"])
-        return
-
-    add_splash_cmdline(ctx)
-    # after the flags are on, so the copy is of the final entry
+    # A second loader entry with quiet stripped and a serial console added,
+    # so a boot that dies after the menu says so somewhere (#86).
     add_verbose_entry(ctx)
-    # Unconditional: the hook edit above may be a no-op on a re-run, but
-    # the theme change still has to reach the initramfs, and mkinitcpio is
-    # the only thing that puts it there.
+
+    # Unconditional: the hook edits above may be no-ops on a re-run, but
+    # the initramfs still has to be rebuilt for the target's own hardware,
+    # and mkinitcpio is the only thing that does it.
     run_command(["arch-chroot", str(ctx.target), "mkinitcpio", "-P"])
-    info("› boot splash: the ashlar courses, then the name")
+    info("› initramfs: built for this machine")
 
 
 def configure_login(ctx: InstallContext) -> None:

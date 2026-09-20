@@ -272,9 +272,9 @@ wait-installed)
 boot)
   CDROM=no start
   ;;
-# Boot what was installed on the verbose loader entry, which carries no
-# `quiet splash` and a serial console - so the initramfs says on the
-# host's log what the suppressed framebuffer will not (#86).
+# Boot what was installed on the verbose loader entry, which carries a
+# serial console - so the initramfs says on the host's log what the
+# framebuffer alone would not (#86).
 verbose-boot)
   CDROM=no start
   docker exec "$container" python3 /vm/verbose_boot.py | sed 's/^/   /'

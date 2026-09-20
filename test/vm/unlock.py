@@ -57,13 +57,15 @@ def main():
     # Type it anyway. A TPM-unlocked machine shows no prompt and the
     # characters land on a tty nobody reads, which costs nothing. But an
     # invisible prompt takes them and the boot continues - and that is the
-    # difference between "plymouth is hiding the prompt" and "the initramfs
-    # never asked", which a black frame alone cannot tell apart (#86).
+    # difference between "the prompt is drawn where nothing shows it" and
+    # "the initramfs never asked", which a black frame alone cannot tell
+    # apart (#86).
     #
-    # The encrypt hook hands the prompt to plymouth whenever `plymouth
-    # --ping` answers, skipping the console fallback that would have
-    # printed it. A plymouth that is alive but renders nothing therefore
-    # produces exactly this: a live machine, waiting, on a blank screen.
+    # That was a plymouth splash answering `plymouth --ping` and rendering
+    # nothing, so the encrypt hook skipped its own console fallback. The
+    # splash is gone (#106), but the distinction is still worth keeping:
+    # any boot that waits on a secret without showing it looks identical
+    # to one that hung.
     q.type(PASSWORD)
     q.key("ret")
     print("typed it blind, in case the prompt is drawn but not visible", flush=True)

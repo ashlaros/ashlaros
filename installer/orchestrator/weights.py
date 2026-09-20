@@ -13,7 +13,7 @@ install (TCG, no KVM, 954s, 778 packages), the shares are:
       0.0s   0.0%  Resolving .local names
       4.9s   0.5%  Configuring the firewall
       0.5s   0.1%  Configuring snapshots
-    156.3s  16.4%  Configuring the boot splash
+    156.3s  16.4%  Configuring the initramfs
       0.0s   0.0%  Locking the boot menu
       0.0s   0.0%  Validating boot
 
@@ -51,7 +51,9 @@ MEASURED = {
     "Resolving .local names": 0.0,
     "Configuring the firewall": 4.9,
     "Configuring snapshots": 0.5,
-    "Configuring the boot splash": 156.3,
+    # Almost all of this is mkinitcpio, which still runs; only the splash
+    # it used to configure is gone (#106).
+    "Configuring the initramfs": 156.3,
     "Locking the boot menu": 0.0,
     "Validating boot": 0.0,
 }
