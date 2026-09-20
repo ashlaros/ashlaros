@@ -15,6 +15,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from . import archinstall_adapter as arch
+from . import livecopy
 from .context import InstallContext
 from .ui import error, info
 
@@ -465,6 +466,18 @@ def install_system(ctx: InstallContext) -> None:
         # the disk already written.
         if not online:
             use_staged_databases(ctx.target)
+
+        # Seed the target from the medium before anything is installed
+        # into it. The ISO already carries a working userland, so this
+        # replaces unpacking those packages a second time - and lets the
+        # cache carry only what the medium lacks, which is where 1256 MiB
+        # of a 3.55 GB image goes (#104).
+        #
+        # minimal_installation still runs afterwards: it is what writes
+        # fstab, the locale and the bootloader, and pacstrapping a package
+        # set the target already has is a no-op transaction rather than a
+        # second unpack.
+        ctx.state["seeded"] = livecopy.seed_target(ctx)
 
         if arch.is_encrypted(config):
             installer.generate_key_files()

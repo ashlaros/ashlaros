@@ -39,13 +39,22 @@ fi
 # Appended directly after GTK_CSD, because the two belong together: the
 # variable configures the library, and neither does anything without the
 # other. The ${LD_PRELOAD:+:...} keeps whatever the user already preloads.
+#
+# Guarded on the library existing. An unconditional preload makes ld.so
+# print "cannot be preloaded (cannot open shared object file)" before
+# every command on a machine where gtk-nocsd is absent, and this script
+# writes into a file it does not own - so it must not be the thing that
+# turns a missing optional library into an error on every prompt.
 tmp=$(mktemp) || exit 1
 awk '
     { print }
     /^export GTK_CSD=/ && !done {
         print "# gtk-nocsd is what makes the line above mean anything: GTK_CSD is read"
-        print "# by the preloaded library, not by GTK."
-        print "export LD_PRELOAD=\"/usr/lib/libgtk-nocsd.so${LD_PRELOAD:+:$LD_PRELOAD}\""
+        print "# by the preloaded library, not by GTK. Guarded: an unconditional"
+        print "# preload errors on every command when the library is not installed."
+        print "if [ -e /usr/lib/libgtk-nocsd.so ]; then"
+        print "\texport LD_PRELOAD=\"/usr/lib/libgtk-nocsd.so${LD_PRELOAD:+:$LD_PRELOAD}\""
+        print "fi"
         done = 1
     }
 ' "$profile" > "$tmp" || { rm -f "$tmp"; exit 1; }

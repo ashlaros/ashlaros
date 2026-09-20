@@ -31,7 +31,11 @@ source=()
 # scripts/discover_packages.py and scripts/package_version.py, which
 # otherwise see only the package directory and would never notice an edit
 # to installer/ - the package would keep its version and stay skipped.
-_source_trees=(installer)
+#
+# iso/airootfs is here for live-only below: the manifest is generated from
+# that tree, so a file added to the ISO profile has to re-version this
+# package or the installer would copy it onto the target.
+_source_trees=(installer iso/airootfs)
 
 package() {
   local installer="${startdir}/../../installer"
@@ -67,4 +71,24 @@ package() {
     --dbpath /var/lib/pacman \
     --output "${pkgdir}/usr/share/ashlaros-installer/expected-packages" \
     || warning "could not resolve the package count; the install bar will move per phase only"
+
+  # What the installer must NOT copy from the medium onto the target.
+  #
+  # Generated from the ISO profile, because that tree IS the definition of
+  # "live only" - every file in it exists to make the medium a live medium.
+  # A hand-written list beside it would drift the first time somebody adds
+  # a file to the profile, and the drift is silent: the installer would
+  # copy the new file onto installed systems and nothing would say so.
+  #
+  # Fatal if it produces nothing, unlike the package count above. An empty
+  # manifest means an unfiltered copy, and iso/airootfs/etc/shadow gives
+  # root an empty password - livecopy refuses to run without this file, so
+  # a package that shipped without it would disable the copy entirely
+  # rather than install a machine anyone can log into.
+  ( cd "${startdir}/../../iso/airootfs" && find . -type f -o -type l ) |
+    sed 's|^\.||' | sort > "${srcdir}/live-only"
+  [[ -s ${srcdir}/live-only ]] ||
+    { error "the live-only manifest is empty; iso/airootfs was not readable"; return 1; }
+  install -Dm644 "${srcdir}/live-only" \
+    "${pkgdir}/usr/share/ashlaros-installer/live-only"
 }
