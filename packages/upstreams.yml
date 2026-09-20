@@ -135,6 +135,11 @@ packages:
     # build and this PKGBUILD already selects per arch, so vendoring is
     # the whole fix rather than a patch.
     arch: both
+  pacseek:
+    upstream: https://aur.archlinux.org/pacseek.git
+    # arch=any upstream already, so this is a straight vendoring with no
+    # local edit - the package is a Go TUI over pacman and libalpm.
+    arch: any
   phinger-cursors:
     upstream: https://aur.archlinux.org/phinger-cursors.git
     arch: any

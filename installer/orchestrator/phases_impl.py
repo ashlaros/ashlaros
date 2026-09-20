@@ -97,7 +97,9 @@ ASHLAROS_MIRRORLIST = "Server = https://ashlaros.download/packages/$arch\n"
 DESKTOP_PACKAGES = [
     "ashlaros-branding",
     "ashlaros-browser-settings",
-    "firefox",
+    # The browser. zen-browser-bin comes from CachyOS, which carries it, so
+    # there is nothing of ours to build for it.
+    "zen-browser-bin",
     "greetd",
     "greetd-tuigreet",
     "networkmanager",

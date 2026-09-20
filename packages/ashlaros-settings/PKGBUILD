@@ -136,6 +136,19 @@ depends=(
     # does nothing is worse than one that is absent, because the lid closes
     # either way.
     'swaylock'
+    # Credentials. The settings TUI offers to put mail and CalDAV passwords
+    # in the login keyring, gated on `command -v secret-tool`; without it
+    # the guard holds and it silently writes the password to a config file
+    # in plaintext instead. A fallback nobody chose is not a fallback.
+    'libsecret'
+    # The media controls. waybar's custom/playerctl module and the
+    # watch-playerctl unit both need it; absent, the bar module is dead and
+    # the play/pause keys do nothing.
+    'playerctl'
+    # What the TUI's "Install packages" entry runs, and what CONTRIBUTING
+    # names as the way applications are installed. The entry is gated on
+    # `command -v pacseek`, so without it the row never appears at all.
+    'pacseek'
 )
 optdepends=(
     'gtklock: lockscreen based on gtkgreet'
