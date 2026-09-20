@@ -204,7 +204,12 @@
         "format": " {}",
         "min-length": 5,
         "hide-single-layout": true,
-        "tooltip": false,
+        // The bar shows a 5-character abbreviation - "eu", "de" - which is
+        // what min-length above is sized for. The full name and the
+        // variant are the state that does not fit there, and clicking
+        // cycles layouts, so knowing which one you are on is the point.
+        "tooltip": true,
+        "tooltip-format": "{long} {variant}",
         "on-click": "swaymsg input type:keyboard xkb_switch_layout next"
     },
     "custom/scratchpad": {
