@@ -21,18 +21,27 @@ from qmp import Qmp
 PASSWORD = "correcthorse"
 
 # gum's selected-button background as the framebuffer renders it, measured
-# off a real completion screen - not the 24-bit value the theme names.
+# off real completion screens - not the 24-bit value the theme names.
+#
+# Two colours, because the installer is drawn on two different surfaces.
+# On the VGA text console gum's magenta lands on the 0xaa,0x00,0xaa of the
+# standard palette; in the sway session the installer now runs in, foot
+# renders the same button as the theme's pink. Matching only the console
+# one is how a COMPLETED install - "AshlarOS is installed", sitting at its
+# Reboot? prompt - was reported as a 450s stall.
 #
 # The run length is the whole difference between a button and a text
 # cursor, which is the same colour. Measured across every screen the
-# driver visits: a cursor is exactly 8 pixels - one glyph cell - and the
-# hostname, disk and password screens all carry one. "Reboot now" is ten
-# characters, so the real button is ~96 wide; 32 sits well clear of a
-# cursor and well under the button.
+# driver visits: "Reboot now" is ten characters and renders as a 96-pixel
+# run, while the cursor on the hostname and user screens is 6. 32 sits
+# well clear of both.
 #
 # At 8 this matched the password field's cursor and reported a finished
 # install four minutes in, on a run that had not started installing.
-SELECTED = bytes([0xAA, 0x00, 0xAA]) * 32
+SELECTED = (
+    bytes([0xAA, 0x00, 0xAA]) * 32,
+    bytes([0xFF, 0x87, 0xD7]) * 32,
+)
 
 
 def _same(a, b, tolerance=2000):
@@ -56,7 +65,8 @@ def finished(path):
     """
     try:
         with open(path, "rb") as handle:
-            return SELECTED in handle.read()
+            frame = handle.read()
+        return any(selected in frame for selected in SELECTED)
     except OSError:
         return False
 
