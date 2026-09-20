@@ -36,6 +36,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# The resolver the installer package used to run at its own build time.
+# Imported rather than reimplemented: it already parses the same two lists
+# this file does, and a second copy of that parsing is one that drifts.
+sys.path.insert(0, str(ROOT / "installer"))
+from expected_package_count import count  # noqa: E402
+
 DESKTOP_PACKAGES_RE = re.compile(
     r"^DESKTOP_PACKAGES\s*[:=].*?[\(\[](.*?)[\)\]]\s*$",
     re.MULTILINE | re.DOTALL,
@@ -243,6 +249,27 @@ def main() -> int:
         print(f"pruned {pruned} packages the medium carries unpacked")
     else:
         print("could not resolve the live closure; staging everything")
+
+    # The dashboard's denominator. Written here, onto the medium, rather
+    # than into the installer package: it is resolved against live
+    # repositories, so the same commit yields a different count on a
+    # different day - and pkgrel is a commit count, so a rebuild cannot
+    # move it. That combination made publish.py refuse the package as
+    # "already published with different content" (53138 vs 53139 bytes),
+    # which is a build-time property of the medium ending up versioned as
+    # if it were source. The ISO is rebuilt every time, so it is the right
+    # owner; `count` resolves against the databases staged just above.
+    expected = args.rootfs / "usr/share/ashlaros-installer/expected-packages"
+    expected.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        total = count(args.pacman_conf, cache.parent / "db")
+    except SystemExit as exc:
+        # Not fatal, deliberately: without the file the dashboard falls
+        # back to whole-phase arithmetic, which is what it did before #94.
+        print(f"could not resolve the package count ({exc}); the bar moves per phase")
+    else:
+        expected.write_text(f"{total}\n")
+        print(f"expected packages: {total} -> {expected}")
 
     staged = sorted(cache.glob("*.pkg.tar.*"))
     signatures = [path for path in staged if path.suffix == ".sig"]

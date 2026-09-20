@@ -48,39 +48,14 @@ package() {
   install -Dm644 "${installer}"/orchestrator/*.py \
     "${pkgdir}/usr/share/ashlaros-installer/orchestrator/"
 
-  # The denominator the dashboard fills its progress band from. Resolved at
-  # build time rather than written by hand, for the reason
-  # ashlaros-branding generates its plymouth script from logo.txt: a
-  # literal goes stale the first time a dependency changes, and the
-  # staleness is invisible - the bar just fills to the wrong place.
-  #
-  # Not fatal, deliberately. The builder syncs the full repository stack
-  # before this runs, so resolution works there - but a mirror hiccup must
-  # degrade the progress bar, not fail the package. Without the file the
-  # dashboard falls back to whole-phase arithmetic, which is exactly what it
-  # did before #94. The script itself refuses to emit a count below 100, so
-  # a partial resolution cannot ship a wrong denominator either.
-  #
-  # It also makes this package's content non-deterministic: the count is
-  # resolved against the repositories as they are today, so the same commit
-  # built a day apart differs by the width of a number. pkgrel is a commit
-  # count, so it does not move for a rebuild - and publish.py refuses to
-  # replace a published object with different bytes at the same version,
-  # which is how a rebuild of an unchanged installer failed the whole
-  # workflow with "already published with different content". The fix when
-  # that happens is a commit touching installer/ or iso/airootfs, which is
-  # what moves pkgrel; there is deliberately no flag to force a replace.
-  # /etc/pacman.conf, not iso/pacman.conf: --dbpath below is the builder's
-  # own database, synced against the builder's own configuration. Handing
-  # pacman a different config names repositories those databases were never
-  # fetched for, and resolution fails with "database not valid" - which is
-  # how this silently fell back to no file at all and shipped an ISO whose
-  # progress bar still moved per phase.
-  python3 "${installer}/expected_package_count.py" \
-    --pacman-conf /etc/pacman.conf \
-    --dbpath /var/lib/pacman \
-    --output "${pkgdir}/usr/share/ashlaros-installer/expected-packages" \
-    || warning "could not resolve the package count; the install bar will move per phase only"
+  # The dashboard's denominator is NOT written here. It is resolved against
+  # live repositories, so the same commit produces a different count on a
+  # different day, while pkgrel is a commit count and cannot move for a
+  # rebuild - publish.py then refuses the object as "already published with
+  # different content" and takes the whole workflow down with it. A
+  # build-time property of the medium does not belong in a versioned
+  # package, so scripts/seed_install_cache.py writes it into iso/airootfs
+  # when the ISO is built, against the databases it stages the cache from.
 
   # What the installer must NOT copy from the medium onto the target.
   #
