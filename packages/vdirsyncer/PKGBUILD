@@ -1,0 +1,100 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+# Contributor: David Runge <dvzrv@archlinux.org>
+# Contributor: Daniel M. Capella <polyzen@archlinux.org>
+# Contributor: Hugo Osvaldo Barrera <hugo@barrera.io>
+
+# Arch's own vdirsyncer with one unmerged upstream patch, carried because
+# Google's CalDAV server breaks the calendar sync we ship.
+#
+# Google advertises events in a collection listing and then answers 404
+# when vdirsyncer fetches that batch. dav.py's get_multi treats any href
+# the server did not return as fatal, so ONE dead reference aborts the
+# whole sync - including every calendar that was syncing fine beside it:
+#
+#   error: Unknown error occurred for calendar/user@gmail.com:
+#     /caldav/v2/user@gmail.com/events/69791701@....ics
+#   error: Use `-vdebug` to see the full traceback.
+#
+# Settings -> Calendar configures exactly this storage, so the failure is
+# ours to carry even though the defect is not.
+#
+# Dropped the moment upstream merges: this exists only until PR #1203
+# lands, and the patch file names it. Rebased against the v0.21.0 tag
+# rather than main, which is what Arch builds.
+pkgname=vdirsyncer
+pkgver=0.21.0
+# .1, not 2: this is Arch's -1 with a patch on top, and the suffix says so
+# without colliding with a future Arch rebuild at -2.
+pkgrel=1.1
+pkgdesc='Synchronize CalDAV and CardDAV (with the Google 404 fix)'
+arch=(any)
+url=https://vdirsyncer.pimutils.org/en/stable/
+license=(BSD-3-Clause)
+depends=(
+  python
+  python-aiohttp
+  python-aiostream
+  python-click
+  python-click-log
+  python-requests
+  python-tenacity
+)
+makedepends=(
+  git
+  python-build
+  python-installer
+  python-setuptools-scm
+  python-sphinx
+  python-wheel
+)
+# The test suite needs seven more packages and takes minutes; upstream's
+# own CI runs it on every commit against a tag we did not move. What this
+# package changes is one line, and prepare() verifies it applied.
+optdepends=('python-aiohttp-oauthlib: Google support')
+provides=("vdirsyncer=$pkgver")
+conflicts=('vdirsyncer')
+source=(
+  "git+https://github.com/pimutils/vdirsyncer.git#tag=v$pkgver"
+  "0001-continue-past-404-resources.patch"
+)
+b2sums=('731897ddde72b9069b3d7508cb05e64258c39436b7d730f58d161e9f7d2454465a799c8962628d35f187bc79fb58c6d8c579fe5d357205382940c3b76bc4dd5f'
+        'SKIP')
+
+prepare() {
+  cd $pkgname
+  patch -p1 < "$srcdir/0001-continue-past-404-resources.patch"
+
+  # The patch must change the SERVER-side stop and leave the client-side
+  # normalisation guard alone - that one catches an href we would have
+  # requested wrongly, which is a real bug and not Google's. A patch that
+  # silently applied to the wrong hunk would turn a correctness check into
+  # a warning, so it is checked rather than assumed.
+  grep -q 'Server does not have referenced item' vdirsyncer/storage/dav.py
+  grep -q 'raise exceptions.NotFoundError(href)' vdirsyncer/storage/dav.py
+}
+
+build() {
+  cd $pkgname
+  export SETUPTOOLS_SCM_PRETEND_VERSION=$pkgver
+  python -m build --wheel --skip-dependency-check --no-isolation
+  export PYTHONPATH="build:$PYTHONPATH"
+  sphinx-build -b man docs/ build/
+}
+
+package() {
+  # symlink license
+  local site_packages
+  site_packages=$(python -c "import site; print(site.getsitepackages()[0])")
+  install -d "$pkgdir"/usr/share/licenses/$pkgname
+  ln -s "$site_packages"/$pkgname-$pkgver.dist-info/licenses/LICENSE \
+    "$pkgdir"/usr/share/licenses/$pkgname/LICENSE
+
+  cd $pkgname
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  # systemd
+  install -vDm 644 contrib/$pkgname.{service,timer} -t "$pkgdir"/usr/lib/systemd/user
+  # man page
+  install -vDm 644 build/$pkgname.1 -t "$pkgdir"/usr/share/man/man1
+  # docs
+  install -vDm 644 {AUTHORS,CHANGELOG,README}.rst config.example -t "$pkgdir"/usr/share/doc/$pkgname
+}

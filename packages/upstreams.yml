@@ -169,6 +169,14 @@ packages:
   xdg-terminal-exec:
     upstream: https://aur.archlinux.org/xdg-terminal-exec.git
     arch: any
+  # Arch's own vdirsyncer plus one unmerged upstream patch, not an AUR or
+  # GitHub package - Arch packaging lives on gitlab.archlinux.org, which
+  # track_upstreams.py has no reader for. Deliberately no `upstream:` key:
+  # the tracker skips an entry without one, rather than reporting it
+  # unreadable every day. It is dropped when PR #1203 merges, so a tracker
+  # that cannot see it costs nothing.
+  vdirsyncer:
+    arch: any
 
   eww:
     upstream: https://aur.archlinux.org/eww.git

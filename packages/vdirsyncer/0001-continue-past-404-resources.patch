@@ -1,0 +1,40 @@
+From 33e2c6a55eca94c59e5c818fd87bbb80176ea03e Mon Sep 17 00:00:00 2001
+From: Mathias Gumz <mg@2hoch5.com>
+Date: Sun, 9 Nov 2025 21:05:54 +0000
+Subject: [PATCH] fix: fix hard stop when facing 404 resources on the server
+
+Everyone's darling Google-Caldav server might reference resources which,
+in the end, do not exist:
+
+    debug:   <ns0:href>/caldav/v2/user@example.com/events/_60q...@google.com.ics</ns0:href>
+    debug:   <ns0:status>HTTP/1.1 404 Not Found</ns0:status>
+
+This situation leads to an unconditional hard stop of processing all the
+other, valid and available calendar entries:
+
+    error: Unknown error occurred for my_sync/user@example.com: /caldav/v2/...ics
+    error: Use `-vdebug` to see the full traceback.
+
+Instead of a hard stop, this changes the behaviour of vdirsyncer to just
+print a warning and continue.
+
+Upstream: https://github.com/pimutils/vdirsyncer/pull/1203
+---
+ vdirsyncer/storage/dav.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/vdirsyncer/storage/dav.py b/vdirsyncer/storage/dav.py
+index 1111111..2222222 100644
+--- a/vdirsyncer/storage/dav.py
++++ b/vdirsyncer/storage/dav.py
+@@ -550,7 +550,7 @@ async def get_multi(self, hrefs):
+                 else:
+                     rv.append((href, Item(raw), etag))
+             for href in hrefs_left:
+-                raise exceptions.NotFoundError(href)
++                dav_logger.warning(f"Server does not have referenced item: {href}")
+ 
+             for href, item, etag in rv:
+                 yield href, item, etag
+-- 
+2.51.0
