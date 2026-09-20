@@ -67,6 +67,15 @@ start() {
 # "Something is on screen" is not enough, because the boot menu draws too.
 # The installer's own logo is: it is the only screen with a large light
 # grey block, and no boot menu or kernel log has one.
+#
+# Two shades, because the logo is drawn on two different surfaces. On the
+# VGA text console it lands on the 0xaa grey of the standard palette; in
+# the sway session the installer now boots into, foot renders the same
+# block as 0xe6 - the theme's #eee after foot's own colour handling, not
+# the literal #eee. Measured off real frames from both: 208 and 156
+# consecutive pixels respectively, and zero of the other shade in each.
+# Matching only one is how a working windowed installer reported
+# "never appeared" for 16 minutes.
 wait_for_installer() {
   local deadline=$((SECONDS + ${1:-900}))
   while ((SECONDS < deadline)); do
@@ -75,9 +84,9 @@ wait_for_installer() {
     if docker exec "$container" python3 -c "
 import sys
 raw = open('/vm/out/probe.ppm','rb').read()
-# the logo block, measured off a real installer screen. A run this
-# long appears on no boot menu and in no kernel log.
-sys.exit(0 if bytes([0xaa,0xaa,0xaa]) * 16 in raw else 1)
+# the logo block, measured off real installer screens on both surfaces. A
+# run this long appears on no boot menu and in no kernel log.
+sys.exit(0 if any(bytes([v, v, v]) * 16 in raw for v in (0xaa, 0xe6)) else 1)
 " 2>/dev/null; then
       echo "## installer is up"
       return 0
