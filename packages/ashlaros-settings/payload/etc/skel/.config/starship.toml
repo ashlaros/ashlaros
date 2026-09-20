@@ -12,10 +12,17 @@
 # course comes out solid, and a one-cell mark is a filled rectangle - a
 # block, not our logo.
 #
-# The mark is U+2584 U+2588 U+2580 (lower half, full, upper half): a solid
-# centre course with the one below stepping down and the one above
-# stepping up. That is the offset joint the logo is built from, at the one
-# size a prompt has room for.
+# The mark is U+2580 U+2580 SPACE U+2580: three stones with the joint
+# after the second. That is the logo's top course at prompt scale - its
+# gap sits at 26 of 40 columns, two thirds across, which is where this
+# one falls too. The upper-half glyph leaves the mortar line visible
+# beneath each stone, which is what c6e45ad added to the logo and what
+# makes courses read as courses rather than as one bar.
+#
+# It was U+2584 U+2588 U+2580 (lower/full/upper), chosen before the logo
+# had mortar lines. Rendered against the real font at prompt size that
+# reads as a diagonal staircase - a gesture the logo has never had. The
+# logo is flat courses whose joint moves; a diagonal is a different mark.
 #
 # Not U+259E, which is the obvious pick and looks right in a table: in
 # ttf-jetbrains-mono-nerd the quadrant is drawn as two SMALL offset
@@ -46,7 +53,7 @@
 # or accept that the prompt follows the theme.
 
 format = """
-[▄█▀ ](fg:#eeeeee bg:#282828)\
+[▀▀ ▀ ](fg:#eeeeee bg:#282828)\
 [](fg:#282828 bg:#141a1b)\
 [ $directory](bg:#141a1b)\
 [](fg:#141a1b)\
