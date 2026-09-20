@@ -155,12 +155,21 @@ depends=(
     # names as the way applications are installed. The entry is gated on
     # `command -v pacseek`, so without it the row never appears at all.
     'pacseek'
+    # The clipboard history. wl-clip-persist is already a hard dependency
+    # above, and its whole job is keeping a selection alive after the app
+    # that offered it exits - which is pointless with nothing storing the
+    # history. Everything that consumes it ships here and is dead without
+    # it: Super+Shift+p, /usr/bin/clipboard, waybar's custom/clipboard
+    # module, cliphist-store.service, cliphist-watch.service, and the
+    # shutdown mode's purge. capture-qr.sh's comment says "we ship
+    # cliphist and wl-clip-persist" to justify marking a QR --sensitive,
+    # which was only half true.
+    'cliphist'
 )
 optdepends=(
     'gtklock: lockscreen based on gtkgreet'
     'swaylock-effects: minimalistic lockscreen with fancy effects'
     'wlsunset: time & place based light temperature'
-    'cliphist: clipboard manager'
     'swaycwd: open here helper'
     'poweralertd: battery and power notifications'
     'wluma: adaptive brightness based on screen contents and ALS'
