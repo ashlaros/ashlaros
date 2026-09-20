@@ -27,6 +27,7 @@ live medium - see LIVE_ONLY.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -112,7 +113,52 @@ def seed_target(ctx: InstallContext) -> bool:
         )
 
     verify_not_live(ctx)
+    restore_kernels(ctx)
     return True
+
+
+def restore_kernels(ctx: InstallContext) -> None:
+    """Do for the target what the kernel's alpm hook does on a real install.
+
+    Copying the medium skips two things that no package owns, because both
+    are produced by `/usr/share/libalpm/scripts/mkinitcpio install` when a
+    kernel is unpacked - and nothing unpacks a kernel here:
+
+      * /etc/mkinitcpio.d/<pkgbase>.preset. `pacman -Qo` reports no owner.
+        Without it the install dies at `mkinitcpio -P` with "No presets
+        found in /etc/mkinitcpio.d", after the disk is already written.
+      * /boot/vmlinuz-<pkgbase>. mkarchiso empties /boot before packing the
+        squashfs, so the copied root has no kernel image at all - only
+        usr/lib/modules/<kver>/vmlinuz, which is where the hook reads from.
+
+    The medium's own presets are no substitute: they name PRESETS=('archiso')
+    and an archiso config, which is why live_only excludes them. mkinitcpio
+    ships the template the hook fills in, so that is what is used here
+    rather than a second copy of the same text.
+    """
+    template = ctx.target / "usr/share/mkinitcpio/hook.preset"
+    presets = ctx.target / "etc/mkinitcpio.d"
+    presets.mkdir(parents=True, exist_ok=True)
+    (ctx.target / "boot").mkdir(parents=True, exist_ok=True)
+
+    restored = []
+    for marker in sorted((ctx.target / "usr/lib/modules").glob("*/pkgbase")):
+        pkgbase = marker.read_text().strip()
+        image = marker.parent / "vmlinuz"
+        if not pkgbase or not image.exists():
+            continue
+        (presets / f"{pkgbase}.preset").write_text(
+            template.read_text().replace("%PKGBASE%", pkgbase)
+        )
+        shutil.copy2(image, ctx.target / "boot" / f"vmlinuz-{pkgbase}")
+        restored.append(pkgbase)
+
+    if not restored:
+        raise RuntimeError(
+            "the copied root carries no kernel under usr/lib/modules, so no "
+            "initramfs could be built and the target would not boot"
+        )
+    info(f"› kernel and preset restored for {', '.join(restored)}")
 
 
 def verify_not_live(ctx: InstallContext) -> None:
