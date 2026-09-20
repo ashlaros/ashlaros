@@ -60,6 +60,16 @@ package() {
   # dashboard falls back to whole-phase arithmetic, which is exactly what it
   # did before #94. The script itself refuses to emit a count below 100, so
   # a partial resolution cannot ship a wrong denominator either.
+  #
+  # It also makes this package's content non-deterministic: the count is
+  # resolved against the repositories as they are today, so the same commit
+  # built a day apart differs by the width of a number. pkgrel is a commit
+  # count, so it does not move for a rebuild - and publish.py refuses to
+  # replace a published object with different bytes at the same version,
+  # which is how a rebuild of an unchanged installer failed the whole
+  # workflow with "already published with different content". The fix when
+  # that happens is a commit touching installer/ or iso/airootfs, which is
+  # what moves pkgrel; there is deliberately no flag to force a replace.
   # /etc/pacman.conf, not iso/pacman.conf: --dbpath below is the builder's
   # own database, synced against the builder's own configuration. Handing
   # pacman a different config names repositories those databases were never
