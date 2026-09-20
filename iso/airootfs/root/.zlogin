@@ -3,9 +3,14 @@ if grep -Fqa 'accessibility=' /proc/cmdline &> /dev/null; then
     setopt SINGLE_LINE_ZLE
 fi
 
-~/.automated_script.sh
+# The live session is a sway desktop on tty1, which runs the installer in a
+# terminal window so other tools (like a browser) are available alongside it.
+[[ $(tty) == /dev/tty1 ]] || return 0
 
-# The live session, on its own VT. .automated_script.sh guards on tty1 and
-# exits anywhere else, so this is only reached on tty2 - the installer on
-# tty1 is untouched and keeps the screen it owns.
-~/.live_session.sh
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[[ -d $XDG_RUNTIME_DIR ]] || {
+    mkdir -p "$XDG_RUNTIME_DIR"
+    chmod 700 "$XDG_RUNTIME_DIR"
+}
+
+exec sway -c /etc/sway/config >/var/log/live-session.log 2>&1

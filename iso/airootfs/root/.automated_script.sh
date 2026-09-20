@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 #
-# Live ISO entry point on tty1: set the console up, run the configurator,
-# then hand off to the dashboard, which owns the screen while the
-# orchestrator installs.
+# Live ISO installer script: set the console up, run the configurator,
+# then hand off to the dashboard.
+#
+# Run inside a terminal window by sway at startup.
 #
 # The stream contract matters:
 #   - stdout is teed to the log with the CSI sequences stripped, and to the tty
-#   - stderr goes straight to /dev/tty, because gum draws its TUI there
 #   - CLICOLOR_FORCE/FORCE_COLOR so gum still emits colour with stdout piped
 #   - COLUMNS/LINES so gum picks up the real terminal size
 set -uo pipefail
 
-[[ $(tty) == /dev/tty1 ]] || exit 0
 
 export ASHLAROS_PATH=/usr/share/ashlaros
 export ASHLAROS_INSTALL_LOG_FILE=/var/log/ashlaros-install.log

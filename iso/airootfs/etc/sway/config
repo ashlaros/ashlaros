@@ -13,10 +13,6 @@ set $mod Mod4
 set $term foot
 set $menu wmenu-run
 
-# Getting back to the installer is the single most important binding here:
-# the install is running on tty1 and this VT is a detour from it.
-set $back_to_installer chvt 1
-
 font pango:monospace 10
 
 # No wallpaper on the medium, and a solid colour cannot fail to load.
@@ -29,14 +25,6 @@ bindsym $mod+d exec $menu
 # the stated reason the session exists
 bindsym $mod+b exec firefox
 bindsym $mod+Shift+q kill
-
-# wlroots switches VTs itself, below sway's bindings, so Ctrl+Alt+F1
-# already works and is what the hint below names. This binding is the
-# same thing spelled where sway can see it, for the case where the seat
-# backend does not take it; $mod+Escape is the one that adds something,
-# since a fullscreen client can swallow the Ctrl+Alt chord.
-bindsym Ctrl+Alt+F1 exec $back_to_installer
-bindsym $mod+Escape exec $back_to_installer
 
 bindsym $mod+Shift+c reload
 
@@ -51,15 +39,7 @@ bindsym $mod+Shift+space floating toggle
 
 ### What is on screen
 
-# No waybar on the ISO and no intention of adding one: the hint a person
-# needs here is how to get back, and a swaynag stays visible without any
-# of waybar's configuration.
-exec swaynag --type warning --message \
-    'Live session. Ctrl+Alt+F1 returns to the AshlarOS installer. Super+Return terminal, Super+d menu, Super+b Firefox.' \
-    --button 'Back to the installer' 'chvt 1'
-
-# A terminal at startup, or the session is an empty screen with no
-# indication that anything worked.
-exec $term
-
+# Start the installer in a terminal window. The user can start more instances
+# or open other applications alongside it.
+exec $term -a ashlaros-installer -e /root/.automated_script.sh
 include /etc/sway/config.d/*
