@@ -167,12 +167,6 @@ packages:
     upstream: https://aur.archlinux.org/xdg-terminal-exec.git
     arch: any
 
-  # vendored from manjaro-contrib, which maintains these outside the AUR
-  zen-browser-bin:
-    # upstream releases often - expect this to be one of the noisier
-    # tracker entries, one PR per Zen release
-    upstream: https://aur.archlinux.org/zen-browser-bin.git
-    arch: both
   eww:
     upstream: https://aur.archlinux.org/eww.git
     # arch is widened to aarch64 here and the lockfile patch is vendored
