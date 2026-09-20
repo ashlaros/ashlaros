@@ -8,7 +8,9 @@ source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
 source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
 # grml's prompt is fine on a dark terminal but reads as noise beside the
-# stone accent; starship matches the rest of the desktop
+# stone accent. grml rebuilds PROMPT on every command, which silently
+# clobbers what starship init sets, so it must be disabled explicitly
+prompt off
 command -v starship >/dev/null && eval "$(starship init zsh)"
 
 ZSH_HIGHLIGHT_STYLES[comment]='fg=blue'
