@@ -120,12 +120,18 @@ depends=(
     'adwaita-cursors'         # default cursor theme
     'ttf-jetbrains-mono-nerd' # default monospace font
     'ttf-roboto'              # default font
+    # Workspace icons. An optdepend for this was a promise the desktop did
+    # not keep: 99-autostart-applications.conf starts the daemon behind
+    # `command -v sworkstyle`, so absent it the guard silently held and
+    # workspaces stayed numbered - the configured icons never appeared on
+    # any install. The glyphs come from ttf-jetbrains-mono-nerd above, so
+    # both halves are now dependencies of the thing that renders them.
+    'sworkstyle'
 )
 optdepends=(
     'gtklock: lockscreen based on gtkgreet'
     'swaylock-effects: minimalistic lockscreen with fancy effects'
     'wlsunset: time & place based light temperature'
-    'sworkstyle: dynamic workspace names (icons) in waybar'
     'cliphist: clipboard manager'
     'swaycwd: open here helper'
     'poweralertd: battery and power notifications'

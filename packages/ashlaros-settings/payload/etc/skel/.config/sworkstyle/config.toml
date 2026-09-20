@@ -24,3 +24,10 @@
 # logs "No match" and the workspace shows the generic fallback.
 
 [matching]
+# The file manager the installer puts on every desktop.
+'pcmanfm-qt' = ''
+# The settings TUI and the installer's own dashboard both run in foot with
+# a set app-id; matched by title so they read as themselves rather than as
+# a terminal.
+'/(?i)ashlaros.settings/' = ''
+'floating_shell' = ''
