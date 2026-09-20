@@ -56,13 +56,23 @@ case ${1:-status} in
                 if ($0 != "no") { print; exit }
             }')
 
+    # Labelled, not bare. The bar shows an icon and nothing else, so the
+    # tooltip is the only place the profile is named - and a lone
+    # "balanced" reads as a stray word rather than as the power mode.
+    # The click action goes with it: cycling is not discoverable from an
+    # icon, and the tooltip is where waybar can say so.
+    tooltip="Power mode: $current"
     if [ -n "$degraded" ]; then
-        tooltip="$current (degraded: $degraded)"
-    else
-        tooltip="$current"
+        tooltip="$tooltip
+Degraded: $degraded"
     fi
+    tooltip="$tooltip
+Click to cycle, right-click for settings"
 
-    printf '{"alt":"%s","tooltip":"%s","class":"%s"}\n' \
-        "$current" "$tooltip" "$current"
+    # jq, not printf: the tooltip carries real newlines now, and a raw
+    # newline inside a JSON string is invalid - waybar drops the module
+    # rather than complaining. --arg escapes them.
+    jq -cn --arg alt "$current" --arg tooltip "$tooltip" --arg class "$current" \
+        '{alt: $alt, tooltip: $tooltip, class: $class}'
     ;;
 esac
