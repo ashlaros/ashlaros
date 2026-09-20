@@ -44,6 +44,10 @@ cat > "$CONFIG" <<EOF
 # overwritten on theme switch. See /etc/skel/.config/starship.toml for why
 # the mark is three stones with a joint rather than the whole logo.
 
+# starship defaults add_newline to true, which would put a blank line
+# above a prompt that already breaks before its character.
+add_newline = false
+
 format = """
 [▀▀ ▀ ](fg:${TEXT_COLOR} bg:${SURFACE_COLOR})\\
 [](fg:${SURFACE_COLOR} bg:${BACKGROUND_COLOR})\\

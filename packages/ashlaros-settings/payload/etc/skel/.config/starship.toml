@@ -52,6 +52,14 @@
 # put your own in ~/.config/starship.toml after disabling the theme hook,
 # or accept that the prompt follows the theme.
 
+# starship's own default is add_newline = true, which prints a blank line
+# before every prompt. That is a reasonable default for a one-line prompt
+# and wrong for this one: $line_break below already puts the character on
+# its own line, so the default makes each prompt three lines tall and
+# leaves a gap between a command's output and the prompt that follows it.
+# Measured: as shipped starship emitted 3 lines, the first empty.
+add_newline = false
+
 format = """
 [▀▀ ▀ ](fg:#eeeeee bg:#282828)\
 [](fg:#282828 bg:#141a1b)\
