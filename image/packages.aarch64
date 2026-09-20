@@ -28,7 +28,6 @@ less
 # our own
 ashlaros-settings
 ashlaros-branding
-ashlaros-browser-settings
 ashlaros-keyring
 ashlaros-mirrorlist
 # ashlaros-release carries os-release and the hook that keeps it; the
@@ -47,6 +46,8 @@ ashlaros-release
 # since 2.0, which is what the settings PKGBUILD already says.
 greetd
 greetd-tuigreet
+# firefox, not zen: zen-browser-bin comes from CachyOS, and this image has
+# no CachyOS repository - only ashlaros and ALARM's core/extra/alarm/aur.
 firefox
 
 # session plumbing

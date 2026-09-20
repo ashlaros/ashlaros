@@ -275,9 +275,9 @@ def _ships(path: Path) -> bool:
 def source_hash(directory: Path) -> str:
     """A digest of everything a package is built from.
 
-    The PKGBUILD alone is not enough: ashlaros-browser-settings ships five
-    payload files beside it, and editing one changes the package without
-    touching pkgver.
+    The PKGBUILD alone is not enough: ashlaros-settings ships a whole
+    payload tree beside it, and editing one file there changes the package
+    without touching pkgver.
     """
     digest = hashlib.sha256()
     for tree in source_trees(directory):

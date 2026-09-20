@@ -36,8 +36,6 @@ packages:
     arch: any
   ashlaros-branding:
     arch: any
-  ashlaros-browser-settings:
-    arch: any
   ashlaros-installer:
     arch: any
   ashlaros-keyring:
