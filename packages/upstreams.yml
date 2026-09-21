@@ -148,9 +148,6 @@ packages:
     # no upstream repository: the AUR url is a dead google cache link, so
     # the script itself is vendored beside the PKGBUILD
     arch: any
-  swaylock-effects:
-    upstream: https://aur.archlinux.org/swaylock-effects.git
-    arch: both
   swayr:
     upstream: https://aur.archlinux.org/swayr.git
     arch: both

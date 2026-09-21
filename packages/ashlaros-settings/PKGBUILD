@@ -168,7 +168,6 @@ depends=(
 )
 optdepends=(
     'gtklock: lockscreen based on gtkgreet'
-    'swaylock-effects: minimalistic lockscreen with fancy effects'
     'wlsunset: time & place based light temperature'
     'swaycwd: open here helper'
     'poweralertd: battery and power notifications'
