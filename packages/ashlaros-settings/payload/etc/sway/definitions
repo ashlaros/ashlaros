@@ -48,6 +48,10 @@ set $generate_aerc_styleset $script_path/generate-aerc-styleset.sh "$background-
 # starship re-reads its config every prompt, so this is the one generator
 # whose output reaches a shell that is already open
 set $generate_starship_config $script_path/generate-starship-config.sh "$background-color" "$text-color" "$accent-color" "$color8"
+# The lock screen. Generated rather than flagged in lock.sh: swaylock
+# reads this path by default, so the config survives however it is started
+# - the shutdown-mode binding, swayidle's timeout, or before-sleep.
+set $generate_swaylock_config $script_path/generate-swaylock-config.sh "$background-color" "$text-color" "$accent-color" "$color8" "$color1"
 set $apply_kvantum_theme kvantummanager --set "$kvantum-theme"
 
 # Terminal emulator
