@@ -108,13 +108,30 @@ root_run() {
 # startup. Setting it here and re-running that script is what makes the
 # change reach the session that is already running, rather than the next
 # login.
+#
+# localectl lists only xkeyboard-config's main registry. EurKEY (`eu`) ships
+# symbols but is registered in the extras alone, so it is added back here,
+# as the installer's configurator does.
+XKB_SYMBOLS_DIR=/usr/share/X11/xkb/symbols
+XKB_UNREGISTERED=(eu)
+
+xkb_layouts() {
+  {
+    localectl list-x11-keymap-layouts 2>/dev/null
+    local name
+    for name in "${XKB_UNREGISTERED[@]}"; do
+      [[ -f $XKB_SYMBOLS_DIR/$name ]] && echo "$name"
+    done
+  } | sort -u
+}
+
 keyboard_menu() {
   local layout
   screen "Keyboard layout"
   say "Current: $(localectl status | sed -n 's/.*X11 Layout: *//p' | head -1)"
   echo
 
-  layout=$(localectl list-x11-keymap-layouts 2>/dev/null |
+  layout=$(xkb_layouts |
     gum filter --header "Layout" --placeholder "type to filter") || return 0
   [[ -n $layout ]] || return 0
 
