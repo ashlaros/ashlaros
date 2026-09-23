@@ -281,8 +281,19 @@ def source_hash(directory: Path) -> str:
     """
     digest = hashlib.sha256()
     for tree in source_trees(directory):
-        for path in sorted(p for p in tree.rglob("*") if p.is_file()):
+        for path in sorted(p for p in tree.rglob("*") if p.is_symlink() or p.is_file()):
             digest.update(path.relative_to(tree).as_posix().encode())
+            # A link is hashed as the link, never followed. iso/airootfs
+            # commits absolute links into /usr/lib/systemd, which resolve
+            # against whatever machine does the hashing: discovery on the
+            # Ubuntu runner and the build in the Arch container read
+            # different files there, or none, so the mark stamped at build
+            # time never matched the one computed here. ashlaros-installer
+            # was rebuilt on every run and refused at its own published
+            # name - -70, -77 and -78, each bumped past by hand.
+            if path.is_symlink():
+                digest.update(b"l" + os.readlink(path).encode())
+                continue
             # The exec bit is part of what ships, but only where we ship
             # the file: a payload script that gains +x is a different
             # package, and hashing contents alone left that rebuild
