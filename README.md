@@ -101,7 +101,8 @@ a resumed download counts once and a checksum file does not count at all.
 launcher) collects the settings that are otherwise commands you have to
 know. The menu groups them by what you are looking for:
 
-- **Language and time:** keyboard layout, locale, time and timezone
+- **Language and time:** keyboard layouts and the key that switches
+  between them (Caps Lock by default), locale, time and timezone
 - **Screen and power:** displays, adaptive brightness, power profiles
 - **Appearance:** the day and night theme, the wallpaper, focus flashing
 - **Software:** kernel variants, hardware profiles, packages, packages

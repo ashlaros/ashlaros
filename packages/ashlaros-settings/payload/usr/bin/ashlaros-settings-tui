@@ -202,31 +202,177 @@ xkb_layouts() {
   } | sort -u
 }
 
-keyboard_menu() {
-  local layout
-  screen "Keyboard layout"
-  say "Current: $(localectl status | sed -n 's/.*X11 Layout: *//p' | head -1)"
-  echo
+# The X11 keymap as localectl has it. Layout and Variant are comma lists
+# in step with each other; the first layout is the one a session starts in.
+x11_field() { localectl status | sed -n "s/^ *X11 $1: *//p" | head -1; }
 
-  layout=$(xkb_layouts |
-    gum filter --header "Layout" --placeholder "type to filter") || return 0
-  [[ -n $layout ]] || return 0
+# The key that switches layouts is an xkb option like any other: grp:
+# picks the key, grp_led: the light that shows you are off the first one.
+# Super+Space is not offered - it is sway's focus toggle.
+KEYMAP_SWITCHES=(
+  "grp:caps_toggle,grp_led:caps|Caps Lock (Shift+Caps Lock for capitals)"
+  "grp:alt_shift_toggle|Alt+Shift"
+  "grp:ctrl_shift_toggle|Ctrl+Shift"
+  "grp:shifts_toggle|Both Shift keys"
+)
 
-  root_run localectl set-x11-keymap "$layout" || { pause; return 0; }
+join_commas() { local IFS=,; printf '%s' "$*"; }
 
-  # the running session, not just the next one
-  if [[ -x /usr/share/sway/scripts/keyboard.sh ]] && [[ -n ${SWAYSOCK:-} ]]; then
+keymap_options_without_switch() {
+  tr ',' '\n' <<<"$1" | grep -v -E '^grp(_led)?:' | paste -sd,
+}
+
+keymap_switch_name() {
+  local entry
+  for entry in "${KEYMAP_SWITCHES[@]}"; do
+    [[ ,$1, == *,"${entry%%[,|]*}",* ]] && { printf '%s' "${entry#*|}"; return; }
+  done
+  printf 'nothing - no switch key is set'
+}
+
+# One call for the whole keymap, so localectl never holds a layout list
+# paired with the previous variants. Model is kept as it was.
+keymap_apply() {
+  local layouts=$1 variants=$2 options=$3
+  [[ $variants =~ ^,*$ ]] && variants=""
+  options=$(sed 's/^,*//; s/,*$//; s/,,*/,/g' <<<"$options")
+  root_run localectl set-x11-keymap "$layouts" "$(x11_field Model)" \
+    "$variants" "$options" || return 1
+  # The running session, not just the next one - on the same condition
+  # autostart has: a layout pinned in config.d is left where it is.
+  if [[ -x /usr/share/sway/scripts/keyboard.sh ]] && [[ -n ${SWAYSOCK:-} ]] &&
+    ! grep -qs 'xkb_layout' "$HOME"/.config/sway/config.d/*.conf; then
     /usr/share/sway/scripts/keyboard.sh >/dev/null 2>&1
-    say "Applied to this session too."
   fi
+  return 0
+}
 
-  # A user's own config.d wins by design - keyboard.sh leaves a layout it
-  # finds there alone - so say so rather than letting the setting look
-  # ignored.
-  if grep -rqs 'xkb_layout' "$HOME/.config/sway/config.d/" 2>/dev/null; then
-    warn "Your sway config.d sets xkb_layout, and that wins over this."
+# A layout and, where it has any, one of its variants: "layout<TAB>variant".
+keymap_pick_new() {
+  local layout variant variants
+  layout=$(xkb_layouts |
+    gum filter --header "Layout" --placeholder "type to filter") || return 1
+  [[ -n $layout ]] || return 1
+  variants=$(localectl list-x11-keymap-variants "$layout" 2>/dev/null)
+  if [[ -n $variants ]]; then
+    variant=$({ echo "(standard)"; echo "$variants"; } |
+      gum filter --header "Variant of $layout" --placeholder "type to filter") ||
+      return 1
+    [[ $variant == "(standard)" ]] && variant=""
   fi
-  pause
+  printf '%s\t%s' "$layout" "${variant-}"
+}
+
+keyboard_menu() {
+  local -a layouts variants
+  local options choice pick i n
+  while true; do
+    screen "Keyboard layout"
+    IFS=, read -ra layouts <<<"$(x11_field Layout)"
+    IFS=, read -ra variants <<<"$(x11_field Variant)"
+    options=$(x11_field Options)
+    n=${#layouts[@]}
+    for ((i = 0; i < n; i++)); do variants[i]=${variants[i]-}; done
+
+    local -a labels=()
+    for ((i = 0; i < n; i++)); do
+      labels+=("${layouts[i]}${variants[i]:+ (${variants[i]})}")
+    done
+    if ((n == 0)); then
+      say "No layout is set, so the desktop uses English (US)."
+    elif ((n == 1)); then
+      say "Layout: ${labels[0]}"
+    else
+      say "Layouts, the first is the one a session starts in:"
+      for ((i = 0; i < n; i++)); do say "  $((i + 1)). ${labels[i]}"; done
+      echo
+      say "Switch with: $(keymap_switch_name "$options")"
+    fi
+    echo
+
+    local -a entries
+    if ((n <= 1)); then
+      entries=("Change the layout" "Add another layout" "Back")
+    else
+      entries=("Add another layout" "Remove one" "Make one the first"
+        "Switch key" "Back")
+    fi
+    choice=$(gum choose --header "Keyboard layout" "${entries[@]}") || return 0
+
+    case $choice in
+      "Change the layout")
+        pick=$(keymap_pick_new) || continue
+        keymap_apply "${pick%%$'\t'*}" "${pick#*$'\t'}" \
+          "$(keymap_options_without_switch "$options")" &&
+          say "✓ Layout set to ${pick%%$'\t'*}."
+        ;;
+      "Add another layout")
+        pick=$(keymap_pick_new) || continue
+        local label="${pick%%$'\t'*}"
+        [[ -n ${pick#*$'\t'} ]] && label+=" (${pick#*$'\t'})"
+        if printf '%s\n' "${labels[@]}" | grep -qxF "$label"; then
+          warn "! $label is already one of them."
+          pause
+          continue
+        fi
+        layouts+=("${pick%%$'\t'*}")
+        variants+=("${pick#*$'\t'}")
+        # Caps Lock unless a switch key is already chosen: the one the
+        # shipped config.d example uses, and the one key most people never
+        # hold down deliberately. Only from two layouts on - with one there
+        # is nothing to switch to and Caps Lock would just stop working.
+        ((${#layouts[@]} >= 2)) && [[ $options != *grp:* ]] &&
+          options+=",grp:caps_toggle,grp_led:caps"
+        if keymap_apply "$(join_commas "${layouts[@]}")" \
+          "$(join_commas "${variants[@]}")" "$options"; then
+          say "✓ Added $label."
+          ((${#layouts[@]} >= 2)) &&
+            say "$(keymap_switch_name "$options" | sed 's/ (.*//') switches between them."
+        fi
+        ;;
+      "Remove one")
+        i=$(for ((i = 0; i < n; i++)); do printf '%s|%s\n' "${labels[i]}" "$i"; done |
+          gum choose --label-delimiter="|" --header "Remove") || continue
+        local gone=${labels[i]}
+        unset 'layouts[i]' 'variants[i]'
+        layouts=("${layouts[@]}") variants=("${variants[@]}")
+        # With one layout, grp:caps_toggle does not fall back to Caps Lock -
+        # the key just stops doing anything. So the switch goes with it.
+        ((${#layouts[@]} == 1)) && options=$(keymap_options_without_switch "$options")
+        keymap_apply "$(join_commas "${layouts[@]}")" \
+          "$(join_commas "${variants[@]}")" "$options" &&
+          say "✓ Removed $gone."
+        ;;
+      "Make one the first")
+        i=$(for ((i = 1; i < n; i++)); do printf '%s|%s\n' "${labels[i]}" "$i"; done |
+          gum choose --label-delimiter="|" --header "First") || continue
+        layouts=("${layouts[i]}" "${layouts[@]:0:i}" "${layouts[@]:i+1}")
+        variants=("${variants[i]}" "${variants[@]:0:i}" "${variants[@]:i+1}")
+        keymap_apply "$(join_commas "${layouts[@]}")" \
+          "$(join_commas "${variants[@]}")" "$options" &&
+          say "✓ ${labels[i]} is now the first."
+        ;;
+      "Switch key")
+        local key
+        key=$(printf '%s\n' "${KEYMAP_SWITCHES[@]}" |
+          awk -F'|' '{ print $2 "|" $1 }' |
+          gum choose --label-delimiter="|" --header "Switch layouts with") || continue
+        keymap_apply "$(join_commas "${layouts[@]}")" \
+          "$(join_commas "${variants[@]}")" \
+          "$(keymap_options_without_switch "$options"),$key" &&
+          say "✓ $(keymap_switch_name "$key") switches layouts."
+        ;;
+      "Back") return 0 ;;
+    esac
+
+    # A user's own config.d wins by design - keyboard.sh leaves a layout it
+    # finds there alone - so say so rather than letting the setting look
+    # ignored. *.conf only, as sway includes: the shipped .example is not.
+    if grep -qs 'xkb_layout' "$HOME"/.config/sway/config.d/*.conf; then
+      warn "Your sway config.d sets xkb_layout, and that wins over this."
+    fi
+    pause
+  done
 }
 
 locale_menu() {
