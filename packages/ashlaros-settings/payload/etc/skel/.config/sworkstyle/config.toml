@@ -52,3 +52,7 @@
 # Slack on Wayland reports app_id "slack". Upstream matches only the X11
 # class 'Slack', and matching is exact; same icon (U+F198).
 'slack' = ''
+# Microsoft's VS Code build (visual-studio-code-bin) reports app_id
+# "com.microsoft.VSCode" on Wayland, its desktop file's StartupWMClass.
+# Upstream knows only 'Code' and 'code-oss'; the icon it gives both (U+F121).
+'com.microsoft.VSCode' = ''
