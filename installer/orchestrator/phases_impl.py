@@ -262,13 +262,13 @@ DESKTOP_PACKAGES = [
     # when a commit drops them into it. The live ISO already has both.
     "vim",
     "nano",
-    # AUR helper, from the cachyos repository rather than vendored. Not an
-    # optional extra: every shipped theme lists packages, and the four
-    # catppuccin ones name AUR-only ones, so ashlaros-theme calls yay
-    # unguarded on any machine where it is missing. Installed here rather
-    # than as a depends of ashlaros-settings because that package is
-    # arch=any and yay is x86_64 only - a depends would make the settings
-    # uninstallable on Arch Linux ARM.
+    # AUR helper, from the cachyos repository rather than vendored. It is
+    # what topgrade updates AUR packages with (arch_package_manager = "yay"
+    # in skel's topgrade.toml). Theme packages no longer need it: they are
+    # all in a repository, ours or Arch's. Installed here rather than as a
+    # depends of ashlaros-settings because that package is arch=any and yay
+    # is x86_64 only - a depends would make the settings uninstallable on
+    # Arch Linux ARM.
     "yay",
 ]
 

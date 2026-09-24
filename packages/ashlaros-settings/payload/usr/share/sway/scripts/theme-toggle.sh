@@ -118,8 +118,9 @@ case $1'' in
     exit $?
     ;;
 'merge-foot')
-    # ashlaros-theme writes the two halves and needs foot-theme.ini rebuilt
-    # without a toggle: the theme it just applied is the active one.
+    # The settings TUI's Theme entry writes the two halves and needs
+    # foot-theme.ini rebuilt without a toggle: the theme it just applied is
+    # the active one.
     merge_foot_themes "$CURRENT_PRIMARY_THEME"
     exit $?
     ;;

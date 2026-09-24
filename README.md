@@ -105,7 +105,7 @@ know:
 - kernel variants and hardware profiles
 - fingerprint enrolment, face unlock, adaptive brightness, power profiles
 - how the disk unlocks, and snapshots
-- the wallpaper, and packages nothing needs any more
+- the day and night theme, the wallpaper, and packages nothing needs any more
 
 It also opens the things that do nothing until configured: mail, a
 calendar, notes, chat clients, web apps and a model. Displays and package

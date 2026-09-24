@@ -45,9 +45,9 @@ while read -r shot; do
     log "=== $name ==="
 
     # A shot can ask for a theme, which is how the variants get one picture
-    # each (#84). The same copy-and-reload ashlaros-theme does, without its
-    # rofi prompts: sway rereads definitions.d/theme.conf on reload, so no
-    # session restart is needed.
+    # each (#84). The same copy-and-reload the settings TUI's Theme entry
+    # does, without its prompts: sway rereads definitions.d/theme.conf on
+    # reload, so no session restart is needed.
     if [ -n "$theme" ]; then
         theme_dir="/usr/share/sway/themes/$theme"
         if [ -f "$theme_dir/theme.conf" ]; then

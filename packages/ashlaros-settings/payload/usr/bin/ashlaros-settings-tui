@@ -2569,6 +2569,109 @@ wluma_entry() {
   done
 }
 
+# 21. THEME
+#
+# Was its own script, ashlaros-theme, behind a launcher entry: two rofi
+# prompts and a separate foot window just to ask for sudo. The same steps
+# here, in the terminal this already runs in.
+#
+# A theme is a pair. The day theme becomes the active one; the night theme
+# is stashed beside it as theme.light.conf_ and foot-theme.light.ini_ -
+# the names theme-toggle.sh reads to tell which half is live and writes
+# back when the waybar toggle flips them. "light" is that contract, not a
+# description of the theme.
+THEME_DIR=/usr/share/sway/themes
+
+# Missing packages a theme names, one per line; empty when all are there.
+theme_missing() {
+  [[ -f $1/packages ]] || return 0
+  local -a wanted
+  mapfile -t wanted < "$1/packages"
+  pacman -T "${wanted[@]}" 2>/dev/null || true
+}
+
+# Whether a theme can be finished on this machine: every package it lacks
+# is in a configured repository. Offering one that cannot is #56 - on ARM
+# the catppuccin themes applied their sway colours and then asked for
+# AUR-only packages the machine could not get.
+theme_installable() {
+  local pkg
+  while read -r pkg; do
+    [[ -n $pkg ]] || continue
+    pacman -Si "$pkg" >/dev/null 2>&1 || return 1
+  done < <(theme_missing "$1")
+  return 0
+}
+
+# Which shipped theme a copy in definitions.d is, or nothing if edited.
+theme_name_of() {
+  local copy=$1 dir
+  [[ -f $copy ]] || return 0
+  for dir in "$THEME_DIR"/*/; do
+    cmp -s "$copy" "$dir/theme.conf" && { basename "$dir"; return 0; }
+  done
+}
+
+theme_install() {
+  local -a missing
+  mapfile -t missing < <(theme_missing "$1")
+  [[ ${#missing[@]} -gt 0 ]] || return 0
+  say "$(basename "$1") needs: ${missing[*]}"
+  sudo pacman -S --needed "${missing[@]}"
+}
+
+theme_entry() {
+  screen "Theme"
+
+  local defs="$HOME/.config/sway/definitions.d"
+  local day night
+  day=$(theme_name_of "$defs/theme.conf")
+  night=$(theme_name_of "$defs/theme.light.conf_")
+  say "Day theme:   ${day:-a theme.conf you edited}"
+  say "Night theme: ${night:-a theme.light.conf_ you edited}"
+  say "The waybar toggle switches between them."
+  echo
+
+  local -a themes=()
+  local dir
+  for dir in "$THEME_DIR"/*/; do
+    dir=${dir%/}
+    theme_installable "$dir" && themes+=("$(basename "$dir")")
+  done
+  if [[ ${#themes[@]} -eq 0 ]]; then
+    oops "No theme on this machine can install its packages."
+    pause
+    return 1
+  fi
+
+  local new_day new_night
+  new_day=$(printf '%s\n' "${themes[@]}" | gum filter --header "Day theme" \
+    --placeholder "type to filter") || return 0
+  new_night=$(printf '%s\n' "${themes[@]}" | gum filter --header "Night theme" \
+    --placeholder "type to filter") || return 0
+  [[ -n $new_day && -n $new_night ]] || return 0
+
+  theme_install "$THEME_DIR/$new_day" || { pause; return 1; }
+  theme_install "$THEME_DIR/$new_night" || { pause; return 1; }
+
+  mkdir -p "$defs" "$HOME/.config/foot"
+  cp --backup "$THEME_DIR/$new_day/theme.conf" "$defs/theme.conf"
+  cp --backup "$THEME_DIR/$new_night/theme.conf" "$defs/theme.light.conf_"
+  # foot-theme.ini is not one of the pair: theme-toggle.sh builds it from
+  # the .dark. and .light. halves, so writing it directly would be undone
+  # by the first toggle. Write the halves, then have it merged.
+  [[ -f $THEME_DIR/$new_day/foot-theme.ini ]] &&
+    cp --backup "$THEME_DIR/$new_day/foot-theme.ini" "$HOME/.config/foot/foot-theme.dark.ini_"
+  [[ -f $THEME_DIR/$new_night/foot-theme.ini ]] &&
+    cp --backup "$THEME_DIR/$new_night/foot-theme.ini" "$HOME/.config/foot/foot-theme.light.ini_"
+  /usr/share/sway/scripts/theme-toggle.sh merge-foot >/dev/null 2>&1 || true
+  # last, so the reload applies the day theme with everything in place
+  swaymsg reload >/dev/null 2>&1
+
+  say "Day: $new_day, night: $new_night."
+  pause
+}
+
 main() {
   command -v gum >/dev/null || { echo "ashlaros-settings-tui: gum is not installed" >&2; exit 1; }
 
@@ -2631,7 +2734,7 @@ main() {
     command -v zk >/dev/null && entries+=("Notes")
     command -v aerc >/dev/null && entries+=("Mail")
     command -v vdirsyncer >/dev/null && entries+=("Calendar")
-    entries+=("Background")
+    entries+=("Theme" "Background")
     command -v firefoxpwa >/dev/null && entries+=("Web apps")
     command -v aichat >/dev/null && entries+=("Model")
     command -v tailscale >/dev/null && entries+=("Tailscale")
@@ -2659,6 +2762,7 @@ main() {
       "Notes") notes_entry ;;
       "Mail") mail_entry ;;
       "Calendar") calendar_entry ;;
+      "Theme") theme_entry ;;
       "Background") background_entry ;;
       "Web apps") webapps_entry ;;
       "Model") model_entry ;;
