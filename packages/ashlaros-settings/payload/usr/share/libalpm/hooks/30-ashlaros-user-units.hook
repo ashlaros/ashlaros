@@ -1,0 +1,24 @@
+# Reload the user managers when our user units change.
+#
+# They ship under /etc/systemd/user, which is where sway-based spins keep
+# them and where the enable symlinks of every existing install already
+# point. systemd's own hook reloads user managers only for
+# usr/lib/systemd/user/*, so an update that changed one of ours left every
+# running session on the old definition until the next login - with
+# "unit file changed on disk" warnings as the only sign. This is that hook
+# with the path we actually use.
+#
+# 30- beside systemd's 30-systemd-daemon-reload-user.hook, and before
+# anything that starts or restarts a unit.
+
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Target = etc/systemd/user/*
+
+[Action]
+Description = Reloading user manager configuration for AshlarOS units...
+When = PostTransaction
+Exec = /usr/share/libalpm/scripts/systemd-hook daemon-reload-user
