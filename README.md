@@ -99,17 +99,21 @@ a resumed download counts once and a checksum file does not count at all.
 
 `ashlaros-settings-tui` (`Super+,`, or "AshlarOS Settings" in the
 launcher) collects the settings that are otherwise commands you have to
-know:
+know. The menu groups them by what you are looking for:
 
-- locale, keyboard layout, time and timezone
-- kernel variants and hardware profiles
-- fingerprint enrolment, face unlock, adaptive brightness, power profiles
-- how the disk unlocks, and snapshots
-- the day and night theme, the wallpaper, and packages nothing needs any more
+- **Language and time:** keyboard layout, locale, time and timezone
+- **Screen and power:** displays, adaptive brightness, power profiles
+- **Appearance:** the day and night theme, the wallpaper, focus flashing
+- **Software:** kernel variants, hardware profiles, packages, packages
+  nothing needs any more, snapshots
+- **Security:** how the disk unlocks, fingerprint enrolment, face unlock
+- **Accounts** and **Apps:** mail, a calendar and Tailscale; notes, web
+  apps and a model, the things that do nothing until configured
 
-It also opens the things that do nothing until configured: mail, a
-calendar, notes, chat clients, web apps and a model. Displays and package
-installation open `ashlaros-displays` and `pacseek`.
+An entry only appears where it can work, so a machine without a
+fingerprint reader has no Fingerprint entry, and a group left empty is not
+shown. The header and cursor use the theme's accent colour. Displays and
+package installation open `ashlaros-displays` and `pacseek`.
 
 **A launcher, not a control panel.** Every entry runs an existing tool, or
 collects what it needs and runs one command. Entries hide themselves when

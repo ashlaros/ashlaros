@@ -24,11 +24,53 @@ set -uo pipefail
 # that matches for somebody else.
 ME=$(id -un)
 
-export GUM_CHOOSE_CURSOR_FOREGROUND="7"
+# The accent is the theme's own $accent-color, resolved from the sway
+# theme.conf the theme switcher writes - the colour the prompt, the bar and
+# the lock screen are generated from. Not a palette slot: themes disagree
+# about what slot 4 is, and on some it is a grey that reads as disabled.
+# Palette 4 only where there is no theme.conf, outside an AshlarOS session.
+theme_accent() {
+  local conf=$HOME/.config/sway/definitions.d/theme.conf
+  [[ -r $conf ]] || return 1
+  # Follows the reference chain: ashlaros names $color12, catppuccin names
+  # $blue, which is itself a hex. Bounded, so a cycle cannot hang the menu.
+  awk '$1 == "set" { v[$2] = $3 }
+    END {
+      c = v["$accent-color"]
+      for (i = 0; i < 5 && c ~ /^\$/; i++) c = v[c]
+      if (c ~ /^#[0-9A-Fa-f]{6}$/) { print c; exit 0 }
+      exit 1
+    }' "$conf"
+}
+C_ACCENT=$(theme_accent) || C_ACCENT=4
+readonly C_ACCENT C_DIM=8 C_OK=2 C_WARN=3 C_ERR=1
+
+# gum decides on colour per call, from whether its own stdout is a
+# terminal. Almost every styled string here is built inside $( ), where it
+# is not, so without this every header, mark and hint came out plain.
+# Forced only when this script itself is on a terminal: piped or logged,
+# it stays plain text.
+[[ -t 1 ]] && export CLICOLOR_FORCE=1
+
+export GUM_CHOOSE_CURSOR="▌ "
+export GUM_CHOOSE_CURSOR_FOREGROUND="$C_ACCENT"
+export GUM_CHOOSE_HEADER_FOREGROUND="$C_DIM"
 export GUM_CHOOSE_SELECTED_FOREGROUND="15"
-export GUM_CONFIRM_SELECTED_BACKGROUND="8"
-export GUM_CONFIRM_SELECTED_FOREGROUND="15"
+export GUM_FILTER_INDICATOR="▌"
+export GUM_FILTER_INDICATOR_FOREGROUND="$C_ACCENT"
+export GUM_FILTER_MATCH_FOREGROUND="$C_ACCENT"
+export GUM_FILTER_HEADER_FOREGROUND="$C_DIM"
+export GUM_FILTER_PROMPT_FOREGROUND="$C_ACCENT"
+export GUM_INPUT_CURSOR_FOREGROUND="$C_ACCENT"
+export GUM_INPUT_PROMPT_FOREGROUND="$C_ACCENT"
+export GUM_INPUT_HEADER_FOREGROUND="$C_DIM"
+export GUM_CONFIRM_PROMPT_FOREGROUND="15"
+export GUM_CONFIRM_SELECTED_BACKGROUND="$C_ACCENT"
+export GUM_CONFIRM_SELECTED_FOREGROUND="0"
+export GUM_CONFIRM_UNSELECTED_BACKGROUND="$C_DIM"
 export GUM_CONFIRM_UNSELECTED_FOREGROUND="7"
+export GUM_SPIN_SPINNER="dot"
+export GUM_SPIN_SPINNER_FOREGROUND="$C_ACCENT"
 
 PADDING_LEFT=2
 padding() {
@@ -38,13 +80,48 @@ padding() {
 }
 padding
 
-say() { gum style --padding "0 0 0 $PADDING_LEFT" "$@"; }
-warn() { gum style --foreground 3 --padding "0 0 0 $PADDING_LEFT" "$@"; }
-oops() { gum style --foreground 1 --padding "0 0 0 $PADDING_LEFT" "$@"; }
+# Status lines are written as `say "✓ ..."` and `warn "! ..."` throughout;
+# the mark is coloured here rather than at 50 call sites. Plain ANSI, not
+# gum style, for the mark: nested gum styling resets the colour of the
+# text after it.
+say() {
+  if [[ $# -eq 1 && $1 == "✓ "* ]]; then
+    gum style --padding "0 0 0 $PADDING_LEFT" $'\e[3'"$C_OK"$'m✓\e[0m'"${1#✓}"
+  else
+    gum style --padding "0 0 0 $PADDING_LEFT" "$@"
+  fi
+}
+warn() {
+  if [[ $# -eq 1 && $1 == "! "* ]]; then
+    gum style --foreground "$C_WARN" --padding "0 0 0 $PADDING_LEFT" "▲${1#!}"
+  else
+    gum style --foreground "$C_WARN" --padding "0 0 0 $PADDING_LEFT" "$@"
+  fi
+}
+oops() { gum style --foreground "$C_ERR" --padding "0 0 0 $PADDING_LEFT" "$@"; }
+# --faint rather than palette 8: 8 is "bright black", which several themes
+# set within a shade of the background, and a hint nobody can read is not
+# a hint
+hint() { gum style --faint --padding "0 0 0 $PADDING_LEFT" "$@"; }
 
+# The mark, AshlarOS Symbols' U+F8FE, which the prompt and the bar's menu
+# button use too: this is the same desktop, not a separate tool.
+readonly MARK=$'\xef\xa3\xbe'
+
+# One header for every screen: the mark and "Settings" in the accent, then
+# the screen's own title - so where you are is always the first line, and
+# the way back is always the same distance up.
 screen() {
   printf '\033[H\033[2J'
-  say "$1"
+  echo
+  local crumb
+  # the mark unbolded: AshlarOS Symbols has no bold face, and asking for
+  # one gets the missing-glyph box instead
+  crumb=$(gum style --foreground "$C_ACCENT" "$MARK")"  "$(gum style --foreground "$C_ACCENT" --bold "Settings")
+  if [[ ${1-} && $1 != Settings ]]; then
+    crumb+=$(gum style --faint "  ›  ")$(gum style --bold "$1")
+  fi
+  gum style --padding "0 0 0 $PADDING_LEFT" "$crumb"
   echo
 }
 
@@ -2856,45 +2933,72 @@ theme_entry() {
   pause
 }
 
+# The main menu's rows. Each is "key|icon|label|what it is": the key is
+# what main dispatches on, so the label can say anything without
+# breaking the case below. Icons are Nerd Font codepoints, nf-dev first
+# and nf-md otherwise, the same preference as the workspace icons.
+#
+# Plain text only: gum choose strips ANSI from its items, so styling here
+# never shows - and --selected matches against the stripped label, so an
+# escape left in one means the cursor is never restored.
+menu_row() {
+  local key=$1 icon=$2 label=$3 blurb=$4
+  # the label padded to one width, so the descriptions line up
+  printf '%s  %-20s %s|%s\n' "$icon" "$label" "$blurb" "$key"
+}
+
+# A heading row, with no key, so choosing it does nothing. A rule rather
+# than a colour, for the same reason; an empty one is just a gap.
+menu_section() {
+  if [[ -n $1 ]]; then
+    printf '── %s %s|\n' "$1" "$(printf '─%.0s' $(seq $((40 - ${#1}))))"
+  else
+    printf '|\n'
+  fi
+}
+
+# A one-line summary of the machine for the header: what someone opening
+# settings most often wants to know without opening anything.
+machine_line() {
+  local host kernel parts=()
+  host=$(uname -n)
+  kernel=$(uname -r)
+  parts+=("$host" "$kernel")
+  local theme
+  theme=$(sed -n 's/^# \(.*\): the palette.*/\1/p;s/^# \(.*\), light: the palette.*/\1 light/p' \
+    "$HOME/.config/sway/definitions.d/theme.conf" 2>/dev/null | head -1)
+  [[ -n $theme ]] && parts+=("theme $theme")
+  local IFS='·'
+  printf '%s' "${parts[*]/#/ }" | sed 's/^ //; s/·/ · /g; s/  */ /g'
+}
+
 main() {
   command -v gum >/dev/null || { echo "ashlaros-settings-tui: gum is not installed" >&2; exit 1; }
 
+  local last=""
   while true; do
-    screen "AshlarOS settings"
+    screen "Settings"
+    hint "$(machine_line)"
+    echo
 
-    # Entries are built rather than listed, so one pointing at a binary
-    # that is not installed is absent rather than present and broken -
-    # which is the rot #7 removed.
-    local entries=("Keyboard layout" "System locale")
-    command -v ashlaros-displays >/dev/null && entries+=("Displays")
-    entries+=("Kernels")
-    command -v pacseek >/dev/null && entries+=("Install packages")
-    entries+=("Time and date")
-    command -v chwd >/dev/null && entries+=("Hardware profiles")
-    # a machine with no reader must not show the entry at all: fprintd is
-    # installed everywhere, so the binary existing proves nothing
-    if command -v fprintd-enroll >/dev/null &&
-      fprintd-list "$ME" >/dev/null 2>&1; then
-      entries+=("Fingerprint")
-    fi
-    # howdy-next is an optdepend, so the binary existing is already a
-    # choice someone made - but a machine with no camera at all should
-    # still not be offered face unlock. /dev/video0 is the weakest honest
-    # test: whether the camera sees infrared is what the entry's own
-    # recognition test decides, and it refuses to enable until it passes.
-    if command -v howdy >/dev/null && compgen -G "/dev/video*" >/dev/null; then
-      entries+=("Face unlock")
-    fi
+    # Rows are built rather than listed, so one pointing at a binary that
+    # is not installed is absent rather than present and broken - which is
+    # the rot #7 removed. A group is only printed when something is in
+    # it.
+    local -a input=() screen=() software=() sec=() look=() accounts=() apps=() rows=()
+
+    input+=("$(menu_row keyboard $'\U000f030c' "Keyboard layout" "how keys map")")
+    input+=("$(menu_row locale $'\U000f05ca' "System locale" "language and formats")")
+    input+=("$(menu_row time $'\U000f0150' "Time and date" "clock and time zone")")
+    command -v ashlaros-displays >/dev/null &&
+      screen+=("$(menu_row displays $'\U000f0379' "Displays" "arrangement and scaling")")
     # only where there is a backlight to adapt - the same predicate the
     # waybar toggle uses, so the bar and the menu agree about whether this
     # machine has the hardware at all
     if command -v wluma >/dev/null &&
       [[ -n $(ls -A /sys/class/backlight 2>/dev/null) ]]; then
-      entries+=("Adaptive brightness")
+      screen+=("$(menu_row wluma $'\U000f00e1' "Adaptive brightness" "screen follows the light")")
     fi
-    # No hardware predicate: any sway session can flash a window. The script
-    # ships with this package, so the entry is always offerable.
-    entries+=("Focus flashing")
     # Built only where the daemon answers. power-profiles-daemon is
     # installed on every desktop, so the binary existing proves nothing;
     # asking it is what distinguishes a machine it can drive from one it
@@ -2902,56 +3006,109 @@ main() {
     # laptop- nor battery-specific, and a desktop can switch them too.
     if command -v powerprofilesctl >/dev/null &&
       powerprofilesctl get >/dev/null 2>&1; then
-      entries+=("Power")
+      screen+=("$(menu_row power $'\U000f140b' "Power" "performance or battery")")
     fi
-    # Built only where there is an encrypted root to unlock: an
-    # unencrypted install has no slots and no choice to make.
-    if root_crypt_device >/dev/null 2>&1; then
-      entries+=("Disk unlock")
-    fi
-    # only when there is something to say - an entry that always reports
-    # "nothing to do" is an entry people stop reading
+    software+=("$(menu_row kernels $'\ue712' "Kernels" "install another kernel")")
+    command -v chwd >/dev/null &&
+      software+=("$(menu_row hardware $'\U000f061a' "Hardware profiles" "drivers for this machine")")
+    command -v pacseek >/dev/null &&
+      software+=("$(menu_row packages $'\U000f03d6' "Install packages" "search and install")")
+    [[ -n $(pacman -Qtdq 2>/dev/null) ]] &&
+      software+=("$(menu_row orphans $'\U000f00e2' "Unneeded packages" "installed, needed by nothing")")
     # btrfs only: an ext4 install has no snapshots, and the entry would
     # open onto an explanation of why it cannot work
-    [[ $(findmnt -no FSTYPE / 2>/dev/null) == btrfs ]] && entries+=("Snapshots")
-    [[ -n $(pacman -Qtdq 2>/dev/null) ]] && entries+=("Unneeded packages")
-    command -v zk >/dev/null && entries+=("Notes")
-    command -v aerc >/dev/null && entries+=("Mail")
-    command -v vdirsyncer >/dev/null && entries+=("Calendar")
-    entries+=("Theme" "Background")
-    command -v firefoxpwa >/dev/null && entries+=("Web apps")
-    command -v aichat >/dev/null && entries+=("Model")
-    command -v tailscale >/dev/null && entries+=("Tailscale")
-    entries+=("Quit")
+    [[ $(findmnt -no FSTYPE / 2>/dev/null) == btrfs ]] &&
+      software+=("$(menu_row snapshots $'\U000f02da' "Snapshots" "roll back an update")")
 
-    local choice
-    choice=$(gum choose --header "Settings" "${entries[@]}") || exit 0
+    # Built only where there is an encrypted root to unlock: an
+    # unencrypted install has no slots and no choice to make.
+    root_crypt_device >/dev/null 2>&1 &&
+      sec+=("$(menu_row disk $'\U000f033e' "Disk unlock" "passphrase, TPM or PIN")")
+    # a machine with no reader must not show the entry at all: fprintd is
+    # installed everywhere, so the binary existing proves nothing
+    if command -v fprintd-enroll >/dev/null &&
+      fprintd-list "$ME" >/dev/null 2>&1; then
+      sec+=("$(menu_row fingerprint $'\U000f0237' "Fingerprint" "for sudo")")
+    fi
+    # howdy-next is an optdepend, so the binary existing is already a
+    # choice someone made - but a machine with no camera at all should
+    # still not be offered face unlock. /dev/video0 is the weakest honest
+    # test: whether the camera sees infrared is what the entry's own
+    # recognition test decides, and it refuses to enable until it passes.
+    if command -v howdy >/dev/null && compgen -G "/dev/video*" >/dev/null; then
+      sec+=("$(menu_row face $'\U000f0c7b' "Face unlock" "for sudo, with the IR camera")")
+    fi
 
-    case $choice in
-      "Keyboard layout") keyboard_menu ;;
-      "System locale") locale_menu ;;
-      "Displays") displays_entry ;;
-      "Kernels") kernel_menu ;;
-      "Install packages") packages_entry ;;
-      "Time and date") time_menu ;;
-      "Hardware profiles") hardware_menu ;;
-      "Adaptive brightness") wluma_entry ;;
-      "Focus flashing") flashing_entry ;;
-      "Snapshots") snapshots_entry ;;
-      "Power") power_entry ;;
-    "Disk unlock") disk_unlock_entry ;;
-      "Fingerprint") fingerprint_entry ;;
-      "Face unlock") face_entry ;;
-      "Unneeded packages") orphans_entry ;;
-      "Notes") notes_entry ;;
-      "Mail") mail_entry ;;
-      "Calendar") calendar_entry ;;
-      "Theme") theme_entry ;;
-      "Background") background_entry ;;
-      "Web apps") webapps_entry ;;
-      "Model") model_entry ;;
-      "Tailscale") tailscale_entry ;;
-      "Quit") exit 0 ;;
+    look+=("$(menu_row theme $'\U000f03d8' "Theme" "day and night colours")")
+    look+=("$(menu_row background $'\U000f02e9' "Background" "the wallpaper")")
+    # No hardware predicate: any sway session can flash a window. The script
+    # ships with this package, so the entry is always offerable.
+    look+=("$(menu_row flashing $'\U000f0241' "Focus flashing" "flash the window you switch to")")
+
+    command -v aerc >/dev/null && accounts+=("$(menu_row mail $'\U000f01f0' "Mail" "aerc accounts")")
+    command -v vdirsyncer >/dev/null && accounts+=("$(menu_row calendar $'\U000f00ed' "Calendar" "sync and subscriptions")")
+    command -v tailscale >/dev/null &&
+      accounts+=("$(menu_row tailscale $'\U000f0582' "Tailscale" "your private network")")
+    command -v zk >/dev/null && apps+=("$(menu_row notes $'\U000f082e' "Notes" "your zk notebook")")
+    command -v firefoxpwa >/dev/null && apps+=("$(menu_row webapps $'\U000f059f' "Web apps" "sites as windows")")
+    command -v aichat >/dev/null && apps+=("$(menu_row model $'\U000f06a9' "Model" "aichat's model")")
+
+    # Grouped by what someone is looking for, not by which tool does it.
+    # Headings without blank rows between groups: the rule already
+    # separates them, and a gap per group would cost seven rows.
+    local name
+    for name in "input:Language and time" "screen:Screen and power" \
+      "look:Appearance" "software:Software" "sec:Security" \
+      "accounts:Accounts" "apps:Apps"; do
+      local -n group=${name%%:*}
+      ((${#group[@]})) || continue
+      rows+=("$(menu_section "${name#*:}")" "${group[@]}")
+    done
+    rows+=("$(menu_section "")" "$(menu_row quit $'\U000f0206' "Quit" "")")
+
+    # Tall enough for every row where the terminal allows it: gum's
+    # default of 10 hid most of the menu behind "…". Header and help line
+    # take about 8 rows.
+    local height=$(( $(tput lines 2>/dev/null || echo 30) - 8 ))
+    ((height > ${#rows[@]})) && height=${#rows[@]}
+    ((height < 5)) && height=5
+
+    # --selected brings the cursor back to the entry just left, so going
+    # into a screen and out again does not throw you to the top; the first
+    # time, onto the first entry rather than the "System" heading
+    [[ -n $last ]] || last=$(printf '%s\n' "${rows[@]}" | awk -F'|' '$2 != "" { sub(/\|[^|]*$/, ""); print; exit }')
+    local key
+    key=$(printf '%s\n' "${rows[@]}" |
+      gum choose --label-delimiter="|" --height "$height" --header "" \
+        ${last:+--selected "$last"}) || exit 0
+    [[ -n $key ]] || continue
+    last=$(printf '%s\n' "${rows[@]}" | awk -F'|' -v k="$key" '$2 == k { sub(/\|[^|]*$/, ""); print; exit }')
+
+    case $key in
+      keyboard) keyboard_menu ;;
+      locale) locale_menu ;;
+      displays) displays_entry ;;
+      kernels) kernel_menu ;;
+      packages) packages_entry ;;
+      time) time_menu ;;
+      hardware) hardware_menu ;;
+      wluma) wluma_entry ;;
+      flashing) flashing_entry ;;
+      snapshots) snapshots_entry ;;
+      power) power_entry ;;
+      disk) disk_unlock_entry ;;
+      fingerprint) fingerprint_entry ;;
+      face) face_entry ;;
+      orphans) orphans_entry ;;
+      notes) notes_entry ;;
+      mail) mail_entry ;;
+      calendar) calendar_entry ;;
+      theme) theme_entry ;;
+      background) background_entry ;;
+      webapps) webapps_entry ;;
+      model) model_entry ;;
+      tailscale) tailscale_entry ;;
+      quit) exit 0 ;;
     esac
   done
 }
