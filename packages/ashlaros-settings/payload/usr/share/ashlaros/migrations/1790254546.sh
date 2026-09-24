@@ -28,9 +28,9 @@ if ! grep -q '^\[matching\]' "$config"; then
     exit 0
 fi
 
-# U+F121 as its UTF-8 bytes, so this file stays ASCII
+# U+E8DA (nf-dev-vscode) as its UTF-8 bytes, so this file stays ASCII
 tmp=$(mktemp "${config}.XXXXXX") || exit 1
-awk -v line="'com.microsoft.VSCode' = '"$'\xef\x84\xa1'"'" '{ print } /^\[matching\]/ { print line }' \
+awk -v line="'com.microsoft.VSCode' = '"$'\xee\xa3\x9a'"'" '{ print } /^\[matching\]/ { print line }' \
     "$config" >"$tmp" || { rm -f "$tmp"; exit 1; }
 chmod --reference="$config" "$tmp" 2>/dev/null || true
 mv -- "$tmp" "$config"

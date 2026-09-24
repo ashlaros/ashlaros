@@ -22,7 +22,7 @@ if ! grep -q '^\[matching\]' "$config"; then
     exit 0
 fi
 
-# app_id, then the icon as the UTF-8 bytes of U+F120 or U+F075, spelled as
+# app_id, then the icon as the UTF-8 bytes of U+E795 or U+F075, spelled as
 # $'\x..' escapes so this file stays ASCII
 add() {
     local app=$1 icon=$2 tmp
@@ -39,5 +39,5 @@ add() {
     echo "  added $app under [matching]"
 }
 
-add footclient $'\xef\x84\xa0' || exit 1
+add footclient $'\xee\x9e\x95' || exit 1
 add signal $'\xef\x81\xb5' || exit 1

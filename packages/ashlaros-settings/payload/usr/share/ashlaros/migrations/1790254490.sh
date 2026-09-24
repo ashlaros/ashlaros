@@ -27,9 +27,9 @@ if ! grep -q '^\[matching\]' "$config"; then
     exit 0
 fi
 
-# U+F198 as its UTF-8 bytes, so this file stays ASCII
+# U+E8A4 (nf-dev-slack) as its UTF-8 bytes, so this file stays ASCII
 tmp=$(mktemp "${config}.XXXXXX") || exit 1
-awk -v line="'slack' = '"$'\xef\x86\x98'"'" '{ print } /^\[matching\]/ { print line }' \
+awk -v line="'slack' = '"$'\xee\xa2\xa4'"'" '{ print } /^\[matching\]/ { print line }' \
     "$config" >"$tmp" || { rm -f "$tmp"; exit 1; }
 chmod --reference="$config" "$tmp" 2>/dev/null || true
 mv -- "$tmp" "$config"

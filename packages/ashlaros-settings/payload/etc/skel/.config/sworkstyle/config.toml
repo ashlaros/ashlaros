@@ -23,15 +23,18 @@
 # AshlarOS ships that upstream has no icon for, and common ones it misses;
 # without them the daemon logs "No match" and the workspace shows the
 # generic fallback.
+#
+# Icons are nf-dev (U+E7xx-E9xx) where Nerd Fonts has one for the
+# application - dev-terminal, dev-slack, dev-vscode - and nf-fa or nf-md
+# only where it does not.
 
 [matching]
 # The file manager the installer puts on every desktop.
 'pcmanfm-qt' = ''
 # The terminal. Upstream knows 'foot', but every terminal here is a client
 # of foot-server and reports app_id "footclient", which upstream does not -
-# so the one application on every workspace showed the fallback. The same
-# icon upstream gives foot.
-'footclient' = ''
+# so the one application on every workspace showed the fallback.
+'footclient' = ''
 # The browser the installer puts on every desktop (zen-browser-bin, app_id
 # "zen"). Upstream knows firefox but not zen; nf-md-web rather than the
 # firefox icon, because Zen is not Firefox-branded.
@@ -40,7 +43,7 @@
 # a set app-id; matched by title so they read as themselves rather than as
 # a terminal.
 '/(?i)ashlaros.settings/' = ''
-'floating_shell' = ''
+'floating_shell' = ''
 # Telegram Desktop (extra/telegram-desktop) is not shipped, but upstream's
 # table has no entry for it under any name. Wayland app_id, not the old
 # X11 class TelegramDesktop.
@@ -50,9 +53,9 @@
 # this is the same icon under the name Wayland uses.
 'signal' = ''
 # Slack on Wayland reports app_id "slack". Upstream matches only the X11
-# class 'Slack', and matching is exact; same icon (U+F198).
-'slack' = ''
+# class 'Slack', and matching is exact.
+'slack' = ''
 # Microsoft's VS Code build (visual-studio-code-bin) reports app_id
 # "com.microsoft.VSCode" on Wayland, its desktop file's StartupWMClass.
-# Upstream knows only 'Code' and 'code-oss'; the icon it gives both (U+F121).
-'com.microsoft.VSCode' = ''
+# Upstream knows only 'Code' and 'code-oss', and matching is exact.
+'com.microsoft.VSCode' = ''
