@@ -48,6 +48,13 @@ x86_64 builds use CachyOS's v3 compiler flags, copied from CachyOS's
 Linux ARM's defaults. The drop-in is not part of any package's source hash,
 so a flag change reaches a package at its next rebuild, not at once.
 
+An installed system builds locally (yay, makepkg) with CachyOS's own
+`/etc/makepkg.conf`, from CachyOS's `pacman`: the same flags with
+`-march=native` and `target-cpu=native`, which beat v3 on the machine that
+runs the result. `ashlaros-settings` adds only what that file lacks, in
+`/etc/makepkg.conf.d/zz-ashlaros.conf`: `GOAMD64=v3` and Rust's packed
+relocations.
+
 `packages/ashlaros-*` are ours, and their versions are derived rather than
 written down: `pkgver` is the date of the last commit touching the package
 directory and `pkgrel` the number of such commits, both stamped at build
