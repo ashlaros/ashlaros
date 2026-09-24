@@ -35,6 +35,10 @@
 # of foot-server and reports app_id "footclient", which upstream does not -
 # so the one application on every workspace showed the fallback.
 'footclient' = ''
+# A standalone foot - "Foot" in the launcher, or any terminal started while
+# foot-server is down - reports "foot", which upstream maps to nf-fa. The
+# same terminal, so the same icon.
+'foot' = ''
 # The browser the installer puts on every desktop (zen-browser-bin, app_id
 # "zen"). Upstream knows firefox but not zen; nf-md-web rather than the
 # firefox icon, because Zen is not Firefox-branded.
