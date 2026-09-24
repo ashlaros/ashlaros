@@ -49,3 +49,6 @@
 # Upstream matches only the X11 class 'Signal', and matching is exact, so
 # this is the same icon under the name Wayland uses.
 'signal' = ''
+# Slack on Wayland reports app_id "slack". Upstream matches only the X11
+# class 'Slack', and matching is exact; same icon (U+F198).
+'slack' = ''
