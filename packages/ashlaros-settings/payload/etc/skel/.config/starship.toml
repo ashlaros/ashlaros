@@ -6,27 +6,12 @@
 format = """
 [  ](fg:mark_ink bg:mark)\
 $username\
-[](bg:dir fg:mark)\
-$directory\
-[](bg:git fg:dir)\
-$git_branch\
-$git_status\
-[](fg:git bg:lang)\
-$c\
-$rust\
-$golang\
-$nodejs\
-$bun\
-$php\
-$java\
-$kotlin\
-$haskell\
-$python\
-[](fg:lang bg:env)\
-$conda\
-[](fg:env bg:time)\
-$time\
-[ ](fg:time)\
+[](fg:mark)\
+([](fg:dir)$directory[](fg:dir))\
+([](fg:git)$git_branch$git_status[](fg:git))\
+([](fg:lang)$c$rust$golang$nodejs$bun$php$java$kotlin$haskell$python[](fg:lang))\
+([](fg:env)$conda[](fg:env))\
+[](fg:time)$time[ ](fg:time)\
 $cmd_duration"""
 
 palette = 'ashlaros'

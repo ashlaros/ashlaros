@@ -14,8 +14,15 @@
 #     to plain Linux and probe the OS on every prompt to print a constant.
 #     Followed by a space: the glyph is two cells wide, and foot draws it
 #     into the next cell only when that cell is blank.
-#   - both outer ends are square, not rounded, to fit the brick shapes;
-#     the right end is an arrow and replaces the prompt character.
+#   - each segment is its own brick: a notch (U+E0D7) on the left, an
+#     arrow (U+E0B0) on the right, drawn in the segment's own colour on
+#     the terminal background. The preset's separators joined two
+#     neighbours and were drawn whatever was between them, so a directory
+#     with no git, language or conda left three bare chevrons in a row.
+#     Each optional brick is a (...) group, which starship drops whole
+#     when the modules inside it print nothing.
+#   - the left end is square, to fit the brick shapes; the right end is an
+#     arrow and replaces the prompt character.
 #   - no $line_break and no $character: one line, ending in that arrow.
 #   - the preset's four catppuccin palettes are one, "ashlaros", derived
 #     from the theme (below).
@@ -113,27 +120,12 @@ cat > "$CONFIG" <<EOF
 format = """
 [  ](fg:mark_ink bg:mark)\\
 \$username\\
-[](bg:dir fg:mark)\\
-\$directory\\
-[](bg:git fg:dir)\\
-\$git_branch\\
-\$git_status\\
-[](fg:git bg:lang)\\
-\$c\\
-\$rust\\
-\$golang\\
-\$nodejs\\
-\$bun\\
-\$php\\
-\$java\\
-\$kotlin\\
-\$haskell\\
-\$python\\
-[](fg:lang bg:env)\\
-\$conda\\
-[](fg:env bg:time)\\
-\$time\\
-[ ](fg:time)\\
+[](fg:mark)\\
+([](fg:dir)\$directory[](fg:dir))\\
+([](fg:git)\$git_branch\$git_status[](fg:git))\\
+([](fg:lang)\$c\$rust\$golang\$nodejs\$bun\$php\$java\$kotlin\$haskell\$python[](fg:lang))\\
+([](fg:env)\$conda[](fg:env))\\
+[](fg:time)\$time[ ](fg:time)\\
 \$cmd_duration"""
 
 palette = 'ashlaros'

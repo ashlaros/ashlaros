@@ -167,8 +167,10 @@ without a plugin.
 ## The prompt
 
 `starship` is configured out of the box: starship's catppuccin-powerline
-preset on one line, with square ends and the AshlarOS mark where the preset
-shows an OS icon. The mark is a glyph in AshlarOS Symbols, a font built from
+preset on one line, with the AshlarOS mark where the preset shows an OS
+icon. Each segment is its own brick, notched on the left and pointed on the
+right, and a segment with nothing to show - no git repository, no language
+- leaves no gap. The mark is a glyph in AshlarOS Symbols, a font built from
 the logo. The mark sits on the theme's accent colour; the remaining
 segments step through greys towards the terminal background, with text in
 whichever of the theme's text and background colour contrasts more. A theme
