@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""Build AshlarOS Symbols: the mark as a font glyph at U+F8FE.
+
+A prompt or a bar can only print characters. Manjaro's logo reached
+powerlevel10k and waybar as a glyph in Nerd Fonts (U+F312); ours is in no
+font, so this builds one. fontconfig falls back to it for that one
+codepoint, whatever the primary font is.
+
+The stones are read from logo.svg rather than restated, so the glyph moves
+with the logo. Every stone is the same colour: a font glyph is monochrome,
+so the accent course is lost and the offset joints carry the mark.
+
+U+F8FE sits in the BMP private use area, outside every range Nerd Fonts
+3.x occupies (checked against its glyphnames.json) and clear of Font
+Logos' F300-F3FF, where a distro logo would land upstream.
+
+Two cells wide: foot draws a glyph into one neighbouring cell when that
+cell is blank (tweak.overflowing-glyphs, on by default), so print it
+followed by a space. The height follows from the logo's 40:28 aspect.
+
+usage: build-symbols-font LOGO.svg OUT.ttf
+"""
+
+import sys
+import xml.etree.ElementTree as ET
+
+from fontTools.fontBuilder import FontBuilder
+from fontTools.misc.timeTools import timestampSinceEpoch
+from fontTools.pens.ttGlyphPen import TTGlyphPen
+
+CODEPOINT = 0xF8FE
+UPM = 1000
+# JetBrains Mono's vertical metrics, the font this sits beside in foot
+ASCENT, DESCENT = 1020, -300
+WIDTH = 1200  # two 600-unit cells
+# centred on JetBrains Mono's cap height (730), so it sits on the text line
+CAP_MIDDLE = 365
+
+
+def stones(svg_path):
+    """The mark's rects in SVG units, without the background field."""
+    rects = []
+    for el in ET.parse(svg_path).getroot().iter("{http://www.w3.org/2000/svg}rect"):
+        if "x" not in el.attrib:  # the full-size field has no position
+            continue
+        rects.append(tuple(float(el.get(k)) for k in ("x", "y", "width", "height")))
+    if not rects:
+        raise SystemExit(f"build-symbols-font: no stones in {svg_path}")
+    return rects
+
+
+def glyph(rects):
+    left = min(x for x, _, _, _ in rects)
+    top = min(y for _, y, _, _ in rects)
+    right = max(x + w for x, _, w, _ in rects)
+    bottom = max(y + h for _, y, _, h in rects)
+    scale = WIDTH / (right - left)
+    y_top = CAP_MIDDLE + (bottom - top) * scale / 2
+
+    pen = TTGlyphPen(None)
+    for x, y, w, h in rects:
+        x0 = round((x - left) * scale)
+        x1 = round((x + w - left) * scale)
+        y1 = round(y_top - (y - top) * scale)
+        y0 = round(y_top - (y + h - top) * scale)
+        # clockwise, which TrueType reads as filled
+        pen.moveTo((x0, y0))
+        pen.lineTo((x0, y1))
+        pen.lineTo((x1, y1))
+        pen.lineTo((x1, y0))
+        pen.closePath()
+    return pen.glyph()
+
+
+def build(svg_path, out_path):
+    fb = FontBuilder(UPM, isTTF=True)
+    # a fixed head timestamp, so a rebuild of the same logo is the same file
+    fb.font.recalcTimestamp = False
+    fb.setupGlyphOrder([".notdef", "ashlaros"])
+    fb.setupCharacterMap({CODEPOINT: "ashlaros"})
+    fb.setupGlyf({".notdef": TTGlyphPen(None).glyph(), "ashlaros": glyph(stones(svg_path))})
+    fb.setupHorizontalMetrics({".notdef": (600, 0), "ashlaros": (WIDTH, 0)})
+    fb.setupHorizontalHeader(ascent=ASCENT, descent=DESCENT)
+    fb.setupNameTable(
+        {
+            "familyName": "AshlarOS Symbols",
+            "styleName": "Regular",
+            "uniqueFontIdentifier": "AshlarOS Symbols Regular",
+            "fullName": "AshlarOS Symbols",
+            "psName": "AshlarOSSymbols-Regular",
+            "version": "Version 1.000",
+            "licenseDescription": "GPL-3.0-or-later",
+        }
+    )
+    fb.setupOS2(
+        sTypoAscender=ASCENT,
+        sTypoDescender=DESCENT,
+        usWinAscent=ASCENT,
+        usWinDescent=-DESCENT,
+    )
+    fb.setupPost()
+    fb.setupHead(created=timestampSinceEpoch(0), modified=timestampSinceEpoch(0))
+    fb.save(out_path)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        raise SystemExit(__doc__.strip().splitlines()[-1])
+    build(sys.argv[1], sys.argv[2])

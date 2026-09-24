@@ -11,6 +11,8 @@ license=('GPL-3.0-or-later')
 # No depends: the ttf-dejavu that used to be here existed for the boot
 # splash's U+2588 block glyphs, and the splash is gone (#106).
 depends=()
+# branding/build-symbols-font turns logo.svg into the glyph font
+makedepends=('python-fonttools')
 # built from branding/ in the monorepo checkout, not from a tarball: the
 # assets and the PKGBUILD move together, so a source= would only pin them
 # to a release that does not exist yet
@@ -22,8 +24,17 @@ source=()
 # to branding/ - the package would keep its version and stay skipped.
 _source_trees=(branding)
 
+build() {
+  local branding="${startdir}/../../branding"
+  python "${branding}/build-symbols-font" "${branding}/logo.svg" AshlarOSSymbols.ttf
+}
+
 package() {
   local branding="${startdir}/../../branding"
+
+  # the mark as a glyph at U+F8FE, for the prompt and the bar's menu
+  # button; fontconfig falls back to it for that codepoint alone
+  install -Dm644 AshlarOSSymbols.ttf "${pkgdir}/usr/share/fonts/ashlaros/AshlarOSSymbols.ttf"
 
   install -Dm644 "${branding}/logo.svg" "${pkgdir}/usr/share/ashlaros/logo.svg"
   install -Dm644 "${branding}/logo.png" "${pkgdir}/usr/share/ashlaros/logo.png"

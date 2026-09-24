@@ -10,7 +10,7 @@ packages/     PKGBUILDs published to the ashlaros pacman repository
 iso/          the archiso profile the ISO is built from
 installer/    the gum TUI installer shipped on the ISO
 image/        the prebuilt Raspberry Pi 5 disk image
-branding/     logo, favicon, background, palette
+branding/     logo, favicon, background, palette, the mark as a font glyph
 screenshots/  the headless capture that photographs the desktop
 worker/       cloudflare worker serving the repository and the ISOs from R2
 scripts/      publish tooling for the repository
