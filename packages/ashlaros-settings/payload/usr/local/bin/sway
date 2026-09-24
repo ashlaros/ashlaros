@@ -1,5 +1,30 @@
 #!/bin/sh
 
+# The keyboard layout the installer wrote to localectl, as sway's default
+# keymap. keyboard.sh applies it at runtime too, but a runtime layout does
+# not survive `swaymsg reload` - every theme switch is one: sway re-reads a
+# config with no xkb_layout, resets each keyboard to xkbcommon's default
+# (English (US) unless these are set) and only then does exec_always rerun
+# keyboard.sh. waybar's sway/language 0.15.0 adds every layout name it sees
+# to its map, so that transient English (US) made a single-layout machine
+# look like two and hide-single-layout stopped hiding the module until
+# waybar restarted. With the default right, a reload never passes through
+# another layout. A layout pinned in config.d still wins over these.
+if [ -z "${XKB_DEFAULT_LAYOUT:-}" ] && command -v localectl >/dev/null 2>&1; then
+    status=$(localectl status 2>/dev/null)
+    x11() { printf '%s\n' "$status" | sed -n "s/^ *X11 $1: *//p"; }
+    layout=$(x11 Layout)
+    if [ -n "$layout" ]; then
+        export XKB_DEFAULT_LAYOUT="$layout"
+        variant=$(x11 Variant)
+        model=$(x11 Model)
+        options=$(x11 Options)
+        [ -n "$variant" ] && export XKB_DEFAULT_VARIANT="$variant"
+        [ -n "$model" ] && export XKB_DEFAULT_MODEL="$model"
+        [ -n "$options" ] && export XKB_DEFAULT_OPTIONS="$options"
+    fi
+fi
+
 if [ -d /sys/module/nvidia ]; then
     exec /usr/bin/sway --unsupported-gpu "$@"
 else
