@@ -118,8 +118,10 @@ without a plugin.
 
 ## The prompt
 
-`starship` is configured out of the box, with the mark rendered as three
-courses of stone: `▄█▀`. It follows the desktop theme, and a theme change
+`starship` is configured out of the box: starship's catppuccin-powerline
+preset on one line, with square ends and the AshlarOS mark where the preset
+shows an OS icon. The mark is a glyph in AshlarOS Symbols, a font built from
+the logo. The segment colours come from the desktop theme, and a theme change
 reaches the shell you are already sitting in.
 
 If you edit the config by hand, **starship needs six-digit hex**. Given

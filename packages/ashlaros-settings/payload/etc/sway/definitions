@@ -46,8 +46,14 @@ set $generate_waybar_style $script_path/generate-waybar-style.sh "$background-co
 # be installed - cheap, and it means mail is themed the moment it is
 set $generate_aerc_styleset $script_path/generate-aerc-styleset.sh "$background-color" "$text-color" "$accent-color" "$color8" "$color9"
 # starship re-reads its config every prompt, so this is the one generator
-# whose output reaches a shell that is already open
-set $generate_starship_config $script_path/generate-starship-config.sh "$background-color" "$text-color" "$accent-color" "$color8"
+# whose output reaches a shell that is already open.
+#
+# Named variables rather than $colorN: the themes disagree on what the
+# numbers mean. ashlaros and matcha order them base16-style ($color1 a grey
+# surface, $color8 red), catppuccin and hackerman terminal-style ($color1
+# red, $color8 a grey) - $color8 made the mark's plate red on one and grey
+# on the other. Every theme.conf maps the preset's segment names itself.
+set $generate_starship_config $script_path/generate-starship-config.sh "$prompt-crust" "$prompt-red" "$prompt-peach" "$prompt-yellow" "$prompt-green" "$prompt-sapphire" "$prompt-lavender"
 # The lock screen. Generated rather than flagged in lock.sh: swaylock
 # reads this path by default, so the config survives however it is started
 # - the shutdown-mode binding, swayidle's timeout, or before-sleep.
