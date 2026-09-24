@@ -331,7 +331,9 @@ believing you have backups.
 
 The `ashlaros` repository is dual-arch: `x86_64` and `aarch64`. The ISO is
 x86_64; ARM users get either the prebuilt Pi 5 image below or these packages
-on an existing Arch Linux ARM system.
+on an existing Arch Linux ARM system. The x86_64 packages are compiled the
+way CachyOS compiles its v3 repository (`-march=x86-64-v3 -O3`, LTO), so
+they need an x86-64-v3 CPU, as the ISO does.
 
 ```sh
 # 1. trust the signing key

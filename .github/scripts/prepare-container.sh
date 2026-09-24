@@ -96,6 +96,41 @@ pacman -Sy --noconfirm || true
 # it off `debuginfo`-style names that merely start the same way.
 sed -i -E 's/([ (])debug([ )])/\1!debug\2/g' /etc/makepkg.conf
 
+# Compile the way CachyOS compiles its x86_64_v3 repository, which is the
+# stack every AshlarOS install runs: the flags below are CachyOS's own
+# docker-makepkg-v3 makepkg.conf and rust.conf (github.com/CachyOS/
+# docker-makepkg, 9b0259d), copied rather than approximated. Stock Arch
+# builds for baseline x86-64 at -O2, so a vendored AUR package came out
+# slower than the CachyOS package beside it.
+#
+# Not PACKAGECARCH=x86_64_v3 from the same file: that renames the output
+# to *-x86_64_v3.pkg.tar.zst, and our repository and pacman's Architecture
+# line are plain x86_64. The code inside is v3 either way, so these
+# packages need a v3 CPU - which the installer already requires.
+#
+# A file in makepkg.conf.d rather than an edit: makepkg sources the
+# directory after makepkg.conf in glob order, and zz- lands after the
+# stock rust.conf whose RUSTFLAGS this replaces. x86_64 only: CachyOS has
+# no aarch64 tree, and ARM keeps Arch Linux ARM's defaults.
+if [[ $(uname -m) == x86_64 ]]; then
+	cat >/etc/makepkg.conf.d/zz-cachyos-v3.conf <<-'EOF'
+		CFLAGS="-march=x86-64-v3 -mtune=generic -O3 -pipe -fno-plt -fexceptions \
+		        -Wp,-D_FORTIFY_SOURCE=3 -Wformat -Werror=format-security \
+		        -fstack-clash-protection -fcf-protection -mpclmul"
+		CXXFLAGS="$CFLAGS -Wp,-D_GLIBCXX_ASSERTIONS"
+		LDFLAGS="-Wl,-O1 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now \
+		         -Wl,-z,pack-relative-relocs"
+		LTOFLAGS="-flto=auto"
+		RUSTFLAGS="-C opt-level=3 -C target-cpu=x86-64-v3 -Clink-arg=-z -Clink-arg=pack-relative-relocs"
+		# CachyOS's OPTIONS: lto on, where stock Arch has it off. !debug
+		# again, since this replaces the array the sed above fixed.
+		OPTIONS=(strip docs !libtool !staticlibs emptydirs zipman purge !debug lto !autodeps)
+		# CachyOS's file sets this bare; exported here, because stock
+		# makepkg does not pass it to the build and go reads the environment
+		export GOAMD64=v3
+	EOF
+fi
+
 useradd -m -G wheel builder 2>/dev/null || true
 echo 'builder ALL=(ALL) NOPASSWD: ALL' >/etc/sudoers.d/builder
 chmod 440 /etc/sudoers.d/builder

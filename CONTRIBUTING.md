@@ -40,6 +40,12 @@ sudo mkarchiso -v -w /tmp/ashlaros-work -o out iso/
 Packages are built and published by `.github/workflows/build-packages.yml`,
 in dependency waves: a package that needs another built here waits for it to
 be published first.
+x86_64 builds use CachyOS's v3 compiler flags, copied from CachyOS's
+`docker-makepkg-v3` into a `makepkg.conf.d` drop-in by
+`.github/scripts/prepare-container.sh`: `-march=x86-64-v3 -O3`, LTO,
+`target-cpu=x86-64-v3` for Rust and `GOAMD64=v3` for Go. aarch64 keeps Arch
+Linux ARM's defaults. The drop-in is not part of any package's source hash,
+so a flag change reaches a package at its next rebuild, not at once.
 
 `packages/ashlaros-*` are ours, and their versions are derived rather than
 written down: `pkgver` is the date of the last commit touching the package
