@@ -1557,12 +1557,15 @@ model_entry() {
 #
 # The hook (95-ashlaros-orphans.hook) reports after every transaction and
 # deliberately suggests nothing destructive. This is where the destructive
-# half lives: one package at a time, named, behind a confirm.
+# half lives: a checklist of the orphans, all ticked, and the full list of
+# what pacman would take shown before a confirm.
 #
 # `pacman -Qtdq | pacman -Rns -` is the command the upstream hook prints
-# and it is a footgun - it cascades, and on a desktop it takes things
+# and it is a footgun - not because it removes several at once, but
+# because it removes blind: it cascades, and on a desktop it takes things
 # installed as a dependency of something since removed but still wanted.
-# Removing one at a time is slower and is the point.
+# Unticking is how one of those stays, and the preview is where the
+# cascade becomes visible.
 orphans_entry() {
   local choice orphans
   while true; do
@@ -1582,7 +1585,7 @@ orphans_entry() {
     echo
 
     choice=$(gum choose --header "Orphans" \
-      "Show what one is" "Keep one (mark explicit)" "Remove one" "Back") || return 0
+      "Remove them" "Show what one is" "Keep one (mark explicit)" "Back") || return 0
 
     case $choice in
       "Show what one is")
@@ -1600,20 +1603,23 @@ orphans_entry() {
         root_run pacman -D --asexplicit "$pkg" && say "$pkg is now explicit."
         pause
         ;;
-      "Remove one")
-        local pkg
-        pkg=$(gum choose --header "Which" "${orphans[@]}") || continue
-        # -Rns on a single named package, never on a piped list. What it
-        # would take with it is shown before the confirm, because that is
-        # the part that surprises people.
-        screen "Remove $pkg"
+      "Remove them")
+        local -a pkgs
+        mapfile -t pkgs < <(printf '%s\n' "${orphans[@]}" |
+          gum choose --no-limit --selected='*' \
+            --header "Untick any to keep, then enter")
+        ((${#pkgs[@]})) || continue
+        # What -Rns would take is shown before the confirm, because that
+        # is the part that surprises people: -s follows each one's own
+        # dependencies too.
+        screen "Remove ${#pkgs[@]} package(s)"
         say "This would remove:"
         echo
-        pacman -Rns --print "$pkg" 2>&1 | sed "s/^/  /"
+        pacman -Rns --print "${pkgs[@]}" 2>&1 | sed "s/^/  /"
         echo
         gum confirm --affirmative "Remove" --negative "Cancel" \
-          "Remove $pkg and what it pulls with it?" || continue
-        root_run pacman -Rns --noconfirm "$pkg"
+          "Remove these?" || continue
+        root_run pacman -Rns --noconfirm "${pkgs[@]}"
         pause
         ;;
       "Back") return 0 ;;
