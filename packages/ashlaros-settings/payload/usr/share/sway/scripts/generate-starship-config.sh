@@ -17,12 +17,21 @@
 #   - both outer ends are square, not rounded, to fit the brick shapes;
 #     the right end is an arrow and replaces the prompt character.
 #   - no $line_break and no $character: one line, ending in that arrow.
-#   - the preset's four catppuccin palettes are one, "ashlaros", written
-#     from the theme.
+#   - the preset's four catppuccin palettes are one, "ashlaros", derived
+#     from the theme (below).
 #
-# Args: the preset's palette names, from the theme's $prompt-* variables
-# (every theme.conf defines them; see /etc/sway/definitions):
-#   crust red peach yellow green sapphire lavender
+# Colours: the theme's neutrals and its accent, not the preset's rainbow.
+# The mark's segment is the accent; the rest step from a grey towards the
+# terminal background - mixes of the theme's text and background colour,
+# so they are that theme's own greys, dark or light - and fade into the
+# terminal at the right. Each segment's text is whichever of the text and
+# background colour contrasts more with it (WCAG relative luminance), so a
+# light theme and an accent of any brightness stay readable.
+#
+# Derived here rather than set per theme: every theme already names these
+# three, and ten hand-picked ramps drift the moment a theme changes.
+#
+# Args: background-color text-color accent-color
 set -u
 
 # starship needs six-digit hex. Given #eee it drops the whole style string
@@ -41,13 +50,56 @@ expand_hex() {
   fi
 }
 
-CRUST=$(expand_hex "$1")
-RED=$(expand_hex "$2")
-PEACH=$(expand_hex "$3")
-YELLOW=$(expand_hex "$4")
-GREEN=$(expand_hex "$5")
-SAPPHIRE=$(expand_hex "$6")
-LAVENDER=$(expand_hex "$7")
+BACKGROUND=$(expand_hex "$1")
+TEXT=$(expand_hex "$2")
+ACCENT=$(expand_hex "$3")
+
+# prints "name #rrggbb" for the mark, each step of the ramp, and each ink
+derive() {
+  awk -v bg="$BACKGROUND" -v fg="$TEXT" -v ac="$ACCENT" '
+    function hex(h, i) { return index("0123456789abcdef", tolower(substr(h, i, 1))) - 1 }
+    function ch(h, n) { return hex(h, 2 * n) * 16 + hex(h, 2 * n + 1) }
+    function mix(a, b, t, out, n, v) {
+      out = "#"
+      for (n = 1; n <= 3; n++) {
+        v = int(ch(a, n) * t + ch(b, n) * (1 - t) + 0.5)
+        out = out sprintf("%02x", v)
+      }
+      return out
+    }
+    function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ^ 2.4 }
+    function lum(h) { return 0.2126 * lin(ch(h, 1)) + 0.7152 * lin(ch(h, 2)) + 0.0722 * lin(ch(h, 3)) }
+    function contrast(a, b, x, y) { x = lum(a); y = lum(b); return x > y ? (x + 0.05) / (y + 0.05) : (y + 0.05) / (x + 0.05) }
+    # the text or background colour of the theme, whichever reads better;
+    # black or white only when neither reaches 4.5:1 (the peach accent of
+    # catppuccin-latte manages 2.7:1 against both). No apostrophes in here:
+    # this program is single-quoted.
+    function ink(h, best) {
+      best = contrast(h, fg) >= contrast(h, bg) ? fg : bg
+      if (contrast(h, best) >= 4.5) return best
+      return contrast(h, "#000000") >= contrast(h, "#ffffff") ? "#000000" : "#ffffff"
+    }
+    function put(name, h) { print name, h; print name "_ink", ink(h) }
+    BEGIN {
+      put("mark", ac)
+      # share of the text colour in each step; the rest is background
+      put("dir", mix(fg, bg, 0.34))
+      put("git", mix(fg, bg, 0.25))
+      put("lang", mix(fg, bg, 0.17))
+      put("time", mix(fg, bg, 0.09))
+    }'
+}
+
+while read -r name value; do
+  case $name in
+    mark) MARK=$value ;; mark_ink) MARK_INK=$value ;;
+    dir) DIR=$value ;; dir_ink) DIR_INK=$value ;;
+    git) GIT=$value ;; git_ink) GIT_INK=$value ;;
+    # not LANG: that is the locale
+    lang) LANG_BG=$value ;; lang_ink) LANG_INK=$value ;;
+    time) TIME=$value ;; time_ink) TIME_INK=$value ;;
+  esac
+done < <(derive)
 
 CONFIG="$HOME/.config/starship.toml"
 mkdir -p "$(dirname "$CONFIG")"
@@ -59,14 +111,14 @@ cat > "$CONFIG" <<EOF
 "\$schema" = 'https://starship.rs/config-schema.json'
 
 format = """
-[  ](fg:crust bg:red)\\
+[  ](fg:mark_ink bg:mark)\\
 \$username\\
-[](bg:peach fg:red)\\
+[](bg:dir fg:mark)\\
 \$directory\\
-[](bg:yellow fg:peach)\\
+[](bg:git fg:dir)\\
 \$git_branch\\
 \$git_status\\
-[](fg:yellow bg:green)\\
+[](fg:git bg:lang)\\
 \$c\\
 \$rust\\
 \$golang\\
@@ -77,11 +129,11 @@ format = """
 \$kotlin\\
 \$haskell\\
 \$python\\
-[](fg:green bg:sapphire)\\
+[](fg:lang bg:env)\\
 \$conda\\
-[](fg:sapphire bg:lavender)\\
+[](fg:env bg:time)\\
 \$time\\
-[ ](fg:lavender)\\
+[ ](fg:time)\\
 \$cmd_duration"""
 
 palette = 'ashlaros'
@@ -89,12 +141,12 @@ palette = 'ashlaros'
 
 [username]
 show_always = true
-style_user = "bg:red fg:crust"
-style_root = "bg:red fg:crust"
+style_user = "bg:mark fg:mark_ink"
+style_root = "bg:mark fg:mark_ink"
 format = '[ \$user](\$style)'
 
 [directory]
-style = "bg:peach fg:crust"
+style = "bg:dir fg:dir_ink"
 format = "[ \$path ](\$style)"
 truncation_length = 3
 truncation_symbol = "…/"
@@ -108,95 +160,100 @@ truncation_symbol = "…/"
 
 [git_branch]
 symbol = ""
-style = "bg:yellow"
-format = '[[ \$symbol \$branch ](fg:crust bg:yellow)](\$style)'
+style = "bg:git"
+format = '[[ \$symbol \$branch ](fg:git_ink bg:git)](\$style)'
 
 [git_status]
-style = "bg:yellow"
-format = '[[(\$all_status\$ahead_behind )](fg:crust bg:yellow)](\$style)'
+style = "bg:git"
+format = '[[(\$all_status\$ahead_behind )](fg:git_ink bg:git)](\$style)'
 
 [nodejs]
 symbol = ""
-style = "bg:green"
-format = '[[ \$symbol( \$version) ](fg:crust bg:green)](\$style)'
+style = "bg:lang"
+format = '[[ \$symbol( \$version) ](fg:lang_ink bg:lang)](\$style)'
 
 [bun]
 symbol = ""
-style = "bg:green"
-format = '[[ \$symbol( \$version) ](fg:crust bg:green)](\$style)'
+style = "bg:lang"
+format = '[[ \$symbol( \$version) ](fg:lang_ink bg:lang)](\$style)'
 
 [c]
 symbol = " "
-style = "bg:green"
-format = '[[ \$symbol( \$version) ](fg:crust bg:green)](\$style)'
+style = "bg:lang"
+format = '[[ \$symbol( \$version) ](fg:lang_ink bg:lang)](\$style)'
 
 [rust]
 symbol = ""
-style = "bg:green"
-format = '[[ \$symbol( \$version) ](fg:crust bg:green)](\$style)'
+style = "bg:lang"
+format = '[[ \$symbol( \$version) ](fg:lang_ink bg:lang)](\$style)'
 
 [golang]
 symbol = ""
-style = "bg:green"
-format = '[[ \$symbol( \$version) ](fg:crust bg:green)](\$style)'
+style = "bg:lang"
+format = '[[ \$symbol( \$version) ](fg:lang_ink bg:lang)](\$style)'
 
 [php]
 symbol = ""
-style = "bg:green"
-format = '[[ \$symbol( \$version) ](fg:crust bg:green)](\$style)'
+style = "bg:lang"
+format = '[[ \$symbol( \$version) ](fg:lang_ink bg:lang)](\$style)'
 
 [java]
 symbol = " "
-style = "bg:green"
-format = '[[ \$symbol( \$version) ](fg:crust bg:green)](\$style)'
+style = "bg:lang"
+format = '[[ \$symbol( \$version) ](fg:lang_ink bg:lang)](\$style)'
 
 [kotlin]
 symbol = ""
-style = "bg:green"
-format = '[[ \$symbol( \$version) ](fg:crust bg:green)](\$style)'
+style = "bg:lang"
+format = '[[ \$symbol( \$version) ](fg:lang_ink bg:lang)](\$style)'
 
 [haskell]
 symbol = ""
-style = "bg:green"
-format = '[[ \$symbol( \$version) ](fg:crust bg:green)](\$style)'
+style = "bg:lang"
+format = '[[ \$symbol( \$version) ](fg:lang_ink bg:lang)](\$style)'
 
 [python]
 symbol = ""
-style = "bg:green"
-format = '[[ \$symbol( \$version)(\\(#\$virtualenv\\)) ](fg:crust bg:green)](\$style)'
+style = "bg:lang"
+format = '[[ \$symbol( \$version)(\\(#\$virtualenv\\)) ](fg:lang_ink bg:lang)](\$style)'
 
 [docker_context]
 symbol = ""
-style = "bg:sapphire"
-format = '[[ \$symbol( \$context) ](fg:crust bg:sapphire)](\$style)'
+style = "bg:env"
+format = '[[ \$symbol( \$context) ](fg:env_ink bg:env)](\$style)'
 
 [conda]
 symbol = "  "
-style = "fg:crust bg:sapphire"
+style = "fg:env_ink bg:env"
 format = '[\$symbol\$environment ](\$style)'
 ignore_base = false
 
 [time]
 disabled = false
 time_format = "%R"
-style = "bg:lavender"
-format = '[[  \$time ](fg:crust bg:lavender)](\$style)'
+style = "bg:time"
+format = '[[  \$time ](fg:time_ink bg:time)](\$style)'
 
 [cmd_duration]
 show_milliseconds = true
 format = " in \$duration "
-style = "bg:lavender"
+style = "bg:time"
 disabled = false
 show_notifications = true
 min_time_to_notify = 45000
 
 
 [palettes.ashlaros]
-red = "${RED}"
-peach = "${PEACH}"
-yellow = "${YELLOW}"
-green = "${GREEN}"
-sapphire = "${SAPPHIRE}"
-lavender = "${LAVENDER}"
-crust = "${CRUST}"
+mark = "${MARK}"
+mark_ink = "${MARK_INK}"
+dir = "${DIR}"
+dir_ink = "${DIR_INK}"
+git = "${GIT}"
+git_ink = "${GIT_INK}"
+lang = "${LANG_BG}"
+lang_ink = "${LANG_INK}"
+env = "${LANG_BG}"
+env_ink = "${LANG_INK}"
+time = "${TIME}"
+time_ink = "${TIME_INK}"
 EOF

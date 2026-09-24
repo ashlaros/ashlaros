@@ -4,14 +4,14 @@
 "$schema" = 'https://starship.rs/config-schema.json'
 
 format = """
-[  ](fg:crust bg:red)\
+[  ](fg:mark_ink bg:mark)\
 $username\
-[](bg:peach fg:red)\
+[](bg:dir fg:mark)\
 $directory\
-[](bg:yellow fg:peach)\
+[](bg:git fg:dir)\
 $git_branch\
 $git_status\
-[](fg:yellow bg:green)\
+[](fg:git bg:lang)\
 $c\
 $rust\
 $golang\
@@ -22,11 +22,11 @@ $java\
 $kotlin\
 $haskell\
 $python\
-[](fg:green bg:sapphire)\
+[](fg:lang bg:env)\
 $conda\
-[](fg:sapphire bg:lavender)\
+[](fg:env bg:time)\
 $time\
-[ ](fg:lavender)\
+[ ](fg:time)\
 $cmd_duration"""
 
 palette = 'ashlaros'
@@ -34,12 +34,12 @@ palette = 'ashlaros'
 
 [username]
 show_always = true
-style_user = "bg:red fg:crust"
-style_root = "bg:red fg:crust"
+style_user = "bg:mark fg:mark_ink"
+style_root = "bg:mark fg:mark_ink"
 format = '[ $user]($style)'
 
 [directory]
-style = "bg:peach fg:crust"
+style = "bg:dir fg:dir_ink"
 format = "[ $path ]($style)"
 truncation_length = 3
 truncation_symbol = "…/"
@@ -53,94 +53,99 @@ truncation_symbol = "…/"
 
 [git_branch]
 symbol = ""
-style = "bg:yellow"
-format = '[[ $symbol $branch ](fg:crust bg:yellow)]($style)'
+style = "bg:git"
+format = '[[ $symbol $branch ](fg:git_ink bg:git)]($style)'
 
 [git_status]
-style = "bg:yellow"
-format = '[[($all_status$ahead_behind )](fg:crust bg:yellow)]($style)'
+style = "bg:git"
+format = '[[($all_status$ahead_behind )](fg:git_ink bg:git)]($style)'
 
 [nodejs]
 symbol = ""
-style = "bg:green"
-format = '[[ $symbol( $version) ](fg:crust bg:green)]($style)'
+style = "bg:lang"
+format = '[[ $symbol( $version) ](fg:lang_ink bg:lang)]($style)'
 
 [bun]
 symbol = ""
-style = "bg:green"
-format = '[[ $symbol( $version) ](fg:crust bg:green)]($style)'
+style = "bg:lang"
+format = '[[ $symbol( $version) ](fg:lang_ink bg:lang)]($style)'
 
 [c]
 symbol = " "
-style = "bg:green"
-format = '[[ $symbol( $version) ](fg:crust bg:green)]($style)'
+style = "bg:lang"
+format = '[[ $symbol( $version) ](fg:lang_ink bg:lang)]($style)'
 
 [rust]
 symbol = ""
-style = "bg:green"
-format = '[[ $symbol( $version) ](fg:crust bg:green)]($style)'
+style = "bg:lang"
+format = '[[ $symbol( $version) ](fg:lang_ink bg:lang)]($style)'
 
 [golang]
 symbol = ""
-style = "bg:green"
-format = '[[ $symbol( $version) ](fg:crust bg:green)]($style)'
+style = "bg:lang"
+format = '[[ $symbol( $version) ](fg:lang_ink bg:lang)]($style)'
 
 [php]
 symbol = ""
-style = "bg:green"
-format = '[[ $symbol( $version) ](fg:crust bg:green)]($style)'
+style = "bg:lang"
+format = '[[ $symbol( $version) ](fg:lang_ink bg:lang)]($style)'
 
 [java]
 symbol = " "
-style = "bg:green"
-format = '[[ $symbol( $version) ](fg:crust bg:green)]($style)'
+style = "bg:lang"
+format = '[[ $symbol( $version) ](fg:lang_ink bg:lang)]($style)'
 
 [kotlin]
 symbol = ""
-style = "bg:green"
-format = '[[ $symbol( $version) ](fg:crust bg:green)]($style)'
+style = "bg:lang"
+format = '[[ $symbol( $version) ](fg:lang_ink bg:lang)]($style)'
 
 [haskell]
 symbol = ""
-style = "bg:green"
-format = '[[ $symbol( $version) ](fg:crust bg:green)]($style)'
+style = "bg:lang"
+format = '[[ $symbol( $version) ](fg:lang_ink bg:lang)]($style)'
 
 [python]
 symbol = ""
-style = "bg:green"
-format = '[[ $symbol( $version)(\(#$virtualenv\)) ](fg:crust bg:green)]($style)'
+style = "bg:lang"
+format = '[[ $symbol( $version)(\(#$virtualenv\)) ](fg:lang_ink bg:lang)]($style)'
 
 [docker_context]
 symbol = ""
-style = "bg:sapphire"
-format = '[[ $symbol( $context) ](fg:crust bg:sapphire)]($style)'
+style = "bg:env"
+format = '[[ $symbol( $context) ](fg:env_ink bg:env)]($style)'
 
 [conda]
 symbol = "  "
-style = "fg:crust bg:sapphire"
+style = "fg:env_ink bg:env"
 format = '[$symbol$environment ]($style)'
 ignore_base = false
 
 [time]
 disabled = false
 time_format = "%R"
-style = "bg:lavender"
-format = '[[  $time ](fg:crust bg:lavender)]($style)'
+style = "bg:time"
+format = '[[  $time ](fg:time_ink bg:time)]($style)'
 
 [cmd_duration]
 show_milliseconds = true
 format = " in $duration "
-style = "bg:lavender"
+style = "bg:time"
 disabled = false
 show_notifications = true
 min_time_to_notify = 45000
 
 
 [palettes.ashlaros]
-red = "#Cd3f45"
-peach = "#db7b55"
-yellow = "#e6cd69"
-green = "#9fca56"
-sapphire = "#55b5db"
-lavender = "#a074c4"
-crust = "#141a1b"
+mark = "#8a8f98"
+mark_ink = "#141a1b"
+dir = "#5e6263"
+dir_ink = "#eeeeee"
+git = "#4b4f50"
+git_ink = "#eeeeee"
+lang = "#393e3f"
+lang_ink = "#eeeeee"
+env = "#393e3f"
+env_ink = "#eeeeee"
+time = "#282d2e"
+time_ink = "#eeeeee"

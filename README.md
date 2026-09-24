@@ -161,8 +161,10 @@ without a plugin.
 `starship` is configured out of the box: starship's catppuccin-powerline
 preset on one line, with square ends and the AshlarOS mark where the preset
 shows an OS icon. The mark is a glyph in AshlarOS Symbols, a font built from
-the logo. The segment colours come from the desktop theme, and a theme change
-reaches the shell you are already sitting in.
+the logo. The mark sits on the theme's accent colour; the remaining
+segments step through greys towards the terminal background, with text in
+whichever of the theme's text and background colour contrasts more. A theme
+change reaches the shell you are already sitting in.
 
 If you edit the config by hand, **starship needs six-digit hex**. Given
 `#eee` it accepts the file and silently renders that style unstyled.
