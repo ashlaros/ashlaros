@@ -26,6 +26,10 @@
 [matching]
 # The file manager the installer puts on every desktop.
 'pcmanfm-qt' = ''
+# The browser the installer puts on every desktop (zen-browser-bin, app_id
+# "zen"). Upstream knows firefox but not zen; nf-md-web rather than the
+# firefox icon, because Zen is not Firefox-branded.
+'zen' = '󰖟'
 # The settings TUI and the installer's own dashboard both run in foot with
 # a set app-id; matched by title so they read as themselves rather than as
 # a terminal.
