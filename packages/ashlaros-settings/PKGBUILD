@@ -79,10 +79,10 @@ depends=(
     # Our build carries an unmerged upstream fix (PR #1203): Google
     # advertises events it then 404s, and stock vdirsyncer treats that as
     # fatal, aborting the whole sync including calendars that were fine.
-    # `>=0.21.0-1.1` is what makes pacman take ours rather than extra's,
-    # since [ashlaros] is ordered last; it retires by itself the moment
-    # Arch ships 0.21.0-2 or 0.21.1, which outrank it.
-    'vdirsyncer>=0.21.0-1.1' # caldav sync into that directory
+    # By its own name, like autotiling-rs-ashlaros: [ashlaros] is ordered
+    # last, so a package called vdirsyncer here would lose to extra's.
+    # Retire it by hand when #1203 is released.
+    'vdirsyncer-ashlaros'     # caldav sync into that directory
     # vdirsyncer names this an optdepend for Google support; without it the
     # google_calendar storage raises "aiohttp-oauthlib not installed" at
     # sync time rather than at configure time, which is the wrong end

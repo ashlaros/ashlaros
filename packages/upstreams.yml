@@ -172,7 +172,7 @@ packages:
   # the tracker skips an entry without one, rather than reporting it
   # unreadable every day. It is dropped when PR #1203 merges, so a tracker
   # that cannot see it costs nothing.
-  vdirsyncer:
+  vdirsyncer-ashlaros:
     arch: any
   # Written here from upstream's source: neither Arch nor the AUR carries
   # it, and upstream lives on sourcehut with no tags, which
