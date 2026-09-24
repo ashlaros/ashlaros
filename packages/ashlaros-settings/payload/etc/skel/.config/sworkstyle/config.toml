@@ -24,9 +24,9 @@
 # without them the daemon logs "No match" and the workspace shows the
 # generic fallback.
 #
-# Icons are nf-dev (U+E7xx-E9xx) where Nerd Fonts has one for the
-# application - dev-terminal, dev-slack, dev-vscode - and nf-fa or nf-md
-# only where it does not.
+# Icons in order of preference: nf-dev (dev-terminal, dev-slack,
+# dev-vscode), then nf-fae (fae-telegram), then nf-fa or nf-md only where
+# Nerd Fonts has neither for the application.
 
 [matching]
 # The file manager the installer puts on every desktop.
@@ -47,7 +47,7 @@
 # Telegram Desktop (extra/telegram-desktop) is not shipped, but upstream's
 # table has no entry for it under any name. Wayland app_id, not the old
 # X11 class TelegramDesktop.
-'org.telegram.desktop' = ''
+'org.telegram.desktop' = ''
 # Signal Desktop runs natively on Wayland here and reports app_id "signal".
 # Upstream matches only the X11 class 'Signal', and matching is exact, so
 # this is the same icon under the name Wayland uses.

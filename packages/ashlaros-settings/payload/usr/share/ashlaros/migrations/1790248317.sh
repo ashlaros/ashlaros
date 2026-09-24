@@ -28,7 +28,7 @@ if ! grep -q '^\[matching\]' "$config"; then
 fi
 
 tmp=$(mktemp "${config}.XXXXXX") || exit 1
-awk '{ print } /^\[matching\]/ { print "\x27org.telegram.desktop\x27 = \x27\xef\x8b\x86\x27" }' \
+awk '{ print } /^\[matching\]/ { print "\x27org.telegram.desktop\x27 = \x27\xee\x88\x97\x27" }' \
     "$config" >"$tmp" || { rm -f "$tmp"; exit 1; }
 chmod --reference="$config" "$tmp" 2>/dev/null || true
 mv -- "$tmp" "$config"
