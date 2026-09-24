@@ -18,4 +18,18 @@ cmd="$k xkb_variant \"\"; $k xkb_layout \"$layout\"; $k xkb_variant \"$(x11 Vari
 if ! grep -qs xkb_options "$HOME"/.config/sway/config.d/*.conf; then
     cmd="$cmd; $k xkb_options \"$(x11 Options)\""
 fi
+count() {
+    swaymsg -t get_inputs --raw |
+        jq '[.[] | select(.type == "keyboard") | .xkb_layout_names | length] | max // 0'
+}
+before=$(count)
 swaymsg "$cmd"
+
+# waybar's sway/language decides hide-single-layout once, when it starts,
+# and never again: a second layout added to a running session switched
+# fine but the module stayed hidden, so nothing showed that it had.
+# Restarted only when the number of layouts changed - this also runs on
+# every reload, and a bar that blinks on each theme switch is worse.
+if [ "$before" != "$(count)" ] && systemctl --user -q is-active waybar; then
+    systemctl --user restart waybar
+fi
