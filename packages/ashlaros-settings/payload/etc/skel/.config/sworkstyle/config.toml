@@ -27,6 +27,11 @@
 [matching]
 # The file manager the installer puts on every desktop.
 'pcmanfm-qt' = ''
+# The terminal. Upstream knows 'foot', but every terminal here is a client
+# of foot-server and reports app_id "footclient", which upstream does not -
+# so the one application on every workspace showed the fallback. The same
+# icon upstream gives foot.
+'footclient' = ''
 # The browser the installer puts on every desktop (zen-browser-bin, app_id
 # "zen"). Upstream knows firefox but not zen; nf-md-web rather than the
 # firefox icon, because Zen is not Firefox-branded.
@@ -40,3 +45,7 @@
 # table has no entry for it under any name. Wayland app_id, not the old
 # X11 class TelegramDesktop.
 'org.telegram.desktop' = ''
+# Signal Desktop runs natively on Wayland here and reports app_id "signal".
+# Upstream matches only the X11 class 'Signal', and matching is exact, so
+# this is the same icon under the name Wayland uses.
+'signal' = ''
