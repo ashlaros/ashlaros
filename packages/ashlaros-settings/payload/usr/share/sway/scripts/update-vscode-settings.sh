@@ -42,13 +42,21 @@ for variant in "Code" "Code - OSS" "Code - Insiders" "Antigravity"; do
                     jq --arg theme "$VSCODE_THEME" '.["workbench.colorTheme"] = $theme' "$file" > "$tmp" && mv "$tmp" "$file"
                 fi
 
-                # Only update font if current value is a managed font
+                # Only update font if current value is a managed font.
+                #
+                # 'AshlarOS Symbols' goes second in both lists: it carries the
+                # mark at U+F8FE that the prompt prints. fontconfig would find
+                # it for foot, but Chromium does no system font fallback for
+                # private-use codepoints - only fonts named in the list are
+                # tried - so VS Code's terminal drew a box. Nerd Font glyphs
+                # work there only because JetBrainsMono NF is named first.
                 current_font=$(jq -r '.["editor.fontFamily"] // empty' "$file" 2>/dev/null | sed 's/,.*//' | sed "s/'//g" | xargs)
                 if echo "$current_font" | grep -qE "^($MANAGED_FONTS)$"; then
                     tmp=$(mktemp)
                     jq --arg font "$FONT_NAME" \
-                       '.["editor.fontFamily"] = ($font + (if .["editor.fontFamily"] then .["editor.fontFamily"] | sub("^[^,]+"; "") else ", '\''Terminess Nerd Font Mono'\'', '\''Droid Sans Mono'\'', monospace, '\''Droid Sans Fallback'\''" end)) |
-                        .["terminal.integrated.fontFamily"] = ($font + (if .["terminal.integrated.fontFamily"] then .["terminal.integrated.fontFamily"] | sub("^[^,]+"; "") else ", '\''Terminess Nerd Font Mono'\'', monospace" end))' \
+                       'def symbols: if test("AshlarOS Symbols") then . else sub("^(?<first>[^,]+)"; "\(.first), '\''AshlarOS Symbols'\''") end;
+                        .["editor.fontFamily"] = ($font + (if .["editor.fontFamily"] then .["editor.fontFamily"] | sub("^[^,]+"; "") else ", '\''Terminess Nerd Font Mono'\'', '\''Droid Sans Mono'\'', monospace, '\''Droid Sans Fallback'\''" end) | symbols) |
+                        .["terminal.integrated.fontFamily"] = ($font + (if .["terminal.integrated.fontFamily"] then .["terminal.integrated.fontFamily"] | sub("^[^,]+"; "") else ", '\''Terminess Nerd Font Mono'\'', monospace" end) | symbols)' \
                        "$file" > "$tmp" && mv "$tmp" "$file"
                 fi
             fi
