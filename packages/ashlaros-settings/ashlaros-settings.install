@@ -1,0 +1,56 @@
+# systemd's preset enables systemd-networkd on the first boot, beside the
+# NetworkManager every AshlarOS install runs, and anything waiting for
+# network-online.target then waits two minutes for the manager that has no
+# links. The installer masks it on new installs (PRESET_CONFLICTS in
+# installer/orchestrator/phases_impl.py); this brings existing ones in line.
+#
+# Only where NetworkManager is enabled, and only where no .network file
+# exists: a machine someone moved to networkd on purpose keeps it.
+_networkd_units=(
+  systemd-networkd.service
+  systemd-networkd-wait-online.service
+  systemd-networkd.socket
+  systemd-networkd-varlink.socket
+  systemd-networkd-varlink-metrics.socket
+  systemd-networkd-resolve-hook.socket
+)
+
+_mask_unused_networkd() {
+  systemctl -q is-enabled NetworkManager.service 2>/dev/null || return 0
+  compgen -G '/etc/systemd/network/*.network' >/dev/null && return 0
+  systemctl -q is-enabled systemd-networkd.service 2>/dev/null || return 0
+  # --now stops what is running, so the failed wait-online goes with it
+  systemctl mask --now "${_networkd_units[@]}" >/dev/null 2>&1 &&
+    echo "  systemd-networkd masked: NetworkManager manages the network here"
+}
+
+# /etc/mkinitcpio.conf.d/ashlaros-fsck.conf gives the initramfs the shell
+# fsck.btrfs needs. mkinitcpio's own hook rebuilds on kernel and mkinitcpio
+# changes, not on a drop-in in /etc, so an existing install would boot the
+# old image until its next kernel. Rebuilt once, only where some image
+# still lacks the shell - a check that is cheap, where a rebuild is not.
+_initramfs_has_shell() {
+  local img missing=0
+  for img in /boot/initramfs-*.img; do
+    [[ -f $img && $img != *-fallback.img ]] || continue
+    lsinitcpio -l "$img" 2>/dev/null | grep -qx 'usr/bin/sh' || missing=1
+  done
+  return "$missing"
+}
+
+_rebuild_initramfs_for_fsck() {
+  command -v mkinitcpio >/dev/null || return 0
+  _initramfs_has_shell && return 0
+  echo "  rebuilding the initramfs so the boot-time fsck of / can run"
+  mkinitcpio -P >/dev/null 2>&1 ||
+    echo "  mkinitcpio -P failed; run it by hand to see why"
+}
+
+post_install() {
+  _mask_unused_networkd
+}
+
+post_upgrade() {
+  _mask_unused_networkd
+  _rebuild_initramfs_for_fsck
+}

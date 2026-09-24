@@ -1321,9 +1321,32 @@ SERVICES = (
 )
 
 
+# systemd's own preset (90-systemd.preset) enables systemd-networkd and its
+# wait-online unit, and the first boot applies it, so an install came up
+# with two network managers. networkd manages nothing - NetworkManager has
+# every link - but whatever pulls in network-online.target (fwupd-refresh,
+# the keyring WKD sync) then waited the full two minutes for networkd and
+# left a failed unit behind. Masked rather than disabled: a preset only
+# ever enables, and a disabled unit is exactly what the first boot's
+# preset pass turns back on.
+#
+# Every unit the service's Also= enables with it, sockets included: a
+# socket left listening would activate a masked service and fail on each
+# connection instead of never being there.
+PRESET_CONFLICTS = (
+    "systemd-networkd.service",
+    "systemd-networkd-wait-online.service",
+    "systemd-networkd.socket",
+    "systemd-networkd-varlink.socket",
+    "systemd-networkd-varlink-metrics.socket",
+    "systemd-networkd-resolve-hook.socket",
+)
+
+
 def enable_services(ctx: InstallContext) -> None:
     for service in SERVICES:
         run_command(["arch-chroot", str(ctx.target), "systemctl", "enable", service])
+    run_command(["arch-chroot", str(ctx.target), "systemctl", "mask", *PRESET_CONFLICTS])
 
 
 # Snapper's own template keeps 50 numbered snapshots and creates a timeline
