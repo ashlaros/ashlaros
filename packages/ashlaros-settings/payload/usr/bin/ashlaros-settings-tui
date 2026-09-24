@@ -1854,6 +1854,10 @@ tailscale_entry() {
         now=$(tailscale debug prefs 2>/dev/null | sed -n 's/.*"OperatorUser": *"\([^"]*\)".*/\1/p' | head -1)
         if [[ $now == "$USER" ]]; then
           say "Done. The tray can manage Tailscale now."
+          # the Taildrop receiver is skipped for anyone but the operator,
+          # so this is the moment it can start - not the next login
+          systemctl --user restart taildrop-receive.service 2>/dev/null &&
+            say "Files sent with Taildrop now arrive in $(xdg-user-dir DOWNLOAD)."
         else
           oops "The setting did not stick (tailscale#18294). Try again after a reconnect."
         fi
