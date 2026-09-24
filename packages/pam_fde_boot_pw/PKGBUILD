@@ -5,11 +5,14 @@
 # the login keyring unlocked. The installer wires it into /etc/pam.d/greetd.
 #
 # Not in Arch or the AUR. Upstream has no tags and two commits, so this pins
-# the commit and says so in pkgver.
+# the commit and says so in pkgver. Spelled out rather than derived from
+# _commit: discover_packages.py reads pkgver= as text, and an unexpanded
+# ${_commit::7} never matched the published version, so every run rebuilt
+# this at its published name and the publish guard failed the whole wave.
 pkgname=pam_fde_boot_pw
 _commit=49bf498fd8d13f73e4a24221818a8a5d2af20088
-pkgver=0.1.r2.g${_commit::7}
-pkgrel=1
+pkgver=0.1.r2.g49bf498
+pkgrel=2
 pkgdesc="PAM module passing the boot-time disk encryption passphrase to gnome-keyring"
 arch=(x86_64 aarch64)
 url=https://git.sr.ht/~kennylevinsen/pam_fde_boot_pw
