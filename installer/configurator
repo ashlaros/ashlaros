@@ -412,6 +412,15 @@ tpm_unlock_form() {
 
   if [[ $tpm_unlock == pin ]]; then
     local pin confirm
+    # With autologin nothing is typed at login, so the keyring can only be
+    # unlocked with what was typed at boot - and only when that is the
+    # password. The installer checks for exactly that before wiring it.
+    if [[ $autologin == true ]] &&
+      gum confirm --affirmative "Use my password" --negative "A separate PIN" \
+        "Use your password as the PIN? It then also unlocks the keyring at login."; then
+      tpm_pin=$password
+      return 0
+    fi
     while true; do
       pin=$(gum input --password --placeholder "PIN" --header "A PIN for unlocking at boot") || continue
       [[ -n $pin ]] || continue

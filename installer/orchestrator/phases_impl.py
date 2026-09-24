@@ -1230,7 +1230,7 @@ def _unlock_keyring_at_login(ctx: InstallContext) -> None:
     # pam_gnome_keyring when the autologin session opens. greetd.service
     # already sets KeyringMode=shared, which is what lets greetd see it.
     #
-    # Two lines ahead of the session include, for two reasons. pam_keyinit
+    # The lines go ahead of the session include, for two reasons. pam_keyinit
     # in that include replaces the session keyring, after which root's
     # "cryptsetup" key is out of reach. And the pam_succeed_if line skips
     # the injection for the greeter: it runs this same stack as a system
@@ -1241,16 +1241,44 @@ def _unlock_keyring_at_login(ctx: InstallContext) -> None:
     # A later `passwd` moves the keyring password (the passwd line above)
     # but not the disk passphrase; from then on the injected passphrase is
     # refused, optional does its job, and the keyring prompts as before.
-    # With TPM unlock nothing is typed and there is nothing to hand on.
-    if ctx.autologin and ctx.encrypt and ctx.tpm_unlock == "none":
+    #
+    # Written for TPM installs too. The TPM unlocks with nothing typed and
+    # there is then no key - the module logs that and changes nothing - but
+    # PCR 7 moves with every Secure Boot or dbx change, and each boot after
+    # that falls back to the passphrase, which this then passes on.
+    #
+    # TPM + PIN caches the PIN as "tpm2-pin" instead. Passed on only when
+    # the PIN IS the password: otherwise the first autologin would create
+    # the login keyring with the PIN, which a password login and `passwd`
+    # could never open again. Both keys never hold different values then,
+    # so which module line runs last does not matter.
+    if ctx.autologin and ctx.encrypt:
+        injections = []
+        pin = ctx.user_credentials.get("tpm_pin")
+        pin_is_password = (
+            ctx.tpm_unlock == "pin"
+            and pin
+            and pin == ctx.user_credentials.get("encryption_password")
+        )
+        if pin_is_password:
+            injections.append(
+                "session    optional     pam_fde_boot_pw.so inject_for=gkr keyname=tpm2-pin"
+            )
+        injections.append("session    optional     pam_fde_boot_pw.so inject_for=gkr")
         _insert_pam_lines_before_session(
             pam_dir / "greetd",
             [
-                "session    [success=1 default=ignore] pam_succeed_if.so quiet uid < 1000",
-                "session    optional     pam_fde_boot_pw.so inject_for=gkr",
+                f"session    [success={len(injections)} default=ignore] "
+                "pam_succeed_if.so quiet uid < 1000",
+                *injections,
             ],
         )
-        info("› keyring: unlocked at autologin with the disk passphrase")
+        if ctx.tpm_unlock == "none":
+            info("› keyring: unlocked at autologin with the disk passphrase")
+        elif pin_is_password:
+            info("› keyring: unlocked at autologin with the TPM PIN, which is the password")
+        else:
+            info("› keyring: unlocked at autologin when the disk falls back to its passphrase")
     elif ctx.autologin:
         # The alternative is a blank keyring password, which stores its
         # contents unencrypted - not something to do silently on a user's

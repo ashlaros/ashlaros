@@ -57,9 +57,17 @@ typed passphrase, which the installer makes your user password, that
 passphrase unlocks the login keyring too (`pam_fde_boot_pw`, wired into
 `/etc/pam.d/greetd`).
 
-Two cases still ask for the keyring password on first use:
+With **TPM + PIN**, the installer offers your password as the PIN. Take it
+and the PIN unlocks the keyring as well: the disk stays bound to this
+machine's TPM, at the price of typing the full password instead of a short
+PIN. A separate PIN never reaches the keyring. It is not the keyring's
+password, and handing it over would lock the keyring to it.
 
-- **TPM unlock**: nothing is typed at boot, so there is nothing to pass on.
+These cases still ask for the keyring password on first use:
+
+- **TPM alone, or TPM with a separate PIN**: the password is typed at
+  boot only when the TPM refuses, after a firmware or Secure Boot change
+  (see above). Those boots unlock the keyring; the others cannot.
 - **After `passwd`**: the keyring follows the new password, the disk
   passphrase does not. Keep them the same (`cryptsetup luksChangeKey`) and
   the unlock works again.
@@ -71,6 +79,13 @@ which is where the installer puts them:
 ```sh
 sudo pacman -S pam_fde_boot_pw
 sudo sed -i '0,/^session/s//session    [success=1 default=ignore] pam_succeed_if.so quiet uid < 1000\nsession    optional     pam_fde_boot_pw.so inject_for=gkr\nsession/' /etc/pam.d/greetd
+```
+
+With TPM + PIN where the PIN is your password, add the PIN's line as well,
+and skip both for the greeter:
+
+```sh
+sudo sed -i 's/^session    \[success=1 default=ignore\] pam_succeed_if.so/session    [success=2 default=ignore] pam_succeed_if.so/; /pam_fde_boot_pw.so inject_for=gkr$/i session    optional     pam_fde_boot_pw.so inject_for=gkr keyname=tpm2-pin' /etc/pam.d/greetd
 ```
 
 ## Download stats
