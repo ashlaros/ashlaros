@@ -31,6 +31,29 @@ command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
 # would print an error on every shell start there.
 command -v mise >/dev/null && eval "$(mise activate zsh)"
 
+# A multiplexer in a foot window marks the window with its own app_id, so
+# sworkstyle can give that workspace the multiplexer icon: sworkstyle
+# matches app_id, class and title only, and none of tmux, zellij or herdr
+# puts its name in the title by default. OSC 176 is foot's; other
+# terminals ignore it. preexec's $2 has aliases expanded, so `t` aliased
+# to tmux counts; the first word after sudo/env/exec is what runs. Reset
+# before each prompt, so detaching or quitting gives the window back.
+if [[ $TERM == foot* ]]; then
+  _ashlaros_mux_appid() {
+    local -a words=(${(z)2})
+    while [[ ${words[1]-} == (sudo|env|exec|command|nohup|*=*) ]]; do
+      shift words
+    done
+    case ${words[1]:t} in
+      tmux | zellij | herdr) printf '\e]176;terminal-multiplexer\e\\' ;;
+    esac
+  }
+  _ashlaros_mux_reset() { printf '\e]176;\e\\'; }
+  autoload -Uz add-zsh-hook
+  add-zsh-hook preexec _ashlaros_mux_appid
+  add-zsh-hook precmd _ashlaros_mux_reset
+fi
+
 # user-defined overrides
 [ -d ~/.config/zsh/config.d/ ] && source <(cat ~/.config/zsh/config.d/*)
 

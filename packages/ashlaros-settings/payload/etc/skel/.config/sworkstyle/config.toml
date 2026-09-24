@@ -59,3 +59,7 @@
 # "com.microsoft.VSCode" on Wayland, its desktop file's StartupWMClass.
 # Upstream knows only 'Code' and 'code-oss', and matching is exact.
 'com.microsoft.VSCode' = ''
+# A foot window running tmux, zellij or herdr. None of them names itself in
+# the terminal title, so skel's .zshrc sets this app_id through foot's
+# OSC 176 while one runs and resets it at the next prompt. dev-tmux (U+E94C).
+'terminal-multiplexer' = ''
