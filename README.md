@@ -48,6 +48,31 @@ ever flashed unattended: applying an update is an explicit `fwupdmgr
 update`. A bad capsule bricks a board and there is no rollback from the OS
 side, so that stays a decision someone makes.
 
+### The keyring and automatic login
+
+Automatic login is on by default: on an encrypted disk, the passphrase at
+boot is already the authentication. No password is typed at login, so
+gnome-keyring would have nothing to unlock with. When the disk opens with a
+typed passphrase, which the installer makes your user password, that
+passphrase unlocks the login keyring too (`pam_fde_boot_pw`, wired into
+`/etc/pam.d/greetd`).
+
+Two cases still ask for the keyring password on first use:
+
+- **TPM unlock**: nothing is typed at boot, so there is nothing to pass on.
+- **After `passwd`**: the keyring follows the new password, the disk
+  passphrase does not. Keep them the same (`cryptsetup luksChangeKey`) and
+  the unlock works again.
+
+The installer sets this up. On an install from before it, add the package
+and put two lines in `/etc/pam.d/greetd` ahead of its first `session` line,
+which is where the installer puts them:
+
+```sh
+sudo pacman -S pam_fde_boot_pw
+sudo sed -i '0,/^session/s//session    [success=1 default=ignore] pam_succeed_if.so quiet uid < 1000\nsession    optional     pam_fde_boot_pw.so inject_for=gkr\nsession/' /etc/pam.d/greetd
+```
+
 ## Download stats
 
 [`ashlaros.download/iso/stats`](https://ashlaros.download/iso/stats)
