@@ -117,6 +117,10 @@ cat > "$CONFIG" <<EOF
 
 "\$schema" = 'https://starship.rs/config-schema.json'
 
+# starship defaults add_newline to true: a blank line above every prompt,
+# including the first one in a new terminal. The preset leaves the default.
+add_newline = false
+
 format = """
 [  ](fg:mark_ink bg:mark)\\
 \$username\\
