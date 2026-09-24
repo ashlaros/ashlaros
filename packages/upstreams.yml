@@ -84,6 +84,16 @@ packages:
     # which opencv is 112.81 MiB and qt6-base 66.53 MiB - measured, not
     # estimated - for hardware most machines do not have.
     arch: x86_64
+  linux-enable-ir-emitter:
+    upstream: https://aur.archlinux.org/linux-enable-ir-emitter.git
+    # Turns on the infrared emitter many laptops leave off, which is why
+    # face unlock sees only darkness; Settings -> Face unlock runs its
+    # configure and enables its unit. Carries one local edit: 6.1.2 asks
+    # meson for opencv4 and Arch ships opencv 5 as opencv5.pc, so prepare()
+    # renames the lookup - the APIs it uses are unchanged in 5. Expect a
+    # conflict there when upstream moves to 7.x, which drops meson.
+    # x86_64 only, like howdy-next it exists for.
+    arch: x86_64
   ddcci-driver-linux-dkms:
     upstream: https://aur.archlinux.org/ddcci-driver-linux-dkms.git
     # The 35-vote release package, not the 3-vote -git one, which carries

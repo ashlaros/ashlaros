@@ -1756,7 +1756,12 @@ face_verify() {
       oops "The camera only saw darkness."
       say "An infrared camera whose emitter is off looks exactly like this;"
       say "many laptops leave it off until something turns it on."
-      say "linux-enable-ir-emitter (AUR) can switch it on."
+      if command -v linux-enable-ir-emitter >/dev/null; then
+        say "\"Set up the infrared emitter\" below can switch it on."
+      else
+        say "Install linux-enable-ir-emitter, then \"Set up the infrared"
+        say "emitter\" appears here and can switch it on."
+      fi
       ;;
     14) oops "The configured camera could not be opened. Choose it again." ;;
     *) oops "Recognition was aborted (howdy-compare exit $status)." ;;
@@ -1836,6 +1841,7 @@ face_entry() {
         face_enabled || entries+=("Use it for sudo")
       fi
       entries+=("Show the camera preview")
+      command -v linux-enable-ir-emitter >/dev/null && entries+=("Set up the infrared emitter")
     fi
     if face_enabled; then
       if ((paused)); then entries+=("Resume face unlock"); else entries+=("Pause face unlock"); fi
@@ -1876,6 +1882,37 @@ face_entry() {
         say "A preview window opens. Close it to come back here."
         echo
         sudo howdy -U "$ME" test
+        pause
+        ;;
+      "Set up the infrared emitter")
+        screen "Face unlock"
+        # An emitter many laptops leave off is the usual reason recognition
+        # sees only darkness. configure finds the UVC control that turns it
+        # on by trying candidates and asking, in a window, whether the
+        # emitter lit - so it runs on the terminal, and must not be cut
+        # short: upstream warns an interrupted search can leave the camera
+        # in a bad state.
+        say "Sit close to the camera, in a well lit room."
+        say "A window opens and asks whether the infrared emitter flashed:"
+        say "answer with Y or N inside that window. This can take minutes;"
+        say "do not interrupt it."
+        echo
+        gum confirm --affirmative "Start" --negative "Cancel" "Search for the emitter now?" || continue
+        echo
+        # the IR camera howdy uses, so the search does not guess a camera
+        local dev=$camera
+        if sudo linux-enable-ir-emitter --device "$dev" configure; then
+          echo
+          # run turns the emitter on; the shipped unit does it at boot and
+          # after every resume, which is when an emitter resets to off
+          root_run systemctl enable --now linux-enable-ir-emitter.service &&
+            say "Enabled at boot and after resume. Now try \"Test recognition\"."
+        else
+          echo
+          oops "The search did not find the emitter."
+          say "Upstream's next steps are a shutdown (not a reboot) and a"
+          say "retry, then --manual; see /usr/share/doc/linux-enable-ir-emitter."
+        fi
         pause
         ;;
       "Remove every face model")

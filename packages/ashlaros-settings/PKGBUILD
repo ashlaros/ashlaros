@@ -189,6 +189,9 @@ optdepends=(
     # infrared camera most machines do not have. And it is weaker than a
     # password: a similar face or a photo may work.
     'howdy-next: infrared face unlock for sudo, from the settings TUI'
+    # switches on an infrared emitter the laptop leaves off - the usual
+    # reason face unlock sees only darkness; set up from the same entry
+    'linux-enable-ir-emitter: turn on the infrared emitter face unlock needs'
     # the desktop otherwise cannot open a .docx at all: this installs
     # Docs and Microsoft 365 as their own windows, from the settings TUI
     'firefoxpwa: Google Docs and Microsoft 365 as web apps'

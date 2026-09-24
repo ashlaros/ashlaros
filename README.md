@@ -127,7 +127,10 @@ Not installed, and off even when it is. Install `howdy-next` and, on a
 machine with a camera, Settings → **Face unlock** chooses the camera
 (an infrared one first, if there is one), enrols a face, tests
 recognition, and can turn it on for `sudo`. It can also be paused
-without losing the enrolled face.
+without losing the enrolled face. Many laptops leave the infrared emitter
+off, and the camera then sees only darkness: with `linux-enable-ir-emitter`
+installed, the same entry finds the emitter and switches it on at boot and
+after resume.
 
 **It is weaker than a password**, and upstream says so first: a similar
 face or a photo may work. This is 2D infrared matching, not Windows Hello.
