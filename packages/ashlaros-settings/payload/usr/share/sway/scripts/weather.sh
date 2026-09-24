@@ -65,9 +65,10 @@ case $distance in km | miles) ;; *) usage ;; esac
 
 # Serve whatever was rendered last. The bar showing an hour-old forecast
 # beats the bar showing an error because a train went through a tunnel.
+# Through jq -c, because a cache written before the render below was
+# compact is pretty-printed, and waybar cannot read that (see there).
 fallback() {
-	if [ -r "$cache_file" ]; then
-		cat "$cache_file"
+	if [ -r "$cache_file" ] && jq -c . "$cache_file" 2>/dev/null; then
 		exit 0
 	fi
 	echo "$1" >&2
@@ -132,7 +133,10 @@ fi
 # nothing and left the separator behind as a trailing space.
 updated=$(date "+%c")
 
-rendered=$(printf '%s' "$forecast" | jq \
+# -c: waybar parses a custom module's output line by line, one JSON object
+# per line. Pretty-printed, the first line is a lone "{" and waybar logs
+# "Error parsing JSON: Line 1, Column 2" on every poll and shows nothing.
+rendered=$(printf '%s' "$forecast" | jq -c \
 	--arg place "$place" \
 	--arg unit "$temperature" \
 	--arg speed "$distance" \
