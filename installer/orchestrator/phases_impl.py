@@ -111,6 +111,9 @@ DESKTOP_PACKAGES = [
     "qt5-wayland",
     "qt6-wayland",
     "gnome-keyring",
+    # Unlocks that keyring on an autologin with the passphrase typed at the
+    # LUKS prompt; see _unlock_keyring_at_login. Built here, not in Arch.
+    "pam_fde_boot_pw",
     "polkit-gnome",
     "xdg-desktop-portal-gtk",
     "xdg-desktop-portal-wlr",
@@ -1165,6 +1168,26 @@ def _append_pam_lines(path: Path, lines: list[str]) -> None:
     path.write_text(existing.rstrip("\n") + "\n" + "\n".join(new) + "\n")
 
 
+def _insert_pam_lines_before_session(path: Path, lines: list[str]) -> None:
+    """Add PAM lines to a stock file ahead of its first session line, once.
+
+    For session modules that must run before the included session stack:
+    pam_keyinit in system-login swaps in the user's session keyring, and
+    anything after it can no longer see root's.
+    """
+    if not path.exists():
+        return
+    existing = path.read_text().splitlines()
+    new = [line for line in lines if line not in existing]
+    if not new:
+        return
+    at = next(
+        (i for i, line in enumerate(existing) if line.split()[:1] == ["session"]),
+        len(existing),
+    )
+    path.write_text("\n".join(existing[:at] + new + existing[at:]) + "\n")
+
+
 def _unlock_keyring_at_login(ctx: InstallContext) -> None:
     """Unlock the login keyring with the password already being typed.
 
@@ -1199,12 +1222,39 @@ def _unlock_keyring_at_login(ctx: InstallContext) -> None:
         ["password   optional     pam_gnome_keyring.so"],
     )
 
-    # Autologin means no password is typed, so PAM has nothing to unlock
-    # with and the keyring still prompts on first use. The alternative is
-    # a blank keyring password, which stores its contents unencrypted -
-    # not something to do silently on a user's behalf, even with the disk
-    # encrypted. Said out loud rather than left to be discovered.
-    if ctx.autologin:
+    # Autologin means no password is typed, so without more PAM has nothing
+    # to unlock with. When the disk opens with a typed passphrase - which
+    # the configurator makes the user password, so it is also the keyring
+    # password - systemd-cryptsetup caches it in root's kernel keyring as
+    # "cryptsetup" for 150 seconds, and pam_fde_boot_pw hands it to
+    # pam_gnome_keyring when the autologin session opens. greetd.service
+    # already sets KeyringMode=shared, which is what lets greetd see it.
+    #
+    # Two lines ahead of the session include, for two reasons. pam_keyinit
+    # in that include replaces the session keyring, after which root's
+    # "cryptsetup" key is out of reach. And the pam_succeed_if line skips
+    # the injection for the greeter: it runs this same stack as a system
+    # user, and a greeter started inside those 150 seconds - a session that
+    # crashed straight after boot - would get a login keyring of its own,
+    # encrypted with the user's password.
+    #
+    # A later `passwd` moves the keyring password (the passwd line above)
+    # but not the disk passphrase; from then on the injected passphrase is
+    # refused, optional does its job, and the keyring prompts as before.
+    # With TPM unlock nothing is typed and there is nothing to hand on.
+    if ctx.autologin and ctx.encrypt and ctx.tpm_unlock == "none":
+        _insert_pam_lines_before_session(
+            pam_dir / "greetd",
+            [
+                "session    [success=1 default=ignore] pam_succeed_if.so quiet uid < 1000",
+                "session    optional     pam_fde_boot_pw.so inject_for=gkr",
+            ],
+        )
+        info("› keyring: unlocked at autologin with the disk passphrase")
+    elif ctx.autologin:
+        # The alternative is a blank keyring password, which stores its
+        # contents unencrypted - not something to do silently on a user's
+        # behalf, even with the disk encrypted.
         info("› keyring: autologin types no password, so it prompts on first use")
 
 

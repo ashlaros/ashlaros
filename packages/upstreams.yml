@@ -174,6 +174,12 @@ packages:
   # that cannot see it costs nothing.
   vdirsyncer:
     arch: any
+  # Written here from upstream's source: neither Arch nor the AUR carries
+  # it, and upstream lives on sourcehut with no tags, which
+  # track_upstreams.py has no reader for - so no `upstream:` key, and a
+  # new upstream commit is a manual pin bump.
+  pam_fde_boot_pw:
+    arch: both
 
   eww:
     upstream: https://aur.archlinux.org/eww.git

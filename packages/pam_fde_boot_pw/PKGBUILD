@@ -1,0 +1,30 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+# Hands the passphrase typed at the LUKS prompt to gnome-keyring when greetd
+# logs in without asking for a password, so an autologin session starts with
+# the login keyring unlocked. The installer wires it into /etc/pam.d/greetd.
+#
+# Not in Arch or the AUR. Upstream has no tags and two commits, so this pins
+# the commit and says so in pkgver.
+pkgname=pam_fde_boot_pw
+_commit=49bf498fd8d13f73e4a24221818a8a5d2af20088
+pkgver=0.1.r2.g${_commit::7}
+pkgrel=1
+pkgdesc="PAM module passing the boot-time disk encryption passphrase to gnome-keyring"
+arch=(x86_64 aarch64)
+url=https://git.sr.ht/~kennylevinsen/pam_fde_boot_pw
+license=(MIT)
+depends=(glibc pam keyutils)
+makedepends=(meson)
+source=("$pkgname-$_commit.tar.gz::https://git.sr.ht/~kennylevinsen/pam_fde_boot_pw/archive/$_commit.tar.gz")
+sha256sums=('986c4b06cebdd7d4dac109761d0df7a9794edac391781e6942cbc906388e1c0b')
+
+build() {
+  arch-meson "$pkgname-$_commit" build
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+  install -Dm644 "$pkgname-$_commit/LICENSE" -t "$pkgdir/usr/share/licenses/$pkgname/"
+}
