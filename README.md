@@ -23,6 +23,13 @@ of them installs: locale and keyboard, user and password, encryption, disk
 layout. Encryption is on by default and the disk is LUKS2 with the root
 filesystem on btrfs; the ESP is mounted at `/boot`.
 
+Every screen has the same header, which names the question and shows how
+many are left, and the last screen before anything is written lists every
+answer next to the disk it is about to erase. While it installs, the
+dashboard shows the phases and ticks each one off as it finishes. If the
+install fails, it names the phase that failed and the error, so the log is
+only needed for the details.
+
 ### If you chose TPM unlock, a firmware update brings the passphrase back
 
 The installer asks how the disk should unlock — passphrase, TPM + PIN, or

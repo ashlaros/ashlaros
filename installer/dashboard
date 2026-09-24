@@ -39,7 +39,25 @@ CLEAR_LINE="${CSI}K"
 CLEAR_BELOW="${CSI}J"
 STONE="${CSI}37m"
 BRIGHT="${CSI}97m"
+BOLD="${CSI}1m"
 RED="${CSI}31m"
+GREEN="${CSI}32m"
+
+# The brand highlight, the colour the configurator's cursor and headings
+# are drawn in, for the bar and the phase list: the two screens are one
+# installer. Truecolor, because both surfaces it runs on take it - foot in
+# the live session, and the VGA console maps it to the nearest palette
+# slot. Stone where palette.conf is missing.
+#
+# Never gum's selected-button pink or the console's 0xaa magenta: those
+# are what test/vm/install.py reads as "the Reboot prompt is up".
+# shellcheck source=/dev/null
+[[ -r ${ASHLAROS_PATH:-/usr/share/ashlaros}/palette.conf ]] &&
+  . "${ASHLAROS_PATH:-/usr/share/ashlaros}/palette.conf"
+ACCENT=$STONE
+if [[ ${ASHLAROS_HIGHLIGHT:-} =~ ^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$ ]]; then
+  ACCENT="${CSI}38;2;$((16#${BASH_REMATCH[1]}));$((16#${BASH_REMATCH[2]}));$((16#${BASH_REMATCH[3]}))m"
+fi
 
 BAR_WIDTH=40
 
@@ -65,6 +83,24 @@ term_width() {
   [[ $width =~ ^[0-9]+$ ]] && ((width > 0)) && echo "$width" || echo 80
 }
 
+term_height() {
+  local height
+  height=$(stty size 2>/dev/null <"$TTY_PATH" | awk '{print $1}')
+  [[ $height =~ ^[0-9]+$ ]] && ((height > 0)) && echo "$height" || echo 25
+}
+
+# Whether the phase list fits under everything else on this frame. The
+# frame is redrawn from the top without clearing, so one that is taller
+# than the terminal scrolls, and every redraw after smears down the
+# screen. A VGA console is 25 rows; the list is a bonus there, not a need.
+# `reserved` is every row of the frame that is not the list.
+phase_list_fits() {
+  local reserved=$1 names=()
+  [[ -n $NAMES ]] || return 1
+  IFS=$'\x1f' read -r -a names <<<"$NAMES"
+  (($(printf '%s\n' "$LOGO" | wc -l) + reserved + ${#names[@]} <= $(term_height)))
+}
+
 # State the orchestrator publishes. Read in one jq pass: a second read could
 # straddle an atomic replace and see a different generation of the file.
 read_state() {
@@ -76,10 +112,13 @@ read_state() {
       (.target // "/mnt"),
       ((.expected_packages // 0) | floor),
       ((.floor_permille // 0) | floor),
-      ((.ceiling_permille // 1000) | floor)
+      ((.ceiling_permille // 1000) | floor),
+      ((.started_at // 0) | floor),
+      ((.phase_started_at // 0) | floor),
+      (.phase_names // [] | join("\u001f"))
     ] | @tsv' "$STATE_FILE" 2>/dev/null) || return 1
   [[ -n $raw ]] || return 1
-  IFS=$'\t' read -r PHASE INDEX TOTAL TARGET EXPECTED FLOOR CEILING <<<"$raw"
+  IFS=$'\t' read -r PHASE INDEX TOTAL TARGET EXPECTED FLOOR CEILING STARTED PHASE_STARTED NAMES <<<"$raw"
 }
 
 # libalpm makes one directory per package under <target>/var/lib/pacman/local,
@@ -114,15 +153,64 @@ progress_permille() {
   echo "$floor"
 }
 
+# The bar, then the percentage beside it, so a long phase that moves the
+# bar by one cell in a minute still visibly moves the number.
 draw_bar() {
   local permille="$1" filled empty
   filled=$((permille * BAR_WIDTH / 1000))
   empty=$((BAR_WIDTH - filled))
-  printf '%s' "$BRIGHT"
+  printf '%s' "$ACCENT"
   printf '█%.0s' $(seq 1 "$filled" 2>/dev/null)
-  printf '%s' "${DIM}${STONE}"
+  printf '%s' "${RESET}${DIM}${STONE}"
   printf '░%.0s' $(seq 1 "$empty" 2>/dev/null)
-  printf '%s' "$RESET"
+  printf '%s %3d%%%s' "${RESET}${BRIGHT}" $((permille / 10)) "$RESET"
+}
+
+# m:ss, or h:mm:ss past the hour a TCG run takes
+clock() {
+  local seconds=$1
+  ((seconds < 0)) && seconds=0
+  if ((seconds >= 3600)); then
+    printf '%d:%02d:%02d' $((seconds / 3600)) $((seconds % 3600 / 60)) $((seconds % 60))
+  else
+    printf '%d:%02d' $((seconds / 60)) $((seconds % 60))
+  fi
+}
+
+# Every phase, ticked off as it passes: ✓ done, ▸ running, · ahead, and ✗
+# on the one that failed. The
+# names come from the orchestrator's own list, so this cannot drift from
+# what is actually run. Left-aligned as a block and the block centred, so
+# the marks line up in one column.
+#
+# Nothing here changes while a phase runs - no elapsed time beside the
+# current one. test/vm/install.py calls an install stuck when the screen
+# stops changing, and a ticking clock would make every frame differ (#94);
+# what moves is the package count, which stops when pacman does.
+phase_list() {
+  local width=$1 names=() longest=0 name i pad
+  [[ -n $NAMES ]] || return 0
+  IFS=$'\x1f' read -r -a names <<<"$NAMES"
+  for name in "${names[@]}"; do
+    ((${#name} > longest)) && longest=${#name}
+  done
+  pad=$(((width - longest - 2) / 2))
+  ((pad < 0)) && pad=0
+  for i in "${!names[@]}"; do
+    printf '%*s' "$pad" ""
+    if ((i < INDEX)) || [[ $DONE == 1 ]]; then
+      printf '%s✓%s %s' "$GREEN" "$RESET" "${DIM}${names[i]}${RESET}"
+    elif ((i == INDEX)) && [[ $FAILED == 1 ]]; then
+      printf '%s✗ %s%s' "$RED" "${BOLD}${names[i]}" "$RESET"
+    elif ((i == INDEX)); then
+      printf '%s▸%s %s' "$ACCENT" "$RESET" "${BOLD}${names[i]}${RESET}"
+    elif [[ $FAILED == 1 ]]; then
+      printf '%s' "${DIM}  ${names[i]}${RESET}"
+    else
+      printf '%s' "${DIM}· ${names[i]}${RESET}"
+    fi
+    printf '%s\n' "$CLEAR_LINE"
+  done
 }
 
 centre() {
@@ -143,6 +231,9 @@ centre() {
 # make every frame differ and silently disable it (#94).
 step_line() {
   local step="step $((INDEX + 1)) of ${TOTAL}"
+  # the phase just started, as a stable fact rather than a running clock
+  ((STARTED > 0 && PHASE_STARTED >= STARTED)) &&
+    step+=" · started at $(clock $((PHASE_STARTED - STARTED)))"
   ((EXPECTED > 0)) || { printf '%s' "$step"; return; }
 
   local installed
@@ -166,22 +257,26 @@ render() {
       printf '%s\n' "$CLEAR_LINE"
     done <<<"$LOGO"
     printf '%s\n' "$CLEAR_LINE"
-    centre "$PHASE" "$width"
+    centre "${BRIGHT}${BOLD}${PHASE}${RESET}" "$width"
     printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
     centre "$(draw_bar "$permille")" "$width"
-    printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
+    printf '%s\n' "$CLEAR_LINE"
     centre "${DIM}$(step_line)${RESET}" "$width"
     printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
-    # the session is on another VT, so this screen is the only place
-    # anyone would learn it exists (#83)
-    centre "${DIM}Ctrl+Alt+F2 for a browser - the install keeps running${RESET}" "$width"
+    if phase_list_fits 11; then
+      phase_list "$width"
+      printf '%s\n' "$CLEAR_LINE"
+    fi
+    # the installer is a window in a sway session now (d71c885), not a VT
+    # beside one, so the way to a browser is sway's binding
+    centre "${DIM}Super+b opens a browser, Super+Return a terminal - the install keeps running${RESET}" "$width"
     printf '%s\n' "$CLEAR_LINE"
   })
   printf '%s%s%s%s' "$CURSOR_HOME" "$HIDE_CURSOR" "$frame" "$CLEAR_BELOW" >"$TTY_PATH"
 }
 
 render_result() {
-  local width status="$1" message="$2"
+  local width status="$1" message="$2" detail="${3:-}"
   width=$(term_width)
   local frame
   frame=$({
@@ -192,6 +287,15 @@ render_result() {
     printf '%s\n' "$CLEAR_LINE"
     centre "$status" "$width"
     printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
+    # 6 around the list, 2 for the detail, 4 for the Reboot? prompt below
+    if phase_list_fits 12; then
+      phase_list "$width"
+      printf '%s\n' "$CLEAR_LINE"
+    fi
+    if [[ -n $detail ]]; then
+      centre "${RED}${detail}${RESET}" "$width"
+      printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
+    fi
     centre "${DIM}${message}${RESET}" "$width"
     printf '%s\n%s\n' "$CLEAR_LINE" "$CLEAR_LINE"
   })
@@ -209,6 +313,13 @@ EXPECTED=0
 # drawn before any phase has started
 FLOOR=0
 CEILING=0
+STARTED=0
+PHASE_STARTED=0
+NAMES=""
+# how the phase list marks the phases after the current one: done ticks
+# them all, failed leaves them unmarked rather than promising them
+DONE=0
+FAILED=0
 
 "${INSTALL_CMD[@]}" >>"$LOG_FILE" 2>&1 &
 child_pid=$!
@@ -224,15 +335,28 @@ child_pid=""
 
 read_state || true
 
+# The whole install's wall clock, from the orchestrator's own record, so
+# the result screen says how long it took rather than leaving it to guess
+took=""
+finished_at=$(jq -r '(.finished_at // 0) | floor' "$STATE_FILE" 2>/dev/null) || finished_at=0
+((STARTED > 0 && finished_at > STARTED)) && took=" in $(clock $((finished_at - STARTED)))"
+
 if ((status == 0)); then
-  render_result "${BRIGHT}AshlarOS is installed${RESET}" \
+  DONE=1
+  render_result "${GREEN}✓${RESET} ${BRIGHT}${BOLD}AshlarOS is installed${took}${RESET}" \
     "Remove the install medium and reboot."
   if gum confirm --affirmative "Reboot now" --negative "Stay here" "Reboot?" </"$TTY_PATH"; then
     systemctl reboot
   fi
 else
-  render_result "${RED}Installation failed${RESET}" \
-    "The log is at $LOG_FILE"
+  FAILED=1
+  # the phase that raised, and what it said, from the state file the
+  # orchestrator wrote before it exited - so the screen says why, not only
+  # that, and nobody has to open the log to find out which step broke
+  reason=$(jq -r '[.phases[] | select(.status == "failed")] | last | .error // empty' \
+    "$STATE_FILE" 2>/dev/null | head -c "$(( $(term_width) - 4 ))")
+  render_result "${RED}✗ Installation failed${RESET}" \
+    "The log is at $LOG_FILE" "$reason"
 fi
 
 exit "$status"

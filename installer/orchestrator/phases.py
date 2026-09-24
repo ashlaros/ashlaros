@@ -38,6 +38,10 @@ def run(ctx: InstallContext, phases: list[tuple[str, PhaseFn]]) -> None:
         # publish the path rather than have the UI assume /mnt
         "target": str(ctx.target),
         "total_phases": len(phases),
+        # the dashboard lists every phase and ticks them off, so it reads
+        # the names from here rather than keeping a second copy that would
+        # drift from the list main.py actually runs
+        "phase_names": [name for name, _ in phases],
         "current_index": 0,
         "current_phase": "Starting installation",
         "expected_packages": expected_package_count(),

@@ -2,7 +2,7 @@
 # AshlarOS install configurator.
 #
 # Four screens plus a confirmation, each with its default preselected, so
-# Enter-Enter-Enter-Enter-Enter installs. Produces the two JSON files
+# Enter through every one installs. Produces the two JSON files
 # archinstall reads (user_configuration.json, user_credentials.json) plus
 # the AshlarOS-specific bits the orchestrator needs, and hands off to
 # ashlaros-install.
@@ -15,13 +15,55 @@ ASHLAROS_PATH="${ASHLAROS_PATH:-/usr/share/ashlaros}"
 LOGO_PATH="${LOGO_PATH:-$ASHLAROS_PATH/logo.txt}"
 OUTPUT_DIR="${OUTPUT_DIR:-/root}"
 
+# The brand palette from ashlaros-branding, which the website and the
+# ashlaros sway theme are drawn from too, so the installer looks like the
+# first screen of the desktop rather than a tool in front of it. Palette
+# slots only where the file is missing - a checkout run by hand; the
+# package depends on ashlaros-branding.
+#
+# Buttons keep gum's own selected colour. test/vm/install.py finds the
+# dashboard's Reboot prompt by a run of it on the framebuffer, measured on
+# both the VGA console and foot; a themed button would read as an install
+# that never finishes.
+# shellcheck source=/dev/null
+[[ -r $ASHLAROS_PATH/palette.conf ]] && . "$ASHLAROS_PATH/palette.conf"
+readonly C_ACCENT=${ASHLAROS_HIGHLIGHT:-7} C_OK=2 C_WARN=3 C_ERR=1
+
+# The accent as an SGR sequence, for the header, which is drawn on every
+# screen: built with gum style it was a dozen processes and a second of
+# blank console per question.
+if [[ $C_ACCENT =~ ^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$ ]]; then
+  SGR_ACCENT=$'\e[38;2;'"$((16#${BASH_REMATCH[1]}));$((16#${BASH_REMATCH[2]}));$((16#${BASH_REMATCH[3]}))m"
+else
+  SGR_ACCENT=$'\e[3'"${C_ACCENT}m"
+fi
+readonly SGR_ACCENT SGR_BOLD=$'\e[1m' SGR_FAINT=$'\e[2m' SGR_RESET=$'\e[0m'
+
+# gum decides on colour per call, from whether its own stdout is a
+# terminal, and the styled fragments below are built inside $( ). The
+# ISO's .automated_script.sh forces it already; this covers a run by hand.
+[[ -t 1 ]] && export CLICOLOR_FORCE=1
+
 # gum draws on stderr and measures /dev/tty, so both are addressed directly
 # throughout rather than through whatever stdout happens to be.
-export GUM_CHOOSE_CURSOR_FOREGROUND="7"
+export GUM_CHOOSE_CURSOR="▌ "
+export GUM_CHOOSE_CURSOR_FOREGROUND="$C_ACCENT"
+export GUM_CHOOSE_HEADER_FOREGROUND="$C_ACCENT"
 export GUM_CHOOSE_SELECTED_FOREGROUND="15"
+export GUM_FILTER_INDICATOR="▌"
+export GUM_FILTER_INDICATOR_FOREGROUND="$C_ACCENT"
+export GUM_FILTER_MATCH_FOREGROUND="$C_ACCENT"
+export GUM_FILTER_HEADER_FOREGROUND="$C_ACCENT"
+export GUM_FILTER_PROMPT_FOREGROUND="$C_ACCENT"
+export GUM_INPUT_CURSOR_FOREGROUND="$C_ACCENT"
+export GUM_INPUT_PROMPT_FOREGROUND="$C_ACCENT"
+export GUM_INPUT_HEADER_FOREGROUND="$C_ACCENT"
+export GUM_CONFIRM_PROMPT_FOREGROUND="15"
 export GUM_CONFIRM_SELECTED_BACKGROUND="8"
 export GUM_CONFIRM_SELECTED_FOREGROUND="15"
 export GUM_CONFIRM_UNSELECTED_FOREGROUND="7"
+export GUM_SPIN_SPINNER="dot"
+export GUM_SPIN_SPINNER_FOREGROUND="$C_ACCENT"
 
 if [[ ! -r $LOGO_PATH ]]; then
   echo "ashlaros: logo not found at $LOGO_PATH" >&2
@@ -49,27 +91,104 @@ measure_terminal() {
 }
 measure_terminal
 
+# Palette 7 rather than the accent: test/vm/run.sh decides the installer
+# is up by a run of this grey on the framebuffer.
 clear_logo() {
   measure_terminal
   printf "\033[H\033[2J"
   gum style --foreground 7 --padding "1 0 0 $PADDING_LEFT" "$(<"$LOGO_PATH")"
 }
 
+# Status lines are written as `say "✓ ..."` and `warn "! ..."`; the mark is
+# coloured here rather than at each call site. Plain ANSI for the ✓: nested
+# gum styling resets the colour of the text after it.
 say() {
-  gum style --padding "0 0 0 $PADDING_LEFT" "$@"
+  if [[ $# -eq 1 && $1 == "✓ "* ]]; then
+    gum style --padding "0 0 0 $PADDING_LEFT" $'\e[3'"$C_OK"$'m✓\e[0m'"${1#✓}"
+  else
+    gum style --padding "0 0 0 $PADDING_LEFT" "$@"
+  fi
 }
+warn() {
+  if [[ $# -eq 1 && $1 == "! "* ]]; then
+    gum style --foreground "$C_WARN" --padding "0 0 0 $PADDING_LEFT" "▲${1#!}"
+  else
+    gum style --foreground "$C_WARN" --padding "0 0 0 $PADDING_LEFT" "$@"
+  fi
+}
+oops() { gum style --foreground "$C_ERR" --padding "0 0 0 $PADDING_LEFT" "$@"; }
+# --faint rather than palette 8, which several palettes draw within a shade
+# of the background
+hint() { gum style --faint --padding "0 0 0 $PADDING_LEFT" "$@"; }
 
+# The questions, in the order they are asked, for the strip under every
+# header. The Wi-Fi step joins it only when network_form is going to ask.
+STEPS=(keyboard account encryption disk install)
+declare -A STEP_LABELS=([keyboard]=Keyboard [network]=Network [account]=Account
+  [encryption]=Encryption [disk]=Disk [install]=Install)
+
+# One header for every screen: the logo, "Install" and the screen's own
+# title as a breadcrumb, then the strip - so where you are and how much is
+# left are always the same two lines.
+#
+# No AshlarOS Symbols mark here, unlike the settings TUI's header: the ISO
+# carries the font, but on the VGA console that a machine without a GPU
+# falls back to there is no fontconfig to fall back through, and the
+# missing glyph is a box.
 step() {
+  local id=$1 title=$2
   clear_logo
   echo
-  say "$1"
-  echo
+  printf '%s%s%s%s  ›  %s%s%s\n' "$PADDING_LEFT_SPACES" "$SGR_ACCENT$SGR_BOLD" Install \
+    "$SGR_RESET$SGR_FAINT" "$SGR_RESET$SGR_BOLD" "$title" "$SGR_RESET"
+  printf '%s%s\n\n' "$PADDING_LEFT_SPACES" "$(step_strip "$id")"
+}
+
+# ● for the steps behind and the current one, ○ for those ahead; the
+# current one bold. "step 2 of 5" where the strip would wrap.
+step_strip() {
+  local id=$1 name index=0 position=0 plain="" styled=""
+  for name in "${STEPS[@]}"; do
+    index=$((index + 1))
+    plain+="● ${STEP_LABELS[$name]}  "
+    if [[ $name == "$id" ]]; then
+      position=$index
+      styled+="$SGR_ACCENT$SGR_BOLD● ${STEP_LABELS[$name]}$SGR_RESET  "
+    elif ((position)); then
+      styled+="$SGR_FAINT○ ${STEP_LABELS[$name]}$SGR_RESET  "
+    else
+      styled+="$SGR_ACCENT● ${STEP_LABELS[$name]}$SGR_RESET  "
+    fi
+  done
+  if ((PADDING_LEFT + ${#plain} > TERM_WIDTH)); then
+    printf '%sstep %s of %s%s' "$SGR_FAINT" "$position" "${#STEPS[@]}" "$SGR_RESET"
+  else
+    printf '%s' "${styled%  }"
+  fi
+}
+
+# A choice row: the label padded to one width so the descriptions line
+# up, then the key after a bar. gum choose shows the part before the bar
+# and prints the key, so the case statements dispatch on a key and the
+# label can say anything. Plain text only: gum strips ANSI from items.
+#
+# Padded by character count rather than with printf's %-16s, which counts
+# bytes: a label ending in "…" came out two columns short.
+row() {
+  local pad=$((18 - ${#2}))
+  ((pad < 1)) && pad=1
+  printf '%s%*s%s|%s' "$2" "$pad" "" "$3" "$1"
+}
+
+# What --selected needs: the shown half of a row
+label_of() {
+  printf '%s' "${1%|*}"
 }
 
 abort() {
-  gum style "${1:-Aborted installation}"
   echo
-  gum style "Run 'ashlaros-configurator' to start again."
+  oops "✗ ${1:-Installation aborted}"
+  hint "Run 'ashlaros-configurator' to start again."
   exit 1
 }
 
@@ -85,31 +204,32 @@ abort() {
 # layouts, and a real install came back with KEYMAP=euro, which is six
 # lines binding Alt+E to the euro sign and defines no letters at all.
 locale_keymap_form() {
-  step "Locale and keyboard"
+  step keyboard "Language and keyboard"
 
-  local choice
-  choice=$(gum choose --header "Layout" --selected "EU (en_US.UTF-8, de keyboard)" \
-    "EU (en_US.UTF-8, de keyboard)" \
-    "US (en_US.UTF-8, us keyboard)" \
-    "EurKEY (en_US.UTF-8, eu keyboard)" \
-    "Other...") || abort
+  local eu us eurkey other choice
+  eu=$(row eu "German keyboard" "English system, de layout")
+  us=$(row us "US keyboard" "English system, us layout")
+  eurkey=$(row eurkey "EurKEY" "English system, US with European letters")
+  other=$(row other "Other…" "pick a locale and a layout")
+  choice=$(gum choose --label-delimiter="|" --header "Keyboard" \
+    --selected "$(label_of "$eu")" "$eu" "$us" "$eurkey" "$other") || abort
 
   case "$choice" in
-  "EU "*)
+  eu)
     locale="en_US.UTF-8"
-    layout="de"
+    xkb_layout="de"
     ;;
-  "US"*)
+  us)
     locale="en_US.UTF-8"
-    layout="us"
+    xkb_layout="us"
     ;;
-  "EurKEY"*)
+  eurkey)
     # A US layout with the western European letters on AltGr, so one
     # keyboard writes English, German, French and the Nordics without
     # switching. XKB only: xkeyboard-config ships symbols/eu and kbd has
     # no console equivalent, so the TTY falls back below.
     locale="en_US.UTF-8"
-    layout="eu"
+    xkb_layout="eu"
     ;;
   *)
     # arguments rather than a pipe: gum reads piped choices from stdin and
@@ -119,18 +239,18 @@ locale_keymap_form() {
       en_US.UTF-8 en_GB.UTF-8 de_DE.UTF-8 fr_FR.UTF-8 es_ES.UTF-8 \
       it_IT.UTF-8 nl_NL.UTF-8 pt_PT.UTF-8 pl_PL.UTF-8 sv_SE.UTF-8 \
       da_DK.UTF-8 nb_NO.UTF-8 fi_FI.UTF-8 cs_CZ.UTF-8 ja_JP.UTF-8) || abort
-    layout=$(xkb_layouts |
+    xkb_layout=$(xkb_layouts |
       gum filter --header "Keyboard layout" --placeholder "type to filter" --value "de") || abort
     ;;
   esac
 
-  keymap=$(console_keymap_for "$layout")
+  keymap=$(console_keymap_for "$xkb_layout")
 
   # The console keymap is a separate namespace and not every layout has
   # one - `eu` has none at all. Offered rather than assumed, because this
   # is what the TTY, the initramfs and the LUKS passphrase prompt use, and
   # a passphrase typed on the wrong keymap is a disk that will not open.
-  if [[ $choice == "Other..." ]] || [[ -z $keymap ]]; then
+  if [[ $choice == other ]] || [[ -z $keymap ]]; then
     keymap=$(localectl list-keymaps 2>/dev/null |
       keymaps_only |
       gum filter --header "Console keymap (TTY, initramfs, disk unlock)" \
@@ -201,10 +321,9 @@ network_form() {
   online && return 0
   wireless_device || return 0
 
-  step "Network"
-  say "The install medium carries a complete set of packages, so this is"
-  say "optional: without a network you get the versions on the image, and"
-  say "with one you get today's."
+  step network "Network"
+  say "The install medium carries every package, so this is optional:"
+  hint "offline you get the versions on the image, online you get today's."
   echo
 
   gum confirm --affirmative "Connect to Wi-Fi" --negative "Install offline" \
@@ -237,11 +356,11 @@ wifi_connect() {
   device=$(wireless_device) || return 0
 
   while true; do
-    step "Wi-Fi"
+    step network "Wi-Fi"
 
     # iwd scans on its own once the device is up, but a fresh boot has
     # usually not finished one by the time anybody reaches this screen.
-    gum spin --title "Scanning for networks..." -- \
+    gum spin --title "Scanning for networks…" -- \
       sh -c "iwctl station '$device' scan >/dev/null 2>&1; sleep 3"
 
     local networks
@@ -250,7 +369,7 @@ wifi_connect() {
       awk 'NR > 4 && NF { $NF = ""; $(NF - 1) = ""; sub(/^[[:space:]*>]+/, ""); sub(/[[:space:]]+$/, ""); if (length) print }')
 
     if [[ -z $networks ]]; then
-      say --foreground 1 "No networks found."
+      warn "! No networks found."
       gum confirm --affirmative "Scan again" --negative "Install offline" "" || return 0
       continue
     fi
@@ -272,9 +391,9 @@ wifi_connect() {
     # Association is not a route. systemd-networkd still has to DHCP, and
     # reporting success before it does would send the install at mirrors
     # it cannot reach yet.
-    if gum spin --title "Getting an address..." -- \
+    if gum spin --title "Getting an address…" -- \
       sh -c 'for _ in $(seq 1 20); do ip route show default | grep -q . && exit 0; sleep 1; done; exit 1'; then
-      say "Connected to $ssid."
+      say "✓ Connected to $ssid."
       # Remembered for the installed system, which runs NetworkManager
       # rather than the ISO's iwd: a user who typed a passphrase to get
       # current packages should not have to type it again at the first
@@ -285,7 +404,8 @@ wifi_connect() {
       return 0
     fi
 
-    say --foreground 1 "Could not connect to $ssid.${output:+ $output}"
+    oops "✗ Could not connect to $ssid."
+    [[ -n $output ]] && hint "$output"
     gum confirm --affirmative "Try again" --negative "Install offline" "" || return 0
   done
 }
@@ -294,21 +414,21 @@ wifi_connect() {
 
 user_form() {
   while true; do
-    step "Your user account"
+    step account "Your account"
 
     # --value, not --placeholder: a placeholder is not submitted, so Enter
     # on an untouched field yielded an empty username and re-asked. The
     # promise is that Enter alone installs.
     username=$(gum input --header "Username" --value "${username:-user}") || abort
     if [[ ! $username =~ ^[a-z_][a-z0-9_-]*$ ]]; then
-      say --foreground 1 "Usernames start with a letter and hold only a-z, 0-9, - and _."
+      oops "✗ Usernames start with a letter and hold only a-z, 0-9, - and _."
       gum confirm --affirmative "Try again" --negative "Quit" "" || abort
       continue
     fi
 
-    password=$(gum input --password --header "Password" --placeholder "•••••••") || abort
+    password=$(gum input --password --header "Password for $username" --placeholder "•••••••") || abort
     if [[ -z $password ]]; then
-      say --foreground 1 "The password cannot be empty: it also unlocks the disk."
+      oops "✗ The password cannot be empty: it also unlocks the disk."
       gum confirm --affirmative "Try again" --negative "Quit" "" || abort
       continue
     fi
@@ -316,7 +436,7 @@ user_form() {
     local again
     again=$(gum input --password --header "Password (again)" --placeholder "•••••••") || abort
     if [[ $password != "$again" ]]; then
-      say --foreground 1 "The two passwords differ."
+      oops "✗ The two passwords differ."
       gum confirm --affirmative "Try again" --negative "Quit" "" || abort
       continue
     fi
@@ -325,6 +445,8 @@ user_form() {
   done
 
   hostname=$(gum input --header "Hostname" --value "ashlaros") || abort
+  say "✓ $username on $hostname"
+  echo
 
   # Autologin is on by default: the disk is encrypted, so the passphrase
   # prompt at boot already is the authentication.
@@ -343,13 +465,13 @@ user_form() {
 # STEP 3: ENCRYPTION & TPM
 
 encryption_form() {
-  step "Disk encryption"
+  step encryption "Disk encryption"
 
-  say "LUKS2 with your user password as the passphrase."
+  say "LUKS2, with your password as the passphrase."
   if tpm_present; then
-    say --foreground 8 "A TPM is present, so unlocking it without typing the passphrase is an option."
+    hint "A TPM is present, so unlocking without the passphrase is an option."
   else
-    say --foreground 8 "No TPM found: you will type the passphrase at every boot."
+    hint "No TPM found: you will type the passphrase at every boot."
   fi
   echo
 
@@ -379,13 +501,15 @@ encryption_form() {
 tpm_unlock_form() {
   tpm_present || { tpm_unlock=none; return; }
 
-  step "Disk unlock"
+  step encryption "Disk unlock"
 
-  say "                  boot            defends drive   defends whole"
-  say "                  experience      theft           machine theft"
-  say "  passphrase      full phrase     yes             yes"
-  say "  TPM + PIN       short PIN       yes             yes (rate-limited)"
-  say "  TPM only        silent          yes             NO"
+  # Aligned by hand rather than through gum table, which pads every row
+  # with a blank line even borderless and would push the choice below off
+  # a VGA console. The one unsafe cell is the only one coloured.
+  hint "              at boot            a stolen drive    a stolen machine"
+  say "  Passphrase  type the phrase    locked            locked"
+  say "  TPM + PIN   type a short PIN   locked            locked, rate-limited"
+  say "  TPM only    nothing            locked            $(gum style --foreground "$C_WARN" unlocked)"
   echo
 
   # PCR 7 measures Secure Boot policy. With Secure Boot off - the normal
@@ -394,19 +518,19 @@ tpm_unlock_form() {
   # this machine. Said here because it changes what the silent option is
   # worth on the hardware in front of the user.
   if ! secure_boot_on; then
-    say --foreground 3 "Secure Boot is off on this machine, so a TPM-only unlock protects"
-    say --foreground 3 "a removed drive but not this laptop or desktop. A PIN closes that."
+    warn "! Secure Boot is off, so TPM only protects a removed drive but not"
+    warn "  this machine. A PIN closes that."
     echo
   fi
 
   local choice
-  choice=$(gum choose --header "How should this disk unlock?" \
-    "Passphrase only - type it every boot" \
-    "TPM + PIN - a short PIN every boot" \
-    "TPM only - unlock silently")
+  choice=$(gum choose --label-delimiter="|" --header "How should this disk unlock?" \
+    "$(row none "Passphrase" "type it every boot")" \
+    "$(row pin "TPM + PIN" "a short PIN every boot")" \
+    "$(row tpm "TPM only" "unlocks silently")")
   case "$choice" in
-    "TPM + PIN"*) tpm_unlock=pin ;;
-    "TPM only"*) tpm_unlock=tpm ;;
+    pin) tpm_unlock=pin ;;
+    tpm) tpm_unlock=tpm ;;
     *) tpm_unlock=none ;;
   esac
 
@@ -426,7 +550,7 @@ tpm_unlock_form() {
       [[ -n $pin ]] || continue
       confirm=$(gum input --password --placeholder "PIN again" --header "Confirm") || continue
       [[ $pin == "$confirm" ]] && break
-      say --foreground 1 "Those did not match."
+      oops "✗ Those did not match."
     done
     tpm_pin=$pin
   fi
@@ -452,40 +576,44 @@ tpm_present() {
 
 disk_form() {
   while true; do
-    step "Where to install"
+    step disk "Where to install"
 
     local boot_source exclude_disk
     boot_source=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)
     exclude_disk=$(root_disk_of "$boot_source")
 
+    # Rows are "size  model  /dev/name|/dev/name": the size first, because
+    # that is how people tell their disks apart, and the device as the key
+    # so a model with a bar or spaces in it cannot break the choice.
     local rows
-    mapfile -t rows < <(lsblk -dpno NAME,SIZE,MODEL,TYPE |
-      awk '$NF=="disk"{ $NF=""; print }' |
-      grep -E '^/dev/(sd|hd|vd|nvme|mmcblk|xv)' |
-      { if [[ -n $exclude_disk ]]; then grep -Fv "$exclude_disk " || true; else cat; fi; })
+    mapfile -t rows < <(lsblk -dpno NAME,SIZE,TYPE,MODEL |
+      awk '$3 == "disk" { name = $1; size = $2; $1 = $2 = $3 = ""; sub(/^ +/, "")
+        gsub(/\|/, "/"); printf "%-8s %-34s %s|%s\n", size, ($0 == "" ? "(no model)" : $0), name, name }' |
+      grep -E '\|/dev/(sd|hd|vd|nvme|mmcblk|xv)' |
+      { if [[ -n $exclude_disk ]]; then grep -v "|${exclude_disk}\$" || true; else cat; fi; })
 
     if ((${#rows[@]} == 0)); then
       abort "No installable disk found."
     fi
 
-    local selected
-    selected=$(gum choose --header "Install disk" "${rows[@]}") || abort
-    disk=$(awk '{print $1}' <<<"$selected")
+    disk=$(gum choose --label-delimiter="|" --header "Disk" "${rows[@]}") || abort
 
-    layout=$(gum choose --header "Layout for $disk" --selected "Erase disk (btrfs)" \
-      "Erase disk (btrfs)" \
-      "Erase disk (ext4)" \
-      "Open cfdisk, then re-detect") || abort
+    local btrfs ext4 cfdisk choice
+    btrfs=$(row btrfs "Erase, btrfs" "snapshots, and roll back a bad update")
+    ext4=$(row ext4 "Erase, ext4" "no snapshots")
+    cfdisk=$(row cfdisk "Partition…" "open cfdisk, then look again")
+    choice=$(gum choose --label-delimiter="|" --header "What to do with $disk" \
+      --selected "$(label_of "$btrfs")" "$btrfs" "$ext4" "$cfdisk") || abort
 
-    case "$layout" in
-    "Open cfdisk"*)
+    case "$choice" in
+    cfdisk)
       clear
       cfdisk "$disk" || true
       partprobe "$disk" 2>/dev/null || true
       sync
       continue
       ;;
-    "Erase disk (ext4)") filesystem="ext4" ;;
+    ext4) filesystem="ext4" ;;
     *) filesystem="btrfs" ;;
     esac
 
@@ -516,15 +644,38 @@ encryption_summary() {
   esac
 }
 
+# The size and model the disk row showed, so the last screen before the
+# wipe names the disk the way the user picked it rather than as a path
+disk_description() {
+  lsblk -dno SIZE,MODEL "$disk" 2>/dev/null | awk '{ $1 = $1; print }'
+}
+
+# Tab-separated rather than the comma gum defaults to: the encryption
+# summary reads "LUKS2, passphrase every boot", and gum table rejects a
+# row with a column too many as "invalid data provided" and prints
+# nothing - which is what this screen showed, above its erase warning, on
+# every default install.
+summary_row() {
+  printf '%s\t%s\n' "$1" "$2"
+}
+
 confirm_form() {
-  clear_logo
+  step install "Ready to install"
+  {
+    summary_row "Setting" "Value"
+    summary_row "Account" "$username on $hostname$([[ $autologin == true ]] && printf ', logs in automatically')"
+    summary_row "Keyboard" "$xkb_layout, console $keymap"
+    summary_row "Language" "$locale"
+    summary_row "Time zone" "$timezone"
+    [[ -n $wifi_ssid ]] && summary_row "Network" "$wifi_ssid"
+    summary_row "Disk" "$disk  $(disk_description)"
+    summary_row "Filesystem" "$filesystem$([[ $filesystem == btrfs ]] && printf ', with snapshots')"
+    summary_row "Encryption" "$(encryption_summary)"
+  } | gum table -s $'\t' -p --border rounded \
+    --border.foreground "$C_ACCENT" --header.foreground "$C_ACCENT" |
+    sed "s/^/${PADDING_LEFT_SPACES}/"
   echo
-  printf 'Field,Value\nUser,%s\nHostname,%s\nAutologin,%s\nLocale,%s\nKeyboard,%s\nConsole keymap,%s\nTimezone,%s\nDisk,%s\nFilesystem,%s\nEncryption,%s\n' \
-    "$username" "$hostname" "$autologin" "$locale" "$layout" "$keymap" "$timezone" \
-    "$disk" "$filesystem" "$(encryption_summary)" |
-    gum table -s "," -p | sed "s/^/${PADDING_LEFT_SPACES}/"
-  echo
-  say --foreground 1 "Everything on $disk will be erased. There is no recovery."
+  oops "✗ Everything on $disk will be erased. There is no recovery."
   echo
 
   gum confirm --affirmative "Install" --negative "Start over" "Install AshlarOS?"
@@ -614,7 +765,7 @@ write_config() {
 	        "filesystem": "$filesystem",
 	        "root_obj_id": "$ROOT_OBJ_ID",
 	        "boot": { "esp_mount": "/boot" },
-	        "xkb_layout": "$layout"
+	        "xkb_layout": "$xkb_layout"
 	    },
 	    "disk_config": {
 	        "config_type": "default_layout",
@@ -722,7 +873,7 @@ write_config() {
   # plaintext LUKS passphrase, and between creating the file and chmod'ing
   # it the content sits at whatever the umask allows. /root is 750 on the
   # live ISO so the window is small, but OUTPUT_DIR is overridable and the
-  # ISO runs a browser session on tty2.
+  # live session runs a browser beside the installer.
   local previous_umask
   previous_umask=$(umask)
   umask 077
@@ -749,6 +900,11 @@ write_config() {
 # MAIN
 
 username=""
+# the XKB layout the desktop gets. Its own name, not `layout`: disk_form
+# used that for the partitioning choice, so every install shipped
+# "Erase disk (btrfs)" as its keyboard layout and the desktop fell back
+# to us
+xkb_layout=""
 autologin=true
 encrypt=true
 # asked in tpm_unlock_form; none means the passphrase is the only key, and
@@ -760,6 +916,13 @@ filesystem="btrfs"
 # installed system so the first desktop login is already online
 wifi_ssid=""
 wifi_passphrase=""
+
+# Wi-Fi is a step only on a machine where network_form will ask: offline
+# with a wireless card. Decided once, so the strip does not change length
+# between two screens.
+if ! online && wireless_device >/dev/null; then
+  STEPS=(keyboard network account encryption disk install)
+fi
 
 while true; do
   locale_keymap_form
@@ -773,8 +936,9 @@ done
 write_config
 
 if [[ ${1:-} == "--dry-run" ]]; then
-  step "Dry run: configuration written, nothing installed"
-  say "$OUTPUT_DIR/user_configuration.json"
-  say "$OUTPUT_DIR/user_credentials.json"
+  step install "Dry run"
+  say "✓ Configuration written, nothing installed"
+  hint "$OUTPUT_DIR/user_configuration.json"
+  hint "$OUTPUT_DIR/user_credentials.json"
   exit 0
 fi
