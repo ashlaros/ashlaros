@@ -3089,6 +3089,145 @@ theme_entry() {
   pause
 }
 
+# 22. LOCATION
+#
+# One place for everything that follows the sun or the sky: the weather in
+# the bar, the night light (sunset.sh -> wlsunset) and the automatic
+# day/night theme (theme-toggle.sh). All three ask geoip.sh, which answers
+# from this file when it exists and guesses from the network when it does
+# not - so "Automatic" is the absence of the file, not a value in it.
+LOCATION_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/ashlaros/location"
+readonly GEOCODE_URL="https://geocoding-api.open-meteo.com/v1/search"
+
+location_get() {
+  sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*$/\1/p" \
+    "$LOCATION_FILE" 2>/dev/null | head -1
+}
+
+# A place as "latitude<TAB>longitude<TAB>name", the name last because typed
+# coordinates have none and read would collapse a leading empty field.
+# Typed coordinates are taken as they are and go nowhere; a name is looked
+# up at open-meteo, the same geocoder the weather module uses for a typed
+# city. Messages to stderr: stdout is the answer.
+location_pick() {
+  local query lang results choice
+  query=$(gum input --header "A town or city, or coordinates as 50.11, 8.68" \
+    --placeholder "Frankfurt am Main") || return 1
+  query=$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' <<<"$query")
+  [[ -n $query ]] || return 1
+
+  if [[ $query =~ ^(-?[0-9]+(\.[0-9]+)?)[[:space:]]*,[[:space:]]*(-?[0-9]+(\.[0-9]+)?)$ ]]; then
+    local lat=${BASH_REMATCH[1]} lon=${BASH_REMATCH[3]}
+    if jq -en --argjson lat "$lat" --argjson lon "$lon" \
+      '$lat >= -90 and $lat <= 90 and $lon >= -180 and $lon <= 180' >/dev/null; then
+      printf '%s\t%s\t' "$lat" "$lon"
+      return 0
+    fi
+    oops "Latitude runs from -90 to 90 and longitude from -180 to 180." >&2
+    return 1
+  fi
+
+  # names in the language the desktop is in, where open-meteo has them
+  lang=${LANG%%[_.]*}
+  [[ $lang =~ ^[a-z]{2}$ ]] || lang=en
+  results=$(gum spin --title "Looking up $query" -- \
+    curl -fsSL --max-time 10 -G --data-urlencode "name=$query" \
+    --data-urlencode "count=10" --data-urlencode "language=$lang" \
+    "$GEOCODE_URL" 2>/dev/null |
+    jq -r '.results // [] | .[]
+      | [([.name, .admin1, .country] | map(select(. != null and . != "")) | join(", ")),
+         (.latitude * 10000 | round / 10000), (.longitude * 10000 | round / 10000), .name]
+      | @tsv' 2>/dev/null)
+  if [[ -z $results ]]; then
+    oops "Nothing found for \"$query\" - or open-meteo.com could not be reached." >&2
+    return 1
+  fi
+  # the label alone is chosen: two Frankfurts differ by region, and the
+  # region is in the label
+  choice=$(cut -f1 <<<"$results" | gum choose --header "Which one?") || return 1
+  awk -F'\t' -v c="$choice" '$1 == c { printf "%s\t%s\t%s", $2, $3, $4; exit }' <<<"$results"
+}
+
+# What follows the new place right away rather than at the next login:
+# wlsunset reads its coordinates once, at start.
+location_apply() {
+  systemctl --user try-restart wlsunset >/dev/null 2>&1
+  waybar-signal weather >/dev/null 2>&1
+  waybar-signal theme >/dev/null 2>&1
+  return 0
+}
+
+location_entry() {
+  local choice pick name lat lon geo
+  while true; do
+    screen "Location"
+    say "The weather in the bar, the night light and the automatic"
+    say "day/night theme all follow this."
+    echo
+
+    # what the three consumers will actually get, asked the way they ask
+    geo=$(sh /usr/share/sway/scripts/geoip.sh 2>/dev/null)
+    if [[ -r $LOCATION_FILE ]]; then
+      name=$(location_get name)
+      say "Set to ${name:+$name, }$(location_get latitude), $(location_get longitude)"
+    elif [[ -n $geo ]]; then
+      say "Automatic: $(jq -r '.city // "somewhere unnamed"' <<<"$geo")"
+      hint "Guessed from this machine's network address by ashlaros.download,"
+      hint "which keeps no record of it."
+    else
+      say "Automatic"
+      warn "! No guess yet - offline, or the network hides where it is."
+    fi
+    [[ -n $geo ]] && hint "$(jq -r 'if .sunrise then "Sunrise \(.sunrise[11:16]), sunset \(.sunset[11:16])"
+      else "No sunrise or sunset today" end' <<<"$geo" 2>/dev/null)"
+
+    # Settings of their own that win over this one, said rather than
+    # silently ignored: a place here that the weather does not follow
+    # looks like a bug.
+    local city
+    city=$(sed -n 's/^[[:space:]]*city[[:space:]]*=[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*$/\1/p' \
+      "${XDG_CONFIG_HOME:-$HOME/.config}/weather.cfg" 2>/dev/null | head -1)
+    if [[ -n $city && $city != auto ]]; then
+      echo
+      warn "! The weather follows city = $city in ~/.config/weather.cfg instead."
+    fi
+    if grep -qs '^[[:space:]]*\(latitude\|longitude\|location\)=' "$HOME/.config/wlsunset/config"; then
+      echo
+      warn "! ~/.config/wlsunset/config sets the night light's own location."
+    fi
+    echo
+
+    local -a entries=("Choose a place")
+    [[ -r $LOCATION_FILE ]] && entries+=("Automatic")
+    entries+=("Back")
+    choice=$(gum choose --header "Location" "${entries[@]}") || return 0
+
+    case $choice in
+      "Choose a place")
+        pick=$(location_pick) || { pause; continue; }
+        IFS=$'\t' read -r lat lon name <<<"$pick"
+        private_file "$LOCATION_FILE"
+        {
+          echo "# written by ashlaros-settings-tui; read by geoip.sh"
+          [[ -n $name ]] && echo "name = $name"
+          echo "latitude = $lat"
+          echo "longitude = $lon"
+        } > "$LOCATION_FILE"
+        location_apply
+        say "✓ ${name:-$lat, $lon}"
+        pause
+        ;;
+      "Automatic")
+        rm -f "$LOCATION_FILE"
+        location_apply
+        say "✓ Guessing from the network again."
+        pause
+        ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
 # The main menu's rows. Each is "key|icon|label|what it is": the key is
 # what main dispatches on, so the label can say anything without
 # breaking the case below. Icons are Nerd Font codepoints, nf-dev first
@@ -3146,6 +3285,7 @@ main() {
     input+=("$(menu_row keyboard $'\U000f030c' "Keyboard layout" "how keys map")")
     input+=("$(menu_row locale $'\U000f05ca' "System locale" "language and formats")")
     input+=("$(menu_row time $'\U000f0150' "Time and date" "clock and time zone")")
+    input+=("$(menu_row location $'\U000f034e' "Location" "weather, night light, sunrise")")
     command -v ashlaros-displays >/dev/null &&
       screen+=("$(menu_row displays $'\U000f0379' "Displays" "arrangement and scaling")")
     # only where there is a backlight to adapt - the same predicate the
@@ -3247,6 +3387,7 @@ main() {
       kernels) kernel_menu ;;
       packages) packages_entry ;;
       time) time_menu ;;
+      location) location_entry ;;
       hardware) hardware_menu ;;
       wluma) wluma_entry ;;
       flashing) flashing_entry ;;

@@ -314,7 +314,9 @@
         // accepts -c/--city <city> -t/--temperature <C/F> -d/--distance <km/miles>
         "exec": "/usr/share/sway/scripts/weather.sh",
         "return-type": "json",
-        "on-click": "xdg-open \"https://wttr.in/$(/usr/share/sway/scripts/geoip.sh | jq -r '.city')\"",
+        // coordinates rather than .city: a place set in Settings as typed
+        // coordinates has no name
+        "on-click": "xdg-open \"https://wttr.in/$(/usr/share/sway/scripts/geoip.sh | jq -r '\"\\(.latitude),\\(.longitude)\"')\"",
         "on-click-right": "waybar-signal weather",
         "signal": 16
     },

@@ -14,15 +14,15 @@
 #   - do not schedule on the hour; their data updates continuously
 #
 # MET publishes no geocoding API, so a typed city name is resolved by
-# open-meteo. 'auto' asks our own worker instead, which reads the geo data
-# Cloudflare attached at its edge - the machine's IP goes to us rather than
-# to a third party.
+# open-meteo. 'auto' is geoip.sh's answer: the place set in Settings ->
+# Location, or else our own worker, which reads the geo data Cloudflare
+# attached at its edge - the machine's IP goes to us rather than to a
+# third party.
 
 set -eu
 
 USER_AGENT="ashlaros-weather/1.0 github.com/ashlaros/ashlaros"
 FORECAST_URL="https://api.met.no/weatherapi/locationforecast/2.0/complete"
-GEO_URL="${ASHLAROS_GEO_URL:-https://ashlaros.download/geo}"
 GEOCODE_URL="https://geocoding-api.open-meteo.com/v1/search"
 
 here=$(dirname "$(readlink -f "$0")")
@@ -76,8 +76,10 @@ fallback() {
 }
 
 if [ "$city" = auto ]; then
-	geo=$(curl -fsSL --max-time 10 -A "$USER_AGENT" "$GEO_URL" 2>/dev/null) ||
-		fallback "weather: cannot reach the geo endpoint"
+	# through geoip.sh, so a place set in Settings -> Location is the one
+	# the forecast is for, and the worker is asked at most once a day
+	geo=$(sh "$here/geoip.sh") && [ -n "$geo" ] ||
+		fallback "weather: no location - set one in Settings, or check the network"
 	latitude=$(printf '%s' "$geo" | jq -r '.latitude')
 	longitude=$(printf '%s' "$geo" | jq -r '.longitude')
 	place=$(printf '%s' "$geo" | jq -r '.city // ""')
@@ -101,9 +103,12 @@ longitude=$(printf '%.4f' "$longitude")
 
 # Revalidate rather than refetch. A 304 costs MET almost nothing and us a
 # round trip, and skipping it is the behaviour they block for.
+# Only for the same coordinates: MET would answer a 304 for a new place as
+# readily as for the old one, and the old forecast would stay.
 last_modified=""
 [ -r "$response_cache" ] &&
-	last_modified=$(jq -r '.last_modified // ""' "$response_cache" 2>/dev/null)
+	last_modified=$(jq -r --arg at "$latitude,$longitude" \
+		'select(.at == $at) | .last_modified // ""' "$response_cache" 2>/dev/null)
 
 headers=$(mktemp)
 body=$(mktemp)
@@ -126,7 +131,8 @@ else
 		"$headers" | tr -d '\r' | head -1)
 	mkdir -p "$cache_dir"
 	printf '%s' "$forecast" |
-		jq --arg lm "$new_lm" '{body: ., last_modified: $lm}' >"$response_cache"
+		jq --arg lm "$new_lm" --arg at "$latitude,$longitude" \
+			'{body: ., last_modified: $lm, at: $at}' >"$response_cache"
 fi
 
 # %c with the zone. Python's datetime.now() is naive, so its %Z expanded to
