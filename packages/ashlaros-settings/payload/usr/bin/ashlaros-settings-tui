@@ -1652,45 +1652,165 @@ tailscale_entry() {
 # howdy-next is an optdepend and this entry is built only when it is
 # installed: pacman resolves 182 packages for it, opencv 112.81 MiB and
 # qt6-base 66.53 MiB, for hardware most machines do not have.
-readonly FACE_LINE="auth       sufficient   pam_howdy.so"
+# workaround=native: howdy-next's own recommendation for sudo, in
+# pam_howdy(8) and in the package's install message. Without it the face
+# scan runs first and the password prompt only appears once it gives up;
+# with it the scan runs while the prompt is already showing, and a
+# recognised face ends the prompt. It needs a real terminal and quietly
+# does nothing without one, which sudo from a shell always has.
+readonly FACE_LINE="auth       sufficient   pam_howdy.so workaround=native"
 readonly FACE_SUDO=/etc/pam.d/sudo
+readonly FACE_COMPARE=/usr/lib/howdy/howdy-compare
 
 face_enabled() {
   grep -q "^auth .*pam_howdy.so" "$FACE_SUDO" 2>/dev/null
 }
 
-# Whether this user has a face model.
-#
-# Two things measured against the published package rather than assumed.
-# It needs root: `howdy list` answers "This command requires root
-# privileges" and exits before printing anything, and the models it would
-# read live in /etc/howdy/models, which is 750 root. And it reports by
-# exit status, not output - with no model it prints nothing at all and
-# exits 1 - so an unprivileged run counting printed rows found none
-# whether or not one existed, and the menu could never show an enrolled
-# model.
-#
-# -n: this only draws a menu, so it must not stop to ask for a password.
-# Without a cached credential it reports none, which is the answer the
-# unprivileged call always gave and no worse than the state it replaces.
+# The camera howdy uses, read from its config. howdy ships with
+# device_path = none, and every command that needs a camera fails with
+# "Camera is not configured" until one is chosen - so nothing in this
+# entry worked on a fresh install. Needs root: /etc/howdy is 750 root.
+face_camera() {
+  sudo -n awk -F= '
+    /^\[/ { video = ($0 ~ /^\[video\]/) }
+    video && $1 ~ /^[[:space:]]*device_path[[:space:]]*$/ {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit
+    }' /etc/howdy/config.ini 2>/dev/null
+}
+
+face_paused() {
+  sudo -n grep -qiE '^[[:space:]]*disabled[[:space:]]*=[[:space:]]*(true|1|yes|on)' \
+    /etc/howdy/config.ini 2>/dev/null
+}
+
+# Whether this user has a face model. Needs root (/etc/howdy/models is 750
+# root) and reports by exit status: with no model it prints nothing and
+# exits 1.
 face_has_model() {
   sudo -n howdy --plain -U "$ME" list >/dev/null 2>&1
 }
 
+# Stable names, not /dev/videoN: the numbers follow enumeration order and
+# can swap between boots, and howdy's own schema recommends by-id. Only
+# index0 - each camera's second node is metadata, not frames.
+face_pick_camera() {
+  local -a cams=()
+  local c
+  for c in /dev/v4l/by-id/*-video-index0; do
+    [[ -e $c ]] && cams+=("$c")
+  done
+  if ((${#cams[@]} == 0)); then
+    oops "No camera found under /dev/v4l/by-id."
+    pause
+    return 1
+  fi
+
+  # An IR camera first: a colour webcam matches a photograph of you as
+  # readily as you, and IR is the whole of howdy's defence against that.
+  local -a labels=() ir=() rest=()
+  for c in "${cams[@]}"; do
+    if [[ ${c,,} == *ir* ]]; then ir+=("$c"); else rest+=("$c"); fi
+  done
+  cams=("${ir[@]}" "${rest[@]}")
+  for c in "${cams[@]}"; do
+    local name=${c##*/usb-}
+    name=${name%-video-index0}
+    [[ ${c,,} == *ir* ]] && name="$name  (infrared)"
+    labels+=("$name")
+  done
+
+  if ((${#ir[@]} == 0)); then
+    warn "No infrared camera found. A colour webcam works, but a photo of"
+    warn "you is then as good as your face."
+    echo
+  fi
+
+  local choice i picked=""
+  choice=$(printf '%s\n' "${labels[@]}" | gum choose --header "Which camera?") || return 1
+  for i in "${!labels[@]}"; do
+    [[ ${labels[$i]} == "$choice" ]] && picked=${cams[$i]} && break
+  done
+  # nothing matched: write nothing, rather than whichever camera the loop
+  # happened to end on
+  [[ -n $picked ]] || return 1
+  # `howdy set` rather than `howdy config`: it edits the one key, checks
+  # the value against howdy's schema, and needs no editor
+  root_run howdy set device_path "$picked"
+}
+
+# Recognition, pass or fail, the way PAM will do it. `howdy test` is not
+# this: it opens a camera preview window and exits 0 whenever the camera
+# opened, whether or not the face matched. howdy-compare is what
+# pam_howdy runs, and says why it failed in its exit status.
+face_verify() {
+  say "Look at the camera."
+  echo
+  sudo "$FACE_COMPARE" "$ME"
+  local status=$?
+  echo
+  case $status in
+    0) say "✓ Recognised." ;;
+    10) oops "No face model for $ME. Add one first." ;;
+    11) oops "Not recognised before the timeout." ;;
+    13)
+      oops "The camera only saw darkness."
+      say "An infrared camera whose emitter is off looks exactly like this;"
+      say "many laptops leave it off until something turns it on."
+      say "linux-enable-ir-emitter (AUR) can switch it on."
+      ;;
+    14) oops "The configured camera could not be opened. Choose it again." ;;
+    *) oops "Recognition was aborted (howdy-compare exit $status)." ;;
+  esac
+  return "$status"
+}
+
+# Where the line goes: directly before the password, so after anything
+# placed ahead of it. chwd puts pam_fprintd first on machines with a
+# reader, and a face line above that would hold sudo in a face scan
+# before the finger is even asked for. Before the `include system-auth`
+# the password comes from, so a password typed during the scan is taken
+# up by pam_unix's try_first_pass rather than asked for twice.
+face_enable_pam() {
+  root_run sed -i -e "/pam_howdy.so/d" \
+    -e "0,/^auth[[:space:]]\+include[[:space:]]\+system-auth/s//$FACE_LINE\n&/" \
+    "$FACE_SUDO" || return 1
+  # a sudo stack without that include is not one this knows how to edit
+  face_enabled && return 0
+  oops "$FACE_SUDO has no 'auth include system-auth' line; nothing was changed."
+  return 1
+}
+
 face_entry() {
   local choice
+  # Status below needs root, and asking without a prompt would say "no"
+  # to everything whenever the sudo timestamp has expired. Asked once
+  # here, with the reason, instead of silently getting the menu wrong.
+  screen "Face unlock"
+  say "Reading howdy's settings needs root."
+  echo
+  sudo -v || return 0
+
   while true; do
     screen "Face unlock"
 
-    local models=0
+    local camera models=0 paused=0
+    camera=$(face_camera)
     face_has_model && models=1
+    face_paused && paused=1
+
+    if [[ -z $camera || $camera == none ]]; then
+      warn "! no camera chosen yet"
+    else
+      say "✓ camera: ${camera##*/}"
+    fi
     if ((models > 0)); then
       say "✓ a face model exists for $ME"
     else
       warn "! no face model yet"
     fi
-
-    if face_enabled; then
+    if face_enabled && ((paused)); then
+      warn "! sudo would accept a face, but face unlock is paused"
+    elif face_enabled; then
       say "✓ sudo accepts a face (password still works)"
     else
       say "  sudo is password only"
@@ -1704,38 +1824,64 @@ face_entry() {
     say "This does not affect the disk passphrase at boot."
     echo
 
-    local entries=()
-    ((models == 0)) && entries+=("Add a face model")
-    ((models > 0)) && entries+=("Test the camera" "Add another face model" "Remove every face model")
-    if ((models > 0)) && ! face_enabled; then
-      entries+=("Use it for sudo")
+    local has_camera=0
+    [[ -n $camera && $camera != none ]] && has_camera=1
+
+    local entries=("Choose the camera")
+    if ((has_camera)); then
+      if ((models == 0)); then
+        entries+=("Add a face model")
+      else
+        entries+=("Test recognition" "Add another face model" "Remove every face model")
+        face_enabled || entries+=("Use it for sudo")
+      fi
+      entries+=("Show the camera preview")
     fi
-    face_enabled && entries+=("Stop using it for sudo")
-    entries+=("Camera settings" "Back")
+    if face_enabled; then
+      if ((paused)); then entries+=("Resume face unlock"); else entries+=("Pause face unlock"); fi
+      entries+=("Stop using it for sudo")
+    fi
+    entries+=("Edit howdy's config file" "Back")
 
     choice=$(gum choose --header "Face unlock" "${entries[@]}") || return 0
     case $choice in
+      "Choose the camera")
+        screen "Face unlock"
+        face_pick_camera
+        pause
+        ;;
       "Add a face model" | "Add another face model")
         screen "Face unlock"
-        # The models are an ONNX download howdy does not ship; running add
-        # without them fails in a way that reads like a camera fault.
+        # The recognition models are an ONNX download howdy does not ship;
+        # without them add fails in a way that reads like a camera fault.
         say "Fetching the recognition models if they are missing…"
         root_run howdy download-models || { pause; continue; }
         echo
         say "Look at the camera."
         echo
-        root_run howdy -U "$ME" add
+        # On the terminal, not through root_run: add reports progress as it
+        # scans, and captured output would only show once it had finished.
+        sudo howdy -U "$ME" add
         pause
         ;;
-      "Test the camera")
+      "Test recognition")
         screen "Face unlock"
-        root_run howdy -U "$ME" test
+        face_verify
+        pause
+        ;;
+      "Show the camera preview")
+        screen "Face unlock"
+        # A window, not a check: shows what the camera sees and whether a
+        # face is found, which is what to look at when recognition fails.
+        say "A preview window opens. Close it to come back here."
+        echo
+        sudo howdy -U "$ME" test
         pause
         ;;
       "Remove every face model")
         gum confirm --affirmative "Remove" --negative "Cancel" \
           "Remove every face model for $ME?" || continue
-        root_run howdy -U "$ME" clear
+        root_run howdy -y -U "$ME" clear
         # PAM asking for a face that no longer exists is a delay before
         # every password and nothing else.
         face_enabled && root_run sed -i "/pam_howdy.so/d" "$FACE_SUDO"
@@ -1743,33 +1889,35 @@ face_entry() {
         ;;
       "Use it for sudo")
         screen "Face unlock"
-        # Refused until a test has passed. Enabling against a camera that
-        # has never recognised anyone - a dark IR emitter is the usual
-        # reason - adds a wait before every password and nothing more.
-        say "Testing recognition first. Look at the camera."
-        echo
-        if ! root_run howdy -U "$ME" test; then
+        # Refused until recognition has actually succeeded. Enabling
+        # against a camera that has never recognised anyone adds a wait
+        # before every password and nothing more.
+        if ! face_verify; then
           echo
-          oops "Recognition did not succeed, so this stays off."
-          say "A dark infrared emitter is the usual cause: many laptops"
-          say "leave it off until something turns it on."
+          oops "So this stays off."
           pause
           continue
         fi
         echo
         gum confirm --affirmative "Enable for sudo" --negative "Cancel" \
           "A photo of you may unlock sudo. Enable it anyway?" || continue
-
-        # Same placement and idempotence as the fingerprint entry: PAM
-        # takes the first sufficient match, so this goes before the line
-        # that asks for a password, and any existing line is removed first
-        # so enabling twice cannot stack two.
-        root_run sed -i -e "/pam_howdy.so/d" \
-          -e "0,/^auth/s//$FACE_LINE\nauth/" "$FACE_SUDO" || continue
+        face_enable_pam || { pause; continue; }
+        # a pause left over from before would make this look broken
+        root_run howdy disable false
         echo
         say "Enabled. Check it now, while this menu is still open:"
         say "  open another terminal and run: sudo -k true"
         say "A password must still work there. If it does not, choose Stop."
+        pause
+        ;;
+      "Pause face unlock")
+        # howdy's own switch: models and the PAM line stay, so resuming
+        # needs no re-enrolment and no second test
+        root_run howdy disable true && say "Paused. sudo asks for a password only."
+        pause
+        ;;
+      "Resume face unlock")
+        root_run howdy disable false && say "Resumed."
         pause
         ;;
       "Stop using it for sudo")
@@ -1777,11 +1925,10 @@ face_entry() {
         say "Disabled. sudo is back to password only."
         pause
         ;;
-      "Camera settings")
-        screen "Face unlock"
-        say "howdy config opens its own configuration file."
-        pause
-        root_run howdy config
+      "Edit howdy's config file")
+        # On the terminal: howdy config opens an editor. Through root_run
+        # its screen was captured and the editor could not be used.
+        sudo howdy config
         ;;
       "Back") return 0 ;;
     esac

@@ -124,17 +124,22 @@ actually boot, and says plainly if something is missing.
 ## Face unlock
 
 Not installed, and off even when it is. Install `howdy-next` and, on a
-machine with a camera, Settings → **Face unlock** enrols a face, tests it,
-and can turn it on for `sudo`.
+machine with a camera, Settings → **Face unlock** chooses the camera
+(an infrared one first, if there is one), enrols a face, tests
+recognition, and can turn it on for `sudo`. It can also be paused
+without losing the enrolled face.
 
 **It is weaker than a password**, and upstream says so first: a similar
 face or a photo may work. This is 2D infrared matching, not Windows Hello.
 
 It is used for `sudo` only, never the lock screen and never the greeter,
-and it is never enabled until a recognition test has passed. A face that
-fails, in a dark room or at an odd angle, falls through to the password
-that always worked. Turning it off restores the original configuration
-exactly. The disk passphrase is untouched either way.
+and it is never enabled until a recognition test has passed. The face is
+checked while the password prompt is already showing, so typing the
+password never waits for it, and a face that fails, in a dark room or at
+an odd angle, leaves the password that always worked. With a fingerprint
+reader set up, the finger is asked for first. Turning it off restores
+the original configuration exactly. The disk passphrase is untouched
+either way.
 
 It costs 182 packages to install, which is why nobody who does not want it
 pays for it.
