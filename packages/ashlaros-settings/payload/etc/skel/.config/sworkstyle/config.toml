@@ -20,8 +20,9 @@
 # and it already covers firefox, foot, the terminals and the usual GUI
 # applications - so this file is for what it does not know rather than a
 # second copy of what it does. The entries below are the applications
-# AshlarOS ships that upstream has no icon for; without them the daemon
-# logs "No match" and the workspace shows the generic fallback.
+# AshlarOS ships that upstream has no icon for, and common ones it misses;
+# without them the daemon logs "No match" and the workspace shows the
+# generic fallback.
 
 [matching]
 # The file manager the installer puts on every desktop.
@@ -35,3 +36,7 @@
 # a terminal.
 '/(?i)ashlaros.settings/' = ''
 'floating_shell' = ''
+# Telegram Desktop (extra/telegram-desktop) is not shipped, but upstream's
+# table has no entry for it under any name. Wayland app_id, not the old
+# X11 class TelegramDesktop.
+'org.telegram.desktop' = ''
