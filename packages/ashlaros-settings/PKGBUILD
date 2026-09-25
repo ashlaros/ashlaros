@@ -72,6 +72,15 @@ depends=(
     'jq'                      # json parsing, used across the scripts
     'bc'                      # arithmetic for the bar scripts
     'inotify-tools'           # file watchers
+    # once.sh, behind the volume icon, bluetuith, btop, khal and zk: it
+    # asks lsof who holds its lock to close the window already open.
+    # Measured against the installed closure, nothing pulled it in, so a
+    # second click failed with "flock: failed to get lock" instead of
+    # closing the first.
+    'lsof'
+    # $pulseaudio in definitions, which the bar's volume icon runs.
+    # Measured the same way: absent, so clicking the icon did nothing.
+    'pulsemixer'
     'lm_sensors'              # sensor readings for the bar
     # Calendar: khal views a vdir, vdirsyncer fills it. calcurse was here
     # and could not reach Google - its OAuth path is built on
