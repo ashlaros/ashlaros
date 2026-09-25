@@ -121,8 +121,8 @@ know. The menu groups them by what you are looking for:
 - **Software:** kernel variants, hardware profiles, packages, packages
   nothing needs any more, snapshots
 - **Security:** how the disk unlocks, fingerprint enrolment, face unlock
-- **Accounts** and **Apps:** mail, a calendar and Tailscale; notes, web
-  apps and a model, the things that do nothing until configured
+- **Accounts** and **Apps:** mail, a calendar, Tailscale and config sync;
+  notes, web apps and a model, the things that do nothing until configured
 
 An entry only appears where it can work, so a machine without a
 fingerprint reader has no Fingerprint entry, and a group left empty is not
@@ -196,6 +196,69 @@ change reaches the shell you are already sitting in.
 
 If you edit the config by hand, **starship needs six-digit hex**. Given
 `#eee` it accepts the file and silently renders that style unstyled.
+
+## Config sync
+
+Your sway tweaks, waybar layout and shell can follow you to the next
+machine from a private git repository, through
+[`chezmoi`](https://www.chezmoi.io) (`pacman -S chezmoi`). Settings →
+**Config sync** clones the repository and shows what applying it would
+add, update or replace before it changes anything. On a machine that is
+already set up, it pulls and shows the same preview again.
+
+The repository is yours and so are its commits. **Nothing is pushed for
+you:** send a change with `chezmoi re-add`, then
+`chezmoi git -- commit -am '...'` and `chezmoi git push`. Start a repository
+with `chezmoi add ~/.config/sway/config.d` and whatever else you want to
+keep, and read chezmoi's own guide for templates that let a laptop and a
+desktop differ.
+
+**Wi-Fi is not synced.** Networks live in
+`/etc/NetworkManager/system-connections`, outside your home directory and
+with their passwords in plain text, so join them again on each machine.
+
+### Secrets: one key, one passphrase
+
+Anything secret goes into the repository encrypted with
+[age](https://age-encryption.org), which chezmoi has built in. A new
+machine needs the key before it can decrypt anything, so the key goes in
+the repository too, encrypted with a passphrase you remember. This is
+chezmoi's own documented pattern. Once, on the machine that has the
+repository:
+
+```sh
+cd "$(chezmoi source-path)"
+chezmoi age-keygen --output key.txt          # prints the public key, age1...
+chezmoi age encrypt --passphrase --output key.txt.age key.txt
+mkdir -p ~/.config/chezmoi && mv key.txt ~/.config/chezmoi/key.txt
+echo key.txt.age > .chezmoiignore
+```
+
+Then two files in the repository. `.chezmoi.toml.tmpl`, with your public
+key:
+
+```toml
+encryption = "age"
+[age]
+    identity = "~/.config/chezmoi/key.txt"
+    recipient = "age1..."
+```
+
+And `run_onchange_before_decrypt-private-key.sh.tmpl`:
+
+```sh
+#!/bin/sh
+if [ ! -f "${HOME}/.config/chezmoi/key.txt" ]; then
+    mkdir -p "${HOME}/.config/chezmoi"
+    chezmoi age decrypt --output "${HOME}/.config/chezmoi/key.txt" --passphrase "{{ .chezmoi.sourceDir }}/key.txt.age"
+    chmod 600 "${HOME}/.config/chezmoi/key.txt"
+fi
+```
+
+Run `chezmoi init`, add secrets with `chezmoi add --encrypt`, and commit.
+On every later machine, Config sync lists the encrypted files and asks
+for that passphrase once, the first time it applies. A wrong passphrase
+stops the apply before anything is written; try again from the same entry.
 
 ## Mail and calendar
 

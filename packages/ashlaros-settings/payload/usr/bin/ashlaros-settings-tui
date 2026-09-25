@@ -3636,6 +3636,154 @@ windows_entry() {
   done
 }
 
+# 27. CONFIG SYNC
+#
+# chezmoi, not a sync tool of ours (#103): it owns the repository, the
+# templating that lets a laptop and a desktop differ, and age encryption
+# for anything secret. This clones, shows what applying would change, and
+# applies once that has been confirmed. Nothing is committed or pushed for
+# you, for the same reason notes are not: a tool that pushes by itself can
+# publish something you did not choose to publish.
+#
+# Wi-Fi is deliberately out. The installer writes networks to
+# /etc/NetworkManager/system-connections as root with the PSK in plain
+# text, so syncing them means applying as root and trusting a dotfiles
+# repository with passwords - a different trust model from $HOME. Half-
+# syncing them is worse than saying so, and the screen says so.
+#
+# Without the age key, `chezmoi status` fails on the first encrypted file
+# and shows nothing at all (measured with 2.72.2) - which is exactly the
+# state of a new machine. So the preview falls back to leaving them out
+# and naming them with `chezmoi managed`, which needs no key; the README's
+# key handoff makes that first apply ask for the key's passphrase once.
+# $1 is extra arguments for status.
+config_sync_plan() {
+  local out
+  # shellcheck disable=SC2086 # $1 is a flag list or nothing
+  out=$(chezmoi status --include=files,symlinks,remove,scripts ${1-} 2>&1) ||
+    { printf '%s\n' "$out"; return 1; }
+  [[ -n $out ]] || return 0
+  # first column: edited here since chezmoi last wrote it; second: what
+  # apply does
+  awk '{
+    a = substr($0, 2, 1); p = substr($0, 4)
+    w = a == "A" ? "add" : a == "M" ? "update" : a == "D" ? "remove" : a == "R" ? "run" : a
+    printf "  %-7s %s%s\n", w, p, substr($0, 1, 1) != " " ? "  (edited here - replaced)" : ""
+  }' <<<"$out"
+}
+
+# Shows the plan and applies it once confirmed. --force only after that
+# confirm: chezmoi's own prompt asks per file and names the file, not what
+# replacing it means, which is the question the plan already answered.
+config_sync_apply() {
+  local plan secret=""
+  if ! plan=$(config_sync_plan); then
+    if ! plan=$(config_sync_plan --exclude=encrypted); then
+      oops "chezmoi could not read the repository:"
+      say "$plan"
+      return 1
+    fi
+    secret=$(chezmoi managed --include=encrypted 2>/dev/null)
+  fi
+
+  if [[ -z $plan && -z $secret ]]; then
+    say "✓ Nothing to change: this machine already matches the repository."
+    return 0
+  fi
+  [[ -n $plan ]] && say "Applying would:" && echo "$plan"
+  if [[ -n $secret ]]; then
+    echo
+    say "$(grep -c . <<<"$secret") encrypted file(s), which need the repository's key:"
+    sed 's/^/  decrypt /' <<<"$secret"
+    hint "This machine does not have the key yet; applying asks for its"
+    hint "passphrase."
+  fi
+  echo
+  gum confirm --affirmative "Apply" --negative "Back" "Apply it?" || return 0
+
+  # not captured: the passphrase and any git credential prompt need the
+  # terminal
+  if ! chezmoi apply --force; then
+    echo
+    oops "Applying stopped partway. What chezmoi printed above says where."
+    return 1
+  fi
+  echo
+  say "✓ Applied."
+  hint "Sway picks up its part on reload (Super+Shift+c); open programs"
+  hint "read theirs when they next start."
+}
+
+config_sync_entry() {
+  local source choice
+  source=$(chezmoi source-path 2>/dev/null)
+  while true; do
+    screen "Config sync"
+
+    local synced=0
+    [[ -d $source/.git ]] && synced=1
+    if ((synced)); then
+      say "Repository: $(chezmoi git -- remote get-url origin 2>/dev/null || echo "none, local only")"
+    else
+      say "Not set up. Point this at a private git repository of your"
+      say "configuration - sway, waybar, the shell - and this machine takes it."
+    fi
+    echo
+    hint "Wi-Fi networks are not synced: they live outside your home"
+    hint "directory, with their passwords in plain text. Join them again on"
+    hint "each machine."
+    if ((synced)); then
+      hint "Sending a change from here is yours to do: chezmoi re-add, then"
+      hint "chezmoi git -- commit -am '...' and chezmoi git push."
+    fi
+    echo
+
+    local -a entries=()
+    if ((synced)); then
+      entries+=("Pull and apply")
+    else
+      entries+=("Use a repository")
+    fi
+    entries+=("Back")
+
+    choice=$(gum choose --header "Config sync" "${entries[@]}") || return 0
+    case $choice in
+      "Use a repository")
+        local url
+        url=$(gum input --prompt "Repository: " \
+          --placeholder "git@github.com:you/dotfiles.git") || continue
+        [[ -n $url ]] || continue
+        echo
+        # -- so a URL can never be read as a flag
+        if ! chezmoi init -- "$url"; then
+          echo
+          oops "Could not clone $url."
+          hint "A private repository needs an SSH key the host knows, or an"
+          hint "HTTPS token when git asks for a password."
+          pause
+          continue
+        fi
+        echo
+        config_sync_apply
+        pause
+        ;;
+      "Pull and apply")
+        echo
+        if ! chezmoi update --apply=false; then
+          echo
+          oops "Could not pull. What git printed above says why."
+          pause
+          continue
+        fi
+        echo
+        config_sync_apply
+        pause
+        ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
 # The main menu's rows. Each is "key|icon|label|what it is": the key is
 # what main dispatches on, so the label can say anything without
 # breaking the case below. Icons are Nerd Font codepoints, nf-dev first
@@ -3761,6 +3909,8 @@ main() {
     command -v vdirsyncer >/dev/null && accounts+=("$(menu_row calendar $'\U000f00ed' "Calendar" "sync and subscriptions")")
     command -v tailscale >/dev/null &&
       accounts+=("$(menu_row tailscale $'\U000f0582' "Tailscale" "your private network")")
+    command -v chezmoi >/dev/null &&
+      accounts+=("$(menu_row sync $'\U000f04e6' "Config sync" "your config from a git repo")")
     command -v zk >/dev/null && apps+=("$(menu_row notes $'\U000f082e' "Notes" "your zk notebook")")
     command -v firefoxpwa >/dev/null && apps+=("$(menu_row webapps $'\U000f059f' "Web apps" "sites as windows")")
     command -v aichat >/dev/null && apps+=("$(menu_row model $'\U000f06a9' "Model" "aichat's model")")
@@ -3825,6 +3975,7 @@ main() {
       webapps) webapps_entry ;;
       model) model_entry ;;
       tailscale) tailscale_entry ;;
+      sync) config_sync_entry ;;
       quit) exit 0 ;;
     esac
   done

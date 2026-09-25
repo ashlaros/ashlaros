@@ -218,6 +218,9 @@ optdepends=(
     # mounts Drive and OneDrive as a directory, which is the version of
     # "open it from the cloud" that does not publish the document first
     'rclone: mount Drive and OneDrive as local directories'
+    # an optdepend like aerc: it does nothing until pointed at a repository
+    # of yours, and the settings entry hides itself without it (#103)
+    'chezmoi: sync your config from a private git repo, from the settings TUI'
 )
 # generated_background.svg is rewritten on every theme apply, and the
 # per-user theme.conf is the file the theme switcher edits
