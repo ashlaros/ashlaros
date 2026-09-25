@@ -2838,7 +2838,10 @@ flashing_entry() {
     # `systemctl --user enable --now flashfocus` on every login, so a
     # disable is undone by the next one. A mask makes that enable fail
     # loudly instead. Do not "simplify" this back to disable.
-    if systemctl --user is-enabled "$unit" 2>/dev/null | grep -q masked; then
+    # a comparison, not `| grep -q`: grep quits at the match, systemctl
+    # dies of SIGPIPE, and under pipefail that read as "not masked"
+    # exactly when it was
+    if [[ $(systemctl --user is-enabled "$unit" 2>/dev/null) == masked ]]; then
       warn "! off - and it stays off across logins"
     elif systemctl --user is-active "$unit" >/dev/null 2>&1; then
       say "✓ on"

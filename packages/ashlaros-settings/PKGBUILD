@@ -92,6 +92,16 @@ depends=(
     'zk'                      # plain-text notes with an index and an LSP
     'btop'                    # system monitor
     'bluetuith'               # bluetooth management tool
+    # Archives. pcmanfm-qt's Extract Here and Compress run the archiver
+    # its settings name, and they named file-roller - pcmanfm-qt's own
+    # default, and skel's libfm.conf - which nothing installs, so a .zip
+    # opened nowhere. lxqt-archiver is LXQt's, like the file manager; it
+    # does .zip through zip/unzip and .7z and .rar through 7z, so those
+    # are what make it open more than tarballs.
+    'lxqt-archiver'
+    'unzip'
+    'zip'
+    '7zip'                    # .7z, and .rar (UnRAR-licensed code in 7z)
     'noto-fonts-emoji'        # emoji font, e.g. weather icons
     'pacman-contrib'          # checkupdates, for the updates module
     'topgrade'                # the update path the bar clicks through to;

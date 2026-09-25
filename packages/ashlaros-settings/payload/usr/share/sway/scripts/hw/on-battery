@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# Running on battery right now?
+#
+# Yes when no Mains supply reports online=1 and there is a battery to run
+# on. A desktop or a VM has no battery, so it is never "on battery" - which
+# is the answer the idle suspend wants: those machines get the mains
+# timeout, not the short one.
+#
+# Read from sysfs, not `acpi --ac-adapter`: acpi is not installed, and
+# swayidle's suspend lines that called it never fired.
+set -u
+
+for supply in /sys/class/power_supply/*; do
+    [ "$(cat "$supply/type" 2>/dev/null)" = "Mains" ] || continue
+    [ "$(cat "$supply/online" 2>/dev/null)" = 1 ] && exit 1
+done
+
+exec "$(dirname "$0")/battery-present"
