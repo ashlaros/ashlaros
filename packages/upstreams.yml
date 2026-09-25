@@ -154,6 +154,12 @@ packages:
   poweralertd:
     upstream: https://aur.archlinux.org/poweralertd.git
     arch: both
+  # In cachyos for x86_64, but ALARM has no build and ashlaros-settings
+  # depends on it, so the aarch64 image could not install the desktop
+  # without this copy. Rust with no arch-specific code.
+  wayland-pipewire-idle-inhibit:
+    upstream: https://aur.archlinux.org/wayland-pipewire-idle-inhibit.git
+    arch: both
   swaycwd:
     # no upstream repository: the AUR url is a dead google cache link, so
     # the script itself is vendored beside the PKGBUILD

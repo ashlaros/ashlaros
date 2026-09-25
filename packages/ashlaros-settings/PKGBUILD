@@ -50,6 +50,8 @@ depends=(
     'wl-clip-persist'         # persists clipboard content between clients
     'xdg-terminal-exec'       # execute-in-terminal xdg standard
     'idlehack'                # inhibit swayidle on screensaver-inhibit dbus calls
+    'wayland-pipewire-idle-inhibit' # screen stays on while sound plays,
+                              # which idlehack never sees; vendored for aarch64
     'swayr'                   # lru window switcher for sway
     # the -ashlaros build, not extra's: [ashlaros] sits after [extra]
     # in the repository stack, so a package under upstream's own name

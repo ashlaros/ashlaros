@@ -19,6 +19,7 @@ set $initialize_workspace_icons '[ -x "$(command -v sworkstyle)" ] && systemctl 
 set $initialize_poweralert_daemon '[ -x "$(command -v poweralertd)" ] && systemctl --user enable --now --no-reload poweralertd'
 set $initialize_idlehack_daemon '[ -x "$(command -v idlehack)" ] && systemctl --user enable --now --no-reload idlehack'
 set $initialize_idle_daemon '[ -x "$(command -v swayidle)" ] && systemctl --user enable --now --no-reload swayidle'
+set $initialize_media_idle_inhibit '[ -x "$(command -v wayland-pipewire-idle-inhibit)" ] && systemctl --user enable --now --no-reload wayland-pipewire-idle-inhibit'
 # pcmanfm.service is shipped by us, below: no package in any repository
 # provides one, so this line used to enable a unit that does not exist and
 # automount has never worked. The daemon is what watches udisks and mounts

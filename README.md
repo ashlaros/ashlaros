@@ -111,9 +111,13 @@ know. The menu groups them by what you are looking for:
 - **Language and time:** keyboard layouts and the key that switches
   between them (Caps Lock by default), locale, time and timezone, and the
   location the weather, the night light and the automatic day/night theme
-  follow (guessed from the network unless you pick a place)
-- **Screen and power:** displays, adaptive brightness, power profiles
-- **Appearance:** the day and night theme, the wallpaper, focus flashing
+  follow (guessed from the network unless you pick a place), the weather's
+  units, and the touchpad, mouse speed and key repeat
+- **Screen and power:** displays, adaptive brightness, when the screen
+  dims, locks and sleeps, whether it stays on while media plays, the night
+  light's warmth and hours, power profiles
+- **Appearance:** the day and night theme, the wallpaper, focus flashing,
+  automatic tiling, gaps and borders
 - **Software:** kernel variants, hardware profiles, packages, packages
   nothing needs any more, snapshots
 - **Security:** how the disk unlocks, fingerprint enrolment, face unlock

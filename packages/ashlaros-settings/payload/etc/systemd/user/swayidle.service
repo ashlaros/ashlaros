@@ -13,6 +13,12 @@ Type=simple
 #
 # No -w: idle.yaml had `wait: false`, and swayidle-conf only passed the
 # flag when the key was true.
+#
+# The timeouts in the config are ${IDLE_*} variables with the shipped
+# values as defaults; this file is where Settings -> Screen timeouts puts
+# the user's own. Optional (-), so a machine nobody has configured runs on
+# the defaults. %E is $XDG_CONFIG_HOME for a user unit.
+EnvironmentFile=-%E/ashlaros/idle
 ExecStart=/usr/bin/swayidle
 Restart=always
 

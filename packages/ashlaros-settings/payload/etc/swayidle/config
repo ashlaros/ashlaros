@@ -9,29 +9,41 @@
 # The lock command is `swaymsg exec \$locking`, where the backslash keeps
 # `$locking` as a literal for sway to expand from its own config rather
 # than something the shell expands to nothing here.
+#
+# The timeouts are ${VARIABLES} that wordexp expands from swayidle's own
+# environment, which swayidle.service reads from ~/.config/ashlaros/idle -
+# what Settings -> Screen timeouts writes. The defaults after :- are the
+# shipped ones. 0 is swayidle's "never": it registers no timeout.
+#
+# Keep idlehint, before-sleep or after-resume. swayidle 1.9 only connects
+# to logind when one of them is present, and without that connection it
+# ignores logind idle locks - which is how idlehack and inhibit-idle hold
+# the screen on. Measured: with none of them it logs "Failed to parse get
+# BlockInhibited property" and dims under a held lock (swayidle#198).
 
 # dim the screen, and put the brightness back on any activity
-timeout 240 'brightnessctl -s && brightnessctl set 10' resume 'brightnessctl -r'
+timeout ${IDLE_DIM:-240} 'brightnessctl -s && brightnessctl set 10' resume 'brightnessctl -r'
 
 # lock
-timeout 300 'swaymsg exec \$locking'
+timeout ${IDLE_LOCK:-300} 'swaymsg exec \$locking'
 
 # keyboard backlight off, and back on with the screen
-timeout 600 '/usr/share/sway/scripts/keyboard-backlight-switch.sh off' resume '/usr/share/sway/scripts/keyboard-backlight-switch.sh on'
+timeout ${IDLE_SCREEN_OFF:-600} '/usr/share/sway/scripts/keyboard-backlight-switch.sh off' resume '/usr/share/sway/scripts/keyboard-backlight-switch.sh on'
 
 # outputs off
-timeout 600 'swaymsg "output * power off"' resume 'swaymsg "output * power on"'
+timeout ${IDLE_SCREEN_OFF:-600} 'swaymsg "output * power off"' resume 'swaymsg "output * power on"'
 
 # Suspend sooner on battery than on mains. Read from sysfs: these called
 # `acpi --ac-adapter`, and acpi is not installed, so the test failed and
 # neither ever suspended. A machine with no Mains supply (a desktop, a
 # VM) has no battery, so it gets the mains timeout.
-timeout 900 '/usr/share/sway/scripts/hw/on-battery && systemctl sleep'
-timeout 3600 '! /usr/share/sway/scripts/hw/on-battery && systemctl sleep'
+timeout ${IDLE_SUSPEND_BATTERY:-900} '/usr/share/sway/scripts/hw/on-battery && systemctl sleep'
+timeout ${IDLE_SUSPEND_AC:-3600} '! /usr/share/sway/scripts/hw/on-battery && systemctl sleep'
 
 before-sleep 'swaymsg exec \$locking'
 after-resume 'swaymsg "output * power on" && brightnessctl -r'
 lock 'swaymsg exec \$locking'
 
-# tell logind the session is idle at the same point the screen dims
-idlehint 240
+# tell logind the session is idle at the same point the screen dims; 0
+# sets no hint but keeps the logind connection the locks need
+idlehint ${IDLE_DIM:-240}

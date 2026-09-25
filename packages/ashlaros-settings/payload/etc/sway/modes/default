@@ -194,7 +194,7 @@ $bindsym $mod+Shift+s exec xdg-open https://github.com/ashlaros/ashlaros/blob/ma
 ## Launch // Inhibit Idle ##
 $bindsym $mod+Shift+i exec inhibit-idle interactive
 
-default_border pixel 1
+default_border pixel $border
 hide_edge_borders smart
 
 # allow to kill focused floating shell windows using Esc

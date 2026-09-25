@@ -1,0 +1,28 @@
+# Keeps the screen on while sound plays, which idlehack cannot: it only
+# sees a browser asking over D-Bus, and a browser asks for video, not for
+# music. This watches PipeWire's playing streams instead, and holds a
+# Wayland idle inhibitor while one is running.
+#
+# Ours rather than the package's, which is WantedBy=graphical-session.target
+# and PartOf nothing: it would outlive the sway that its inhibitor belongs
+# to, as every session unit did before 519bde6. Started from
+# etc/sway/autostart like the rest, and switched off from Settings ->
+# Screen timeouts by masking, as flashfocus is: autostart enables it again
+# at every login, and a mask is the only off that survives that.
+[Unit]
+Description=Keep the screen on while media plays
+Documentation=https://github.com/rafaelrc7/wayland-pipewire-idle-inhibit
+PartOf=sway-session.target
+After=sway-session.target pipewire.service
+Wants=pipewire.service
+
+[Service]
+Type=simple
+# -d 5: a notification ping or a keypress sound is under five seconds and
+# must not hold the screen on; a song is not
+ExecStart=/usr/bin/wayland-pipewire-idle-inhibit --media-minimum-duration 5 --quiet
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=sway-session.target

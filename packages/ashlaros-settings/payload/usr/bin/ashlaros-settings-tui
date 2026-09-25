@@ -178,6 +178,63 @@ root_run() {
   return 0
 }
 
+# One setting from a file of `key = value`, `key=value` or `key value`
+# lines - weather.cfg, wlsunset's config, the location file, a systemd
+# EnvironmentFile and a sway `set $name value` alike. The key is text, as
+# in conf_line. Empty when the file or the key is absent.
+conf_get() {
+  K=$2 awk '
+    { s = $0; sub(/^[ \t]+/, "", s) }
+    substr(s, 1, length(ENVIRON["K"])) == ENVIRON["K"] {
+      rest = substr(s, length(ENVIRON["K"]) + 1)
+      if (rest !~ /^[ \t]*=/ && rest !~ /^[ \t]/) next
+      sub(/^[ \t]*=?[ \t]*/, "", rest); sub(/[ \t]+$/, "", rest)
+      print rest; exit
+    }' "$1" 2>/dev/null
+}
+
+# Sets one line of such a file and keeps every other: the first line that
+# starts with the key $2 - after leading blanks, and followed by a blank or
+# "=" - becomes $3, later ones go, and $3 is appended when none did. So a
+# file someone edited by hand keeps their lines, and one this wrote keeps
+# the others it wrote. The key is compared as text, not as a pattern:
+# `set $gaps` and `input type:touchpad tap` are keys too.
+conf_line() {
+  local file=$1 key=$2 line=$3 tmp
+  mkdir -p "$(dirname "$file")"
+  [[ -e $file ]] || echo "# written by ashlaros-settings-tui" > "$file"
+  tmp=$(mktemp "$file.XXXXXX") || return 1
+  # ENVIRON rather than -v: awk -v processes escapes, and would read
+  # `set \$gaps` back as something else
+  K=$key L=$line awk '
+    function is_key(s,  rest) {
+      sub(/^[ \t]+/, "", s)
+      if (substr(s, 1, length(ENVIRON["K"])) != ENVIRON["K"]) return 0
+      rest = substr(s, length(ENVIRON["K"]) + 1)
+      return rest ~ /^[ \t]*=/ || rest ~ /^[ \t]/
+    }
+    is_key($0) { if (!done) print ENVIRON["L"]; done = 1; next }
+    { print }
+    END { if (!done) print ENVIRON["L"] }' "$file" > "$tmp" || { rm -f "$tmp"; return 1; }
+  chmod --reference="$file" "$tmp" 2>/dev/null
+  mv -- "$tmp" "$file"
+}
+
+# On and off for a user unit that etc/sway/autostart enables at every
+# login. Off is a mask, not a disable: the next login's `enable --now`
+# undoes a disable, while it fails against a mask - loudly, and harmlessly.
+# A comparison, not `| grep -q`: grep quits at the match, systemctl dies of
+# SIGPIPE, and under pipefail that reads as "not masked" exactly when it is.
+unit_masked() { [[ $(systemctl --user is-enabled "$1" 2>/dev/null) == masked ]]; }
+unit_switch() {
+  if [[ $2 == on ]]; then
+    systemctl --user unmask "$1" >/dev/null 2>&1
+    systemctl --user enable --now "$1" >/dev/null 2>&1
+  else
+    systemctl --user mask --now "$1" >/dev/null 2>&1
+  fi
+}
+
 # 1. LOCALE AND KEYBOARD
 #
 # localectl is the mechanism #14 settled on: it writes
@@ -2838,10 +2895,7 @@ flashing_entry() {
     # `systemctl --user enable --now flashfocus` on every login, so a
     # disable is undone by the next one. A mask makes that enable fail
     # loudly instead. Do not "simplify" this back to disable.
-    # a comparison, not `| grep -q`: grep quits at the match, systemctl
-    # dies of SIGPIPE, and under pipefail that read as "not masked"
-    # exactly when it was
-    if [[ $(systemctl --user is-enabled "$unit" 2>/dev/null) == masked ]]; then
+    if unit_masked "$unit"; then
       warn "! off - and it stays off across logins"
     elif systemctl --user is-active "$unit" >/dev/null 2>&1; then
       say "✓ on"
@@ -2864,14 +2918,15 @@ flashing_entry() {
 
     case $choice in
       "Turn on")
-        systemctl --user unmask "$unit" >/dev/null 2>&1
-        if systemctl --user enable --now "$unit" 2>&1 | sed "s/^/  /"; then
+        if unit_switch "$unit" on; then
           say "On."
+        else
+          oops "It did not start: systemctl --user status $unit"
         fi
         pause
         ;;
       "Turn off")
-        systemctl --user mask --now "$unit" 2>&1 | sed "s/^/  /"
+        unit_switch "$unit" off
         say "Off, and it will stay off after a login."
         pause
         ;;
@@ -3102,11 +3157,6 @@ theme_entry() {
 LOCATION_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/ashlaros/location"
 readonly GEOCODE_URL="https://geocoding-api.open-meteo.com/v1/search"
 
-location_get() {
-  sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*$/\1/p" \
-    "$LOCATION_FILE" 2>/dev/null | head -1
-}
-
 # A place as "latitude<TAB>longitude<TAB>name", the name last because typed
 # coordinates have none and read would collapse a leading empty field.
 # Typed coordinates are taken as they are and go nowhere; a name is looked
@@ -3171,8 +3221,8 @@ location_entry() {
     # what the three consumers will actually get, asked the way they ask
     geo=$(sh /usr/share/sway/scripts/geoip.sh 2>/dev/null)
     if [[ -r $LOCATION_FILE ]]; then
-      name=$(location_get name)
-      say "Set to ${name:+$name, }$(location_get latitude), $(location_get longitude)"
+      name=$(conf_get "$LOCATION_FILE" name)
+      say "Set to ${name:+$name, }$(conf_get "$LOCATION_FILE" latitude), $(conf_get "$LOCATION_FILE" longitude)"
     elif [[ -n $geo ]]; then
       say "Automatic: $(jq -r '.city // "somewhere unnamed"' <<<"$geo")"
       hint "Guessed from this machine's network address by ashlaros.download,"
@@ -3188,8 +3238,7 @@ location_entry() {
     # silently ignored: a place here that the weather does not follow
     # looks like a bug.
     local city
-    city=$(sed -n 's/^[[:space:]]*city[[:space:]]*=[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*$/\1/p' \
-      "${XDG_CONFIG_HOME:-$HOME/.config}/weather.cfg" 2>/dev/null | head -1)
+    city=$(conf_get "${XDG_CONFIG_HOME:-$HOME/.config}/weather.cfg" city)
     if [[ -n $city && $city != auto ]]; then
       echo
       warn "! The weather follows city = $city in ~/.config/weather.cfg instead."
@@ -3200,9 +3249,15 @@ location_entry() {
     fi
     echo
 
+    local weather_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/weather.cfg" temperature distance
+    temperature=$(conf_get "$weather_cfg" temperature)
+    distance=$(conf_get "$weather_cfg" distance)
+    [[ ${temperature:-C} == F ]] && temperature="°F" || temperature="°C"
+    [[ ${distance:-km} == miles ]] && distance="mph" || distance="km/h"
+
     local -a entries=("Choose a place")
     [[ -r $LOCATION_FILE ]] && entries+=("Automatic")
-    entries+=("Back")
+    entries+=("Weather in $temperature and $distance" "Back")
     choice=$(gum choose --header "Location" "${entries[@]}") || return 0
 
     case $choice in
@@ -3226,7 +3281,357 @@ location_entry() {
         say "✓ Guessing from the network again."
         pause
         ;;
+      "Weather in "*)
+        # weather.sh reads both from weather.cfg; the rest of that file,
+        # city included, is left as it is
+        local units
+        units=$(printf '%s\n' "°C and km/h|C km" "°F and mph|F miles" "°C and mph|C miles" |
+          gum choose --label-delimiter="|" --header "Weather units") || continue
+        conf_line "$weather_cfg" temperature "temperature = ${units% *}"
+        conf_line "$weather_cfg" distance "distance = ${units#* }"
+        waybar-signal weather >/dev/null 2>&1
+        ;;
       *) return 0 ;;
+    esac
+  done
+}
+
+# 23. SCREEN TIMEOUTS
+#
+# /etc/swayidle/config reads its timeouts as ${IDLE_*} with the shipped
+# values as defaults, and swayidle.service loads this file as its
+# environment - so a user sets numbers and never takes a copy of the
+# config, which would stop every later fix to it reaching them. 0 is "never".
+IDLE_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/ashlaros/idle"
+# "variable|label|default seconds"
+IDLE_STEPS=(
+  "IDLE_DIM|Dim the screen|240"
+  "IDLE_LOCK|Lock|300"
+  "IDLE_SCREEN_OFF|Turn the screen off|600"
+  "IDLE_SUSPEND_BATTERY|Suspend on battery|900"
+  "IDLE_SUSPEND_AC|Suspend when plugged in|3600"
+)
+readonly MEDIA_UNIT=wayland-pipewire-idle-inhibit
+
+idle_seconds() {
+  local value
+  value=$(conf_get "$IDLE_FILE" "$1")
+  printf '%s' "${value:-$2}"
+}
+
+idle_words() {
+  local s=$1
+  if ((s == 0)); then printf 'never'
+  elif ((s % 3600 == 0)); then printf '%d h' $((s / 3600))
+  elif ((s % 60 == 0)); then printf '%d min' $((s / 60))
+  else printf '%d s' "$s"
+  fi
+}
+
+screen_timeouts_entry() {
+  local choice step var label def value
+  while true; do
+    screen "Screen timeouts"
+    say "After how long without input:"
+    echo
+    local -a rows=()
+    for step in "${IDLE_STEPS[@]}"; do
+      IFS='|' read -r var label def <<<"$step"
+      value=$(idle_seconds "$var" "$def")
+      rows+=("$(printf '%-24s %s' "$label" "$(idle_words "$value")")|$var")
+    done
+    # the lock is what stands between an unattended laptop and anyone
+    # walking past it; say so where it is switched off
+    [[ $(idle_seconds IDLE_LOCK 300) == 0 ]] &&
+      warn "! The screen never locks by itself - Super+Shift+E, then L, still does."
+    if command -v "$MEDIA_UNIT" >/dev/null; then
+      if unit_masked "$MEDIA_UNIT"; then
+        rows+=("$(printf '%-24s %s' "Stay on while media plays" "no")|media")
+      else
+        rows+=("$(printf '%-24s %s' "Stay on while media plays" "yes")|media")
+      fi
+    fi
+    hint "A video in the browser, or anything you started with Super+Shift+I,"
+    hint "keeps the screen on too."
+    echo
+    rows+=("Back to the defaults|reset" "Back|back")
+
+    choice=$(printf '%s\n' "${rows[@]}" |
+      gum choose --label-delimiter="|" --header "Screen timeouts") || return 0
+    case $choice in
+      back|"") return 0 ;;
+      media)
+        if unit_masked "$MEDIA_UNIT"; then
+          unit_switch "$MEDIA_UNIT" on
+        else
+          unit_switch "$MEDIA_UNIT" off
+        fi
+        continue
+        ;;
+      reset)
+        rm -f "$IDLE_FILE"
+        ;;
+      *)
+        for step in "${IDLE_STEPS[@]}"; do
+          [[ ${step%%|*} == "$choice" ]] && IFS='|' read -r var label def <<<"$step"
+        done
+        # minutes, because that is how anyone thinks about this; the
+        # config is seconds, so a line someone wrote by hand in seconds
+        # is shown as it is
+        value=$(printf '%s\n' "1 min|60" "2 min|120" "3 min|180" "4 min|240" \
+          "5 min|300" "10 min|600" "15 min|900" "20 min|1200" "30 min|1800" \
+          "45 min|2700" "1 h|3600" "2 h|7200" "never|0" |
+          gum choose --label-delimiter="|" --header "$label after" \
+            --selected "$(idle_words "$(idle_seconds "$var" "$def")")") || continue
+        conf_line "$IDLE_FILE" "$var" "$var=$value"
+        ;;
+    esac
+    # swayidle reads its environment once, at start
+    systemctl --user try-restart swayidle >/dev/null 2>&1
+  done
+}
+
+# 24. TOUCHPAD AND KEYBOARD
+#
+# etc/sway/inputs/default-touchpad sets tap, natural scrolling and
+# typing-disables-touchpad; nothing set speed or key repeat. This writes
+# config.d/50-input.conf, which sway includes after /etc/sway/inputs, and
+# applies each change to the running session with the same line.
+INPUT_CONF="$HOME/.config/sway/config.d/50-input.conf"
+
+# The live value of one libinput setting on the first device of a type,
+# e.g. input_live touchpad tap -> enabled. Empty where there is none.
+input_live() {
+  swaymsg -t get_inputs --raw 2>/dev/null |
+    jq -r --arg t "$1" --arg k "$2" \
+      'first(.[] | select(.type == $t) | (.libinput[$k] // .[$k])) // empty'
+}
+
+# Writes `input type:<type> <setting> <value>` to the file and to sway.
+# Sway first: a line it refuses live would break the config at the next
+# reload, so it is only written once sway has taken it.
+input_set() {
+  local type=$1 setting=$2 value=$3
+  if ! swaymsg -q "input type:$type $setting $value" 2>/dev/null; then
+    oops "sway did not take: input type:$type $setting $value"
+    pause
+    return 1
+  fi
+  conf_line "$INPUT_CONF" "input type:$type $setting" "input type:$type $setting $value"
+}
+
+input_onoff() { [[ $(input_live touchpad "$1") == enabled ]] && printf 'on' || printf 'off'; }
+
+input_toggle() {
+  local type=$1 setting=$2
+  if [[ $(input_live "$type" "$setting") == enabled ]]; then
+    input_set "$type" "$setting" disabled
+  else
+    input_set "$type" "$setting" enabled
+  fi
+}
+
+# -1 to 1 as five steps anyone can pick between, and back to a word for
+# the row; a value set by hand between two steps shows as the number
+INPUT_SPEEDS=("Slowest|-0.8" "Slower|-0.4" "Default|0" "Faster|0.4" "Fastest|0.8")
+input_speed_word() {
+  local entry
+  for entry in "${INPUT_SPEEDS[@]}"; do
+    awk -v a="${entry#*|}" -v b="$1" 'BEGIN { exit !(a - b < 0.01 && b - a < 0.01) }' &&
+      { printf '%s' "${entry%|*}"; return; }
+  done
+  printf '%s' "${1:-Default}"
+}
+
+input_speed_pick() {
+  printf '%s\n' "${INPUT_SPEEDS[@]}" |
+    gum choose --label-delimiter="|" --header "$1 speed"
+}
+
+input_entry() {
+  local choice value has_touchpad=0 has_mouse=0
+  swaymsg -t get_inputs --raw 2>/dev/null | jq -e 'any(.[]; .type == "touchpad")' >/dev/null &&
+    has_touchpad=1
+  swaymsg -t get_inputs --raw 2>/dev/null | jq -e 'any(.[]; .type == "pointer")' >/dev/null &&
+    has_mouse=1
+
+  while true; do
+    screen "Touchpad and keys"
+    if [[ -z ${SWAYSOCK:-} ]]; then
+      oops "This needs a running sway session to read and apply the settings."
+      pause
+      return 1
+    fi
+    local -a rows=()
+    if ((has_touchpad)); then
+      rows+=("$(printf '%-28s %s' "Tap to click" "$(input_onoff tap)")|tap")
+      rows+=("$(printf '%-28s %s' "Natural scrolling" "$(input_onoff natural_scroll)")|natural_scroll")
+      rows+=("$(printf '%-28s %s' "Ignore touchpad while typing" "$(input_onoff dwt)")|dwt")
+      rows+=("$(printf '%-28s %s' "Touchpad speed" "$(input_speed_word "$(input_live touchpad accel_speed)")")|touchpad_speed")
+    fi
+    ((has_mouse)) &&
+      rows+=("$(printf '%-28s %s' "Mouse speed" "$(input_speed_word "$(input_live pointer accel_speed)")")|pointer_speed")
+    rows+=("$(printf '%-28s after %s ms, %s per second' "Key repeat" \
+      "$(input_live keyboard repeat_delay)" "$(input_live keyboard repeat_rate)")|repeat")
+    [[ -f $INPUT_CONF ]] && rows+=("Back to the defaults|reset")
+    rows+=("Back|back")
+
+    choice=$(printf '%s\n' "${rows[@]}" |
+      gum choose --label-delimiter="|" --header "Touchpad and keys") || return 0
+    case $choice in
+      back|"") return 0 ;;
+      tap|natural_scroll|dwt) input_toggle touchpad "$choice" ;;
+      touchpad_speed)
+        value=$(input_speed_pick Touchpad) || continue
+        # pointer_accel to set it, accel_speed where get_inputs reports it
+        input_set touchpad pointer_accel "$value"
+        ;;
+      pointer_speed)
+        value=$(input_speed_pick Mouse) || continue
+        input_set pointer pointer_accel "$value"
+        ;;
+      repeat)
+        # delay then rate, as sway takes them; sway's defaults are 600/25
+        value=$(printf '%s\n' "Slow - after 600 ms, 25 per second|600 25" \
+          "Medium - after 400 ms, 35 per second|400 35" \
+          "Fast - after 250 ms, 50 per second|250 50" |
+          gum choose --label-delimiter="|" --header "Key repeat") || continue
+        input_set keyboard repeat_delay "${value% *}"
+        input_set keyboard repeat_rate "${value#* }"
+        ;;
+      reset)
+        rm -f "$INPUT_CONF"
+        # a reload puts back what the shipped config says, which a
+        # removed line alone would not
+        swaymsg -q reload 2>/dev/null
+        ;;
+    esac
+  done
+}
+
+# 25. NIGHT LIGHT
+#
+# sunset.sh reads ~/.config/wlsunset/config as shell assignments -
+# temp_low, temp_high, location=on|off, sunrise, sunset - and has since
+# before this menu. On "follow the sun" it asks geoip.sh, so Location
+# decides where the sun is.
+WLSUNSET_CONF="$HOME/.config/wlsunset/config"
+
+night_light_entry() {
+  local choice value mode
+  while true; do
+    screen "Night light"
+    say "The screen turns warmer between sunset and sunrise."
+    echo
+    local low sunrise sunset
+    low=$(conf_get "$WLSUNSET_CONF" temp_low)
+    mode=$(conf_get "$WLSUNSET_CONF" location)
+    sunrise=$(conf_get "$WLSUNSET_CONF" sunrise)
+    sunset=$(conf_get "$WLSUNSET_CONF" sunset)
+    local -a rows=()
+    if systemctl --user is-active wlsunset >/dev/null 2>&1; then
+      rows+=("$(printf '%-18s %s' "Night light" "on")|power")
+    else
+      rows+=("$(printf '%-18s %s' "Night light" "off")|power")
+    fi
+    rows+=("$(printf '%-18s %s K' "Warmth at night" "${low:-4000}")|warmth")
+    if [[ ${mode:-on} == off ]]; then
+      rows+=("$(printf '%-18s %s' "When" "fixed, ${sunset:-19:00} to ${sunrise:-07:00}")|when")
+    else
+      rows+=("$(printf '%-18s %s' "When" "sunset to sunrise, from Location")|when")
+    fi
+    rows+=("Back|back")
+    choice=$(printf '%s\n' "${rows[@]}" |
+      gum choose --label-delimiter="|" --header "Night light") || return 0
+
+    case $choice in
+      back|"") return 0 ;;
+      power)
+        # the bar's toggle calls the same script, so the two agree
+        if systemctl --user is-active wlsunset >/dev/null 2>&1; then
+          /usr/share/sway/scripts/sunset.sh off >/dev/null 2>&1
+        else
+          /usr/share/sway/scripts/sunset.sh on >/dev/null 2>&1
+        fi
+        continue
+        ;;
+      warmth)
+        value=$(printf '%s\n' "Slightly warm|5000" "Warm|4000" "Warmer|3500" \
+          "Very warm|3000" "Warmest|2500" |
+          gum choose --label-delimiter="|" --header "At night") || continue
+        conf_line "$WLSUNSET_CONF" temp_low "temp_low=$value"
+        ;;
+      when)
+        value=$(printf '%s\n' "From sunset to sunrise where I am|on" "At fixed times|off" |
+          gum choose --label-delimiter="|" --header "When") || continue
+        conf_line "$WLSUNSET_CONF" location "location=$value"
+        if [[ $value == off ]]; then
+          local t
+          t=$(gum input --header "Warmer from (HH:MM)" --value "${sunset:-19:00}") || continue
+          [[ $t =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || { oops "HH:MM, like 19:30."; pause; continue; }
+          conf_line "$WLSUNSET_CONF" sunset "sunset=$t"
+          t=$(gum input --header "Back to normal from (HH:MM)" --value "${sunrise:-07:00}") || continue
+          [[ $t =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || { oops "HH:MM, like 07:00."; pause; continue; }
+          conf_line "$WLSUNSET_CONF" sunrise "sunrise=$t"
+        fi
+        ;;
+    esac
+    # wlsunset takes all of it as arguments at start
+    systemctl --user try-restart wlsunset >/dev/null 2>&1
+  done
+}
+
+# 26. WINDOWS
+#
+# Autotiling, gaps and borders. Gaps and borders are sway settings, so
+# they go to definitions.d as variables the shipped config reads; each is
+# also sent to the running session.
+WINDOWS_CONF="$HOME/.config/sway/definitions.d/50-windows.conf"
+
+windows_entry() {
+  local choice value
+  while true; do
+    screen "Windows"
+    local gaps border
+    gaps=$(conf_get "$WINDOWS_CONF" 'set $gaps')
+    border=$(conf_get "$WINDOWS_CONF" 'set $border')
+    local -a rows=()
+    if unit_masked autotiling; then
+      rows+=("$(printf '%-22s %s' "Automatic tiling" "off")|autotiling")
+    else
+      rows+=("$(printf '%-22s %s' "Automatic tiling" "on")|autotiling")
+    fi
+    rows+=("$(printf '%-22s %s px' "Gaps between windows" "${gaps:-5}")|gaps")
+    rows+=("$(printf '%-22s %s px' "Window border" "${border:-1}")|border")
+    rows+=("Back|back")
+    hint "Automatic tiling splits the other way for each new window, so they"
+    hint "spiral instead of lining up in a row."
+    echo
+    choice=$(printf '%s\n' "${rows[@]}" |
+      gum choose --label-delimiter="|" --header "Windows") || return 0
+
+    case $choice in
+      back|"") return 0 ;;
+      autotiling)
+        if unit_masked autotiling; then
+          unit_switch autotiling on
+        else
+          unit_switch autotiling off
+        fi
+        ;;
+      gaps)
+        value=$(printf '%s\n' "None|0" "Small|5" "Medium|10" "Large|20" |
+          gum choose --label-delimiter="|" --header "Gaps") || continue
+        conf_line "$WINDOWS_CONF" 'set $gaps' "set \$gaps $value"
+        swaymsg -q "gaps inner all set $value; gaps outer all set $value" 2>/dev/null
+        ;;
+      border)
+        value=$(printf '%s\n' "None|0" "Thin|1" "Medium|2" "Thick|4" |
+          gum choose --label-delimiter="|" --header "Border") || continue
+        conf_line "$WINDOWS_CONF" 'set $border' "set \$border $value"
+        # every window that exists, then the default for new ones
+        swaymsg -q "[tiling] border pixel $value; default_border pixel $value" 2>/dev/null
+        ;;
     esac
   done
 }
@@ -3289,6 +3694,8 @@ main() {
     input+=("$(menu_row locale $'\U000f05ca' "System locale" "language and formats")")
     input+=("$(menu_row time $'\U000f0150' "Time and date" "clock and time zone")")
     input+=("$(menu_row location $'\U000f034e' "Location" "weather, night light, sunrise")")
+    swaymsg -t get_inputs --raw 2>/dev/null | jq -e 'any(.[]; .type == "touchpad" or .type == "pointer")' >/dev/null &&
+      input+=("$(menu_row input $'\U000f037d' "Touchpad and keys" "tap, scrolling, speed, key repeat")")
     command -v ashlaros-displays >/dev/null &&
       screen+=("$(menu_row displays $'\U000f0379' "Displays" "arrangement and scaling")")
     # only where there is a backlight to adapt - the same predicate the
@@ -3298,6 +3705,11 @@ main() {
       [[ -n $(ls -A /sys/class/backlight 2>/dev/null) ]]; then
       screen+=("$(menu_row wluma $'\U000f00e1' "Adaptive brightness" "screen follows the light")")
     fi
+    command -v swayidle >/dev/null &&
+      screen+=("$(menu_row timeouts $'\U000f04b2' "Screen timeouts" "dim, lock and sleep")")
+    # the bar shows its toggle on the same condition
+    command -v wlsunset >/dev/null &&
+      screen+=("$(menu_row nightlight $'\U000f0594' "Night light" "warmer colours after dark")")
     # Built only where the daemon answers. power-profiles-daemon is
     # installed on every desktop, so the binary existing proves nothing;
     # asking it is what distinguishes a machine it can drive from one it
@@ -3343,6 +3755,7 @@ main() {
     # No hardware predicate: any sway session can flash a window. The script
     # ships with this package, so the entry is always offerable.
     look+=("$(menu_row flashing $'\U000f0241' "Focus flashing" "flash the window you switch to")")
+    look+=("$(menu_row windows $'\U000f0574' "Windows" "tiling, gaps and borders")")
 
     command -v aerc >/dev/null && accounts+=("$(menu_row mail $'\U000f01f0' "Mail" "aerc accounts")")
     command -v vdirsyncer >/dev/null && accounts+=("$(menu_row calendar $'\U000f00ed' "Calendar" "sync and subscriptions")")
@@ -3391,6 +3804,10 @@ main() {
       packages) packages_entry ;;
       time) time_menu ;;
       location) location_entry ;;
+      input) input_entry ;;
+      timeouts) screen_timeouts_entry ;;
+      nightlight) night_light_entry ;;
+      windows) windows_entry ;;
       hardware) hardware_menu ;;
       wluma) wluma_entry ;;
       flashing) flashing_entry ;;
