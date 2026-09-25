@@ -1116,7 +1116,7 @@ def configure_login(ctx: InstallContext) -> None:
     greetd_dir.mkdir(parents=True, exist_ok=True)
 
     # Not "sway" bare: the shipped ~/.profile holds the session's
-    # environment - QT_QPA_PLATFORM, the portal theme, MOZ_ENABLE_WAYLAND,
+    # environment - QT_QPA_PLATFORM, the Qt platform theme, MOZ_ENABLE_WAYLAND,
     # EDITOR - and greetd execs its command directly, so a login shell is
     # the only thing in the chain that reads it.
     #

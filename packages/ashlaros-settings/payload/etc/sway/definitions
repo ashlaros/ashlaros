@@ -32,6 +32,7 @@ set $script_path /usr/share/sway/scripts
 # Theme application (override any variable with "" to disable)
 set $apply_gtk_theme $script_path/enable-gtk-theme.sh "$gtk-theme"
 set $apply_icon_theme gsettings set org.gnome.desktop.interface icon-theme "$icon-theme"
+set $apply_qt_theme $script_path/enable-qt-theme.sh "$icon-theme" "$gui-font" "$term-font"
 set $apply_color_scheme gsettings set org.gnome.desktop.interface color-scheme "$gtk-color-scheme"
 set $apply_cursor_theme $script_path/enable-cursor-theme.sh "$cursor-theme"
 set $apply_gui_font gsettings set org.gnome.desktop.interface font-name "$gui-font"

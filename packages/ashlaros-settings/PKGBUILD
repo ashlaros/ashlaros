@@ -125,7 +125,12 @@ depends=(
     'xdg-desktop-portal-lxqt' # native file chooser, via the portal
     'lxqt-qtplugin'           # styles the portal dialog process
     ## theme
-    'qt6ct'                   # provides qt6ct-style, used by the portal dialog
+    # .profile names qt5ct as the Qt platform theme: Qt5 apps load this
+    # plugin, Qt6 apps resolve the name to qt6ct's. Without the one a
+    # toolkit needs, its apps fall back to hicolor and draw no icons.
+    'qt5ct'
+    'qt6ct'                   # Qt6 half of the above; qt6ct-style also
+                              # styles the portal dialog
     'kvantum'                 # theme engine for qt
     'kvantum-qt5'             # theme engine for qt5
     'gtk-nocsd'               # the skel .profile preloads it to disable
