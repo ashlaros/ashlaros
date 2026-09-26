@@ -123,6 +123,15 @@ jobs:
         run: |
           mise run install
           python3 scripts/generate_gallery.py --check
+      - name: the speaker fit flattens synthetic speakers
+        # measure.py's own selftest: known faults in, a delay and noise on
+        # top, and it must find and flatten them. The only check of the
+        # DSP that needs no speaker and no room (#92). numpy is installed
+        # here rather than in requirements.txt: it is the package's
+        # optdepend, and no script under scripts/ imports it.
+        run: |
+          uv pip install --system numpy
+          python3 packages/ashlaros-settings/payload/usr/lib/ashlaros-speakers/measure.py selftest
 
   arm-repo:
     # The aarch64 half of the repository has no other test: the ISO is

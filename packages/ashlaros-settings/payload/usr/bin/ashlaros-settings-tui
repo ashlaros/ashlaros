@@ -456,6 +456,12 @@ displays_entry() {
   fi
 }
 
+# 2b. SPEAKERS - dispatch, as displays does: the measuring and the fitting
+# are ashlaros-speakers' own (#92)
+speakers_entry() {
+  ashlaros-speakers
+}
+
 # 3. KERNELS
 #
 # Install only. Which kernel boots is systemd-boot's own menu, which
@@ -3846,6 +3852,10 @@ main() {
       input+=("$(menu_row input $'\U000f037d' "Touchpad and keys" "tap, scrolling, speed, key repeat")")
     command -v ashlaros-displays >/dev/null &&
       screen+=("$(menu_row displays $'\U000f0379' "Displays" "arrangement and scaling")")
+    # a speaker to measure is the predicate: PipeWire answering is enough,
+    # and the tool itself says when there is no microphone
+    command -v ashlaros-speakers >/dev/null && pactl list short sinks 2>/dev/null | grep -q . &&
+      screen+=("$(menu_row speakers $'\U000f04c3' "Speakers" "measure and calibrate")")
     # only where there is a backlight to adapt - the same predicate the
     # waybar toggle uses, so the bar and the menu agree about whether this
     # machine has the hardware at all
@@ -3950,6 +3960,7 @@ main() {
       keyboard) keyboard_menu ;;
       locale) locale_menu ;;
       displays) displays_entry ;;
+      speakers) speakers_entry ;;
       kernels) kernel_menu ;;
       packages) packages_entry ;;
       time) time_menu ;;

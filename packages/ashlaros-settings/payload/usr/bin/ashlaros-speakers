@@ -1,0 +1,397 @@
+#!/usr/bin/env bash
+# Speaker calibration: measure a speaker with a microphone, and correct it.
+#
+# Its own tool rather than a settings entry (#92), as way-displays got:
+# the settings menu only launches it. The measuring and the fitting are
+# /usr/lib/ashlaros-speakers/measure.py, numpy on a sweep; this owns the
+# devices, the questions and the result.
+#
+# One calibration per speaker, each a PipeWire filter-chain in
+# ~/.config/pipewire/ashlaros-speakers.conf.d/ that ashlaros-speakers.service
+# runs. Each is a smart filter aimed at its speaker: WirePlumber puts it in
+# front of that speaker and nothing else, so headphones and HDMI are never
+# filtered, and a speaker that is unplugged simply has no filter until it
+# is back. Nothing here becomes the default output or moves a stream.
+#
+# gum and the padding conventions are the installer's (installer/
+# configurator); this deliberately does not invent a second TUI style.
+set -uo pipefail
+
+export GUM_CHOOSE_CURSOR_FOREGROUND="7"
+export GUM_CHOOSE_SELECTED_FOREGROUND="15"
+export GUM_CONFIRM_SELECTED_BACKGROUND="8"
+export GUM_CONFIRM_SELECTED_FOREGROUND="15"
+export GUM_CONFIRM_UNSELECTED_FOREGROUND="7"
+
+PADDING_LEFT=2
+padding() {
+  local p="0 0 0 $PADDING_LEFT"
+  export GUM_CHOOSE_PADDING="$p" GUM_INPUT_PADDING="$p" GUM_CONFIRM_PADDING="$p"
+}
+padding
+
+say() { gum style --padding "0 0 0 $PADDING_LEFT" "$@"; }
+warn() { gum style --foreground 3 --padding "0 0 0 $PADDING_LEFT" "$@"; }
+oops() { gum style --foreground 1 --padding "0 0 0 $PADDING_LEFT" "$@"; }
+
+screen() {
+  printf '\033[H\033[2J'
+  say "$1"
+  echo
+}
+
+back() { gum confirm --affirmative "Back" --negative "" "" >/dev/null 2>&1; }
+
+MEASURE=/usr/lib/ashlaros-speakers/measure.py
+DROPINS="${XDG_CONFIG_HOME:-$HOME/.config}/pipewire/ashlaros-speakers.conf.d"
+SERVICE=ashlaros-speakers.service
+# numpy is the one thing measuring needs that the desktop does not ship: an
+# optdepend, installed from here with its size said first (the Web apps
+# entry's pattern). Applying a calibration needs nothing at all.
+NUMPY=python-numpy
+
+# pactl's own JSON, never its human output: the labels are translated and
+# padded, and a sink's description is what the user sees.
+sinks_json() { pactl -f json list sinks 2>/dev/null; }
+sources_json() { pactl -f json list sources 2>/dev/null; }
+
+# Real speakers only: our own filters and every other filter-chain are
+# Audio/Sink too, and a calibration of a filter is a calibration of
+# nothing. HDMI and DisplayPort are a monitor's speakers, not ones a
+# microphone next to the laptop can measure honestly, so they go as well.
+speakers() {
+  sinks_json | jq -r '.[]
+    | select(.properties["node.link-group"] == null)
+    | select(.properties["device.api"] != null)
+    | select((.name | test("hdmi|HDMI|DisplayPort")) | not)
+    | "\(.name)\t\(.description)"'
+}
+
+# Microphones that could hear anything: not a sink's monitor, and not a
+# jack PipeWire says is empty - a laptop lists its headset jack whether or
+# not anything is in it. Unknown counts as present.
+microphones() {
+  sources_json | jq -r '.[]
+    | select(.monitor_source == "")
+    | select(.properties["node.link-group"] == null)
+    | .active_port as $active
+    | select([.ports[] | select(.name == $active or $active == null) | .availability]
+             | all(. == "not available") | not)
+    | "\(.name)\t\(.description)"'
+}
+
+sink_field() { sinks_json | jq -r --arg n "$1" ".[] | select(.name == \$n) | $2"; }
+
+# Channel positions as PipeWire spells them (FL, FR, ...), from the sink's
+# audio.position - the names filter-chain's audio.position takes.
+positions_of() {
+  sink_field "$1" '.properties["audio.position"] // "[ FL, FR ]"' |
+    tr -d '[] ' | tr ',' '\n' | grep .
+}
+
+dropin_of() { printf '%s/%s.conf' "$DROPINS" "$1"; }
+
+calibrated() { [[ -f $(dropin_of "$1") ]]; }
+
+# A speaker that shares its output with the headphone jack, as a laptop
+# without UCM does: one sink, two ports. A filter is aimed at a sink, and
+# nothing tells it which port is playing, so a calibration there would
+# colour headphones too. Where UCM splits them - this is most laptops now -
+# the headphones are a sink of their own and the speaker is safe.
+shares_headphones() {
+  sink_field "$1" '[.ports[] | .type // "" | ascii_downcase] | any(. == "headphones")' |
+    grep -qx true
+}
+
+# Anything the user would hear over a sweep - or whose sound the
+# microphone would measure as the speaker. Corked streams are paused.
+playing() {
+  pactl -f json list sink-inputs 2>/dev/null |
+    jq -r '.[] | select(.corked == false and .mute == false)
+      | .properties["application.name"] // .properties["media.name"] // "something"' |
+    sort -u
+}
+
+# Start, restart or stop the service to match what is on disk: running
+# with at least one calibration, off with none.
+reload() {
+  if compgen -G "$DROPINS/*.conf" >/dev/null; then
+    systemctl --user enable "$SERVICE" >/dev/null 2>&1
+    systemctl --user restart "$SERVICE"
+  else
+    systemctl --user disable --now "$SERVICE" >/dev/null 2>&1
+  fi
+}
+
+# The drop-in's own node, once the service has loaded it - the proof that
+# PipeWire accepted the file rather than logging an error and running
+# nothing.
+filter_running() {
+  local name="ashlaros_speakers.${1//:/_}" tries
+  for ((tries = 0; tries < 10; tries++)); do
+    sinks_json | jq -e --arg n "$name" 'any(.[]; .name == $n)' >/dev/null && return 0
+    sleep 0.3
+  done
+  return 1
+}
+
+need_numpy() {
+  python3 -c 'import numpy' 2>/dev/null && return 0
+  screen "Speakers"
+  say "Measuring needs $NUMPY, which is not installed."
+  local size
+  size=$(LC_ALL=C pacman -Si "$NUMPY" 2>/dev/null | sed -n 's/^Installed Size *: *//p' | head -1)
+  say "It is ${size:-about 50 MiB} installed, and only measuring uses it:"
+  say "a calibration keeps working if you remove it again."
+  echo
+  gum confirm --affirmative "Install it" --negative "Back" "" || return 1
+  echo
+  sudo pacman -S --needed "$NUMPY" || { oops "It did not install."; back; return 1; }
+}
+
+# The sweep for one channel, played at the speaker and recorded at the
+# microphone. The stream targets the speaker by name with dont-reconnect,
+# and the speaker's own filter is taken out of the way first: a
+# calibration of a speaker that is already corrected fits the correction.
+record_channel() {
+  local sink=$1 mic=$2 channels=$3 index=$4 out=$5 volume=$6 sweep rec_pid
+  sweep=$(mktemp --suffix=.raw) || return 1
+  python3 "$MEASURE" sweep "$sweep" "$channels" "$index" || { rm -f "$sweep"; return 1; }
+
+  pw-record --raw --format f32 --rate 48000 --channels 1 --target "$mic" \
+    -P '{ node.dont-reconnect = true }' "$out" &
+  rec_pid=$!
+  # pw-record takes a moment to link; the sweep has half a second of
+  # silence in front of it for exactly this
+  sleep 0.4
+  pw-play --raw --format f32 --rate 48000 --channels "$channels" \
+    --volume "$volume" --target "$sink" \
+    -P '{ node.dont-reconnect = true }' "$sweep"
+  local played=$?
+  sleep 0.3
+  kill "$rec_pid" 2>/dev/null
+  wait "$rec_pid" 2>/dev/null
+  rm -f "$sweep"
+  return "$played"
+}
+
+measure() {
+  local sink=$1 label=$2
+  screen "Calibrate: $label"
+  if shares_headphones "$sink"; then
+    oops "This speaker shares its output with the headphone jack."
+    say "PipeWire cannot tell a filter which of the two is playing, so a"
+    say "calibration here would change how headphones sound as well."
+    back
+    return 0
+  fi
+  need_numpy || return 0
+  screen "Calibrate: $label"
+  local -a mics=()
+  mapfile -t mics < <(microphones)
+  if ((${#mics[@]} == 0)); then
+    oops "No microphone is connected, or every one is muted in its jack."
+    back
+    return 0
+  fi
+  local default mic
+  default=$(pactl get-default-source 2>/dev/null)
+  if ((${#mics[@]} == 1)); then
+    mic=${mics[0]%%$'\t'*}
+  else
+    local -a labels=()
+    local m selected=""
+    for m in "${mics[@]}"; do
+      labels+=("${m#*$'\t'}")
+      [[ ${m%%$'\t'*} == "$default" ]] && selected=${m#*$'\t'}
+    done
+    local pick
+    pick=$(gum choose --header "Measure with" ${selected:+--selected "$selected"} \
+      "${labels[@]}" "Back") || return 0
+    [[ $pick == Back ]] && return 0
+    for m in "${mics[@]}"; do
+      [[ ${m#*$'\t'} == "$pick" ]] && mic=${m%%$'\t'*}
+    done
+  fi
+
+  say "Speaker:    $label"
+  say "Microphone: $(sources_json | jq -r --arg n "$mic" '.[] | select(.name == $n) | .description')"
+  echo
+  say "Each speaker plays three 4 second sweeps, from a low hum to a whistle."
+  say "Keep the room quiet, and keep the microphone where you listen from:"
+  say "a laptop's own microphone is already there. The speaker is set to 70 %"
+  say "for the sweeps and put back afterwards."
+  local busy
+  busy=$(playing | paste -sd, | sed 's/,/, /g')
+  if [[ -n $busy ]]; then
+    echo
+    warn "Sound is open from: $busy. Pause it first, or it is measured too."
+  fi
+  echo
+  gum confirm --affirmative "Measure" --negative "Back" "" || return 0
+
+  local tmp
+  tmp=$(mktemp -d) || return 0
+  run_measurement "$sink" "$label" "$mic" "$tmp"
+  # the recordings are the user's room; nothing of them outlives this
+  rm -rf "$tmp"
+}
+
+# The measurement must hear the bare speaker, so its calibration is set
+# aside for the length of it, and put back whatever goes wrong: only a
+# confirmed new one replaces it.
+run_measurement() {
+  local sink=$1 label=$2 mic=$3 tmp=$4 had="" positions n=0 channels report
+  mapfile -t positions < <(positions_of "$sink")
+  channels=${#positions[@]}
+  if calibrated "$sink"; then
+    had=$tmp/previous.conf
+    mv "$(dropin_of "$sink")" "$had"
+    reload
+  fi
+
+  # The speaker at a fixed volume for the sweeps, and back to the user's
+  # afterwards: at their own level the sweep can be lost in the room -
+  # measured on a laptop at 40 %, 4 dB above the noise; at 70 %, 30 dB.
+  # The fit refuses a clipped or buried capture rather than fitting it.
+  #
+  # Three sweeps per channel, taken in turn rather than in a row: the
+  # same speaker measured minutes apart moves by 2 dB, and interleaving
+  # spreads that over every channel instead of giving each its own moment.
+  local volume mute position failed=0 round
+  volume=$(sink_field "$sink" '[.volume[].value_percent] | join(",")')
+  mute=$(sink_field "$sink" '.mute')
+  pactl set-sink-mute "$sink" 0
+  pactl set-sink-volume "$sink" 70%
+  echo
+  for round in 1 2 3; do
+    n=0
+    for position in "${positions[@]}"; do
+      say "Measuring $position ($round of 3)..."
+      if ! record_channel "$sink" "$mic" "$channels" "$n" "$tmp/$position.$round.raw" 1.0; then
+        failed=1
+        break 2
+      fi
+      n=$((n + 1))
+    done
+  done
+  # one value per channel, as pactl takes them
+  pactl set-sink-volume "$sink" ${volume//,/ }
+  [[ $mute == true ]] && pactl set-sink-mute "$sink" 1
+  if ((failed)); then
+    oops "Playing the sweep failed."
+    put_back "$sink" "$had"
+    back
+    return 0
+  fi
+
+  echo
+  local -a captures=()
+  for position in "${positions[@]}"; do
+    captures+=("$position=$tmp/$position.1.raw,$tmp/$position.2.raw,$tmp/$position.3.raw")
+  done
+  if ! python3 "$MEASURE" fit "$sink" "$label" "${captures[@]}" \
+    >"$tmp/new.conf" 2>"$tmp/report"; then
+    oops "$(cat "$tmp/report")"
+    put_back "$sink" "$had"
+    back
+    return 0
+  fi
+  report=$(cat "$tmp/report")
+  say "How far from flat, before and after:"
+  sed 's/^/  /' <<<"$report"
+  echo
+  gum confirm --affirmative "Use it" --negative "Discard" "" || {
+    put_back "$sink" "$had"
+    return 0
+  }
+
+  mkdir -p "$DROPINS"
+  mv "$tmp/new.conf" "$(dropin_of "$sink")"
+  reload
+  if filter_running "$sink"; then
+    say "Calibrated. Sound for $label now goes through it."
+  else
+    oops "PipeWire did not load it:"
+    journalctl --user -u "$SERVICE" -n 5 --no-pager -o cat 2>/dev/null | sed 's/^/  /'
+  fi
+  back
+}
+
+put_back() {
+  local sink=$1 had=$2
+  [[ -n $had && -f $had ]] || return 0
+  mv "$had" "$(dropin_of "$sink")"
+  reload
+}
+
+forget() {
+  local sink=$1 label=$2
+  gum confirm --affirmative "Remove it" --negative "Back" \
+    "Remove the calibration for $label?" || return 0
+  rm -f "$(dropin_of "$sink")"
+  reload
+  say "Removed. $label plays as it came."
+  back
+}
+
+speaker_menu() {
+  local sink=$1 label=$2 choice
+  while true; do
+    screen "Speakers: $label"
+    if calibrated "$sink"; then
+      say "Calibrated."
+      sed -n 's/^# deviation //p' "$(dropin_of "$sink")" | tr ';' '\n' | sed 's/^ */  /'
+    else
+      say "Not calibrated: it plays as it came."
+    fi
+    echo
+    local -a entries=("Measure and calibrate")
+    calibrated "$sink" && entries=("Measure again" "Remove the calibration")
+    entries+=("Back")
+    choice=$(gum choose --header "Speaker" "${entries[@]}") || return 0
+    case $choice in
+      "Measure and calibrate" | "Measure again") measure "$sink" "$label" ;;
+      "Remove the calibration") forget "$sink" "$label" ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
+main() {
+  for tool in gum jq pactl pw-play pw-record python3; do
+    command -v "$tool" >/dev/null || { echo "ashlaros-speakers: $tool is not installed" >&2; exit 1; }
+  done
+
+  while true; do
+    screen "Speakers"
+    local -a found=()
+    mapfile -t found < <(speakers)
+    if ((${#found[@]} == 0)); then
+      oops "PipeWire reports no speakers."
+      back
+      exit 0
+    fi
+    say "Measures a speaker with a microphone and flattens the peaks and dips"
+    say "it has - the boom and the harshness - for that speaker alone."
+    echo
+    local -a labels=()
+    local s
+    for s in "${found[@]}"; do
+      if calibrated "${s%%$'\t'*}"; then
+        labels+=("${s#*$'\t'}  (calibrated)")
+      else
+        labels+=("${s#*$'\t'}")
+      fi
+    done
+    local pick
+    pick=$(gum choose --header "Speaker" "${labels[@]}" "Quit") || exit 0
+    [[ $pick == Quit ]] && exit 0
+    pick=${pick%  (calibrated)}
+    for s in "${found[@]}"; do
+      [[ ${s#*$'\t'} == "$pick" ]] && speaker_menu "${s%%$'\t'*}" "$pick"
+    done
+  done
+}
+
+main "$@"

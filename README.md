@@ -113,9 +113,9 @@ know. The menu groups them by what you are looking for:
   location the weather, the night light and the automatic day/night theme
   follow (guessed from the network unless you pick a place), the weather's
   units, and the touchpad, mouse speed and key repeat
-- **Screen and power:** displays, adaptive brightness, when the screen
-  dims, locks and sleeps, whether it stays on while media plays, the night
-  light's warmth and hours, power profiles
+- **Screen and power:** displays, speaker calibration, adaptive
+  brightness, when the screen dims, locks and sleeps, whether it stays on
+  while media plays, the night light's warmth and hours, power profiles
 - **Appearance:** the day and night theme, the wallpaper, focus flashing,
   automatic tiling, gaps and borders
 - **Software:** kernel variants, hardware profiles, packages, packages
@@ -126,8 +126,9 @@ know. The menu groups them by what you are looking for:
 
 An entry only appears where it can work, so a machine without a
 fingerprint reader has no Fingerprint entry, and a group left empty is not
-shown. The header and cursor use the theme's accent colour. Displays and
-package installation open `ashlaros-displays` and `pacseek`.
+shown. The header and cursor use the theme's accent colour. Displays,
+speakers and package installation open `ashlaros-displays`,
+`ashlaros-speakers` and `pacseek`.
 
 **A launcher, not a control panel.** Every entry runs an existing tool, or
 collects what it needs and runs one command. Entries hide themselves when
@@ -138,6 +139,39 @@ the whole menu.
 Installing a kernel is an entry; **which kernel boots stays the boot
 menu's own choice**. After an install it checks that the new kernel can
 actually boot, and says plainly if something is missing.
+
+## Speaker calibration
+
+Laptop speakers boom in one place and shout in another, by ten decibels
+or more, and no two models are wrong in the same way. Settings →
+**Speakers** measures yours with a microphone - the laptop's own is
+already where you sit - and flattens the worst of it.
+
+Each channel plays three 4-second sweeps with the speaker at 70 %, and
+your volume is put back afterwards. Keep the room quiet and pause
+anything playing: a sweep the room talked over is dropped, and the fit
+never starts lower than the sweep was heard clearly over the room - a fan
+can hide a small speaker's bass entirely. A measurement where no sweep
+was usable says why, for each one. It
+shows how far from flat each channel is before and after, and nothing
+changes until you choose to use it.
+
+The correction is up to six broad filters per channel, between where the
+speaker's bass rolls off and where its treble does. **It never tries to
+add bass the speaker cannot play**, and boosts stay within 4 dB: a dip
+is often the room rather than the speaker, and boosting it only makes
+everything else louder. On the laptop it was built on, the spread
+between 300 Hz and 10 kHz went from 5.1 to 2.4 dB on the left and 4.7 to
+3.2 dB on the right, measured again through the filter.
+
+Each speaker has its own calibration, and only that speaker plays through
+it: headphones, HDMI and a Bluetooth speaker are never filtered, and a
+speaker that is unplugged keeps its calibration for when it is back.
+Where a laptop's speaker and headphone jack share one output, the entry
+says so and does not calibrate, since a filter there would colour the
+headphones too. Measuring needs `python-numpy`, which the entry offers to
+install; a calibration keeps working without it. Remove one from the same
+entry.
 
 ## Face unlock
 

@@ -1,0 +1,31 @@
+# Runs the speaker calibrations ashlaros-speakers writes (#92): one
+# PipeWire filter-chain per calibrated speaker, each a smart filter that
+# WirePlumber puts in front of that speaker alone.
+#
+# A pipewire client of its own rather than a fragment in
+# filter-chain.conf.d: filter-chain.service is PipeWire's, it would run
+# every example a user drops there too, and removing our calibrations
+# would mean editing a directory we do not own. This one exists only
+# while there is a calibration - the tool enables it on the first and
+# disables it with the last - so a machine that never calibrated runs
+# nothing.
+#
+# PartOf pipewire.service like WirePlumber's own BindsTo: a PipeWire
+# restart takes the filters down, and they come back with it.
+[Unit]
+Description=Speaker calibration filters
+After=pipewire.service wireplumber.service
+BindsTo=pipewire.service
+PartOf=pipewire.service
+# nothing to run without a calibration; %E is $XDG_CONFIG_HOME
+ConditionDirectoryNotEmpty=%E/pipewire/ashlaros-speakers.conf.d
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/pipewire -c ashlaros-speakers.conf
+Restart=on-failure
+RestartSec=2
+Slice=session.slice
+
+[Install]
+WantedBy=pipewire.service

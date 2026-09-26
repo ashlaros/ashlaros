@@ -230,6 +230,9 @@ optdepends=(
     # an optdepend like aerc: it does nothing until pointed at a repository
     # of yours, and the settings entry hides itself without it (#103)
     'chezmoi: sync your config from a private git repo, from the settings TUI'
+    # measuring only: a calibration it made keeps working without it, so
+    # nobody pays 50 MB for a speaker they never measure (#92)
+    'python-numpy: measure a speaker for Settings -> Speakers'
 )
 # generated_background.svg is rewritten on every theme apply, and the
 # per-user theme.conf is the file the theme switcher edits
@@ -246,7 +249,8 @@ package() {
     # A __pycache__ left in a checkout is git-ignored but cp -a copies it
     # anyway, so a stale .pyc of a script we deleted can ship. Found exactly
     # that with weather.cpython-312.pyc after weather.py became weather.sh.
-    find "${pkgdir}" -name __pycache__ -type d -prune -exec rm -rf {} +
+    # .ruff_cache the same way: a lint run inside the payload leaves one
+    find "${pkgdir}" \( -name __pycache__ -o -name .ruff_cache \) -type d -prune -exec rm -rf {} +
 
     # cp -a keeps the source tree's modes; the scripts must be executable
     # whatever the checkout looked like
@@ -254,7 +258,8 @@ package() {
     # predicate that is not executable answers nothing
     find "${pkgdir}/usr/bin" "${pkgdir}/usr/local/bin" \
         "${pkgdir}/usr/share/sway/scripts" \
-        "${pkgdir}/usr/share/ashlaros/migrations" -type f -exec chmod 755 {} +
+        "${pkgdir}/usr/share/ashlaros/migrations" \
+        "${pkgdir}/usr/lib/ashlaros-speakers" -type f -exec chmod 755 {} +
 
     write_google_oauth_client "${pkgdir}"
 }
