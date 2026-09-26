@@ -33,7 +33,11 @@ trap cleanup EXIT
 
 say() { printf '\n== %s\n' "$*" >&2; }
 
-compressed=$(find "$out_dir" -name '*.img.xz' | head -1)
+# Not the checksum beside it: build-image.sh writes SHA256SUMS.<image>, which
+# `*.img.xz` also matches, and find's order is the directory's - so on the
+# 2026-09-20 and 2026-09-26 runs this handed xz a text file and failed
+# before anything booted. upload_iso.py excludes it the same way.
+compressed=$(find "$out_dir" -name '*.img.xz' ! -name 'SHA256SUMS*' | head -1)
 [[ -n $compressed ]] || { echo "no image in $out_dir" >&2; exit 1; }
 
 say "extracting the kernel from the boot partition"
