@@ -179,9 +179,6 @@ packages:
   wluma:
     upstream: https://aur.archlinux.org/wluma.git
     arch: both
-  xdg-terminal-exec:
-    upstream: https://aur.archlinux.org/xdg-terminal-exec.git
-    arch: any
   # Arch's own vdirsyncer plus one unmerged upstream patch, not an AUR or
   # GitHub package - Arch packaging lives on gitlab.archlinux.org, which
   # track_upstreams.py has no reader for. Deliberately no `upstream:` key:

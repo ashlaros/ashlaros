@@ -104,6 +104,26 @@ taking an upstream change is a judgement call against our local edits, while
 a `pkgrel` bump is one mechanical line gated on an audit that either found
 broken links or did nothing.
 
+### Dropping a package
+
+Delete its directory, its `packages/.upstream/` merge base and its
+`upstreams.yml` entry, and push. `publish.py` only adds to the
+repository, so the next `build-packages.yml` run's `remove-dropped` job
+takes out what the tree no longer builds: `scripts/remove_dropped.py`
+compares each live database with every `pkgname` the PKGBUILDs produce,
+removes the leftovers with `repo-remove`, uploads the database, and only
+then deletes the files, so nothing a client can fetch names a missing one.
+Before this, dropped packages stayed installable by name for good; nine had
+built up in each tree by 2026-09-26.
+
+It refuses the whole run, rather than removing part of it, when a package
+still published depends on a dropped one that no repository on that
+architecture offers: Arch's for x86_64, Arch Linux ARM's for aarch64. A
+dependency another repository satisfies only changes which package pacman
+picks. It also refuses more than 20 removals at once, which is a misread
+tree rather than a drop. Run it without `--apply` to see what it would
+take out.
+
 ### Where a package belongs
 
 Three lists exist, and the boundary between them was decided ad hoc until

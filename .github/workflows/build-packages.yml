@@ -69,8 +69,43 @@ jobs:
       compiled: ${{ toJSON(fromJSON(needs.discover.outputs.waves)[1].compiled) }}
     secrets: inherit
 
-  verify:
+  # publish.py only adds, so a package whose PKGBUILD was deleted stayed in
+  # both databases for good, installable by name: nine had built up by
+  # 2026-09-26. This takes out whatever the tree no longer produces. After
+  # the waves, because a wave publishes into the same databases, and before
+  # verify, so check_repo.py sees the result. It refuses on a dependency
+  # only this repository satisfies, or on more removals than a drop looks
+  # like, and fails the run rather than guessing.
+  #
+  # always(), like verify: wave0 is skipped on a push that changed nothing
+  # buildable - which is exactly what deleting a package directory is.
+  remove-dropped:
     needs: [wave0, wave1]
+    if: always() && needs.wave0.result != 'cancelled' && needs.wave0.result != 'failure' && needs.wave1.result != 'failure'
+    runs-on: ubuntu-latest
+    container:
+      # repo-remove from the same pacman generation as repo-add in publish
+      image: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: pacman -Sy --noconfirm --needed python python-boto3
+      - name: import the signing key
+        env:
+          GPG_SECRET_BASE64: ${{ secrets.GPG_SECRET_BASE64 }}
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+        run: .github/scripts/import-key.sh
+      - name: remove what the tree no longer builds
+        env:
+          GPG_KEYID: ${{ vars.GPG_KEYID }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ashlaros
+        # a dispatch for one package is not a statement about the others
+        run: python3 scripts/remove_dropped.py ${{ inputs.package == '' && '--apply' || '' }}
+
+  verify:
+    needs: [wave0, wave1, remove-dropped]
     # a wave that failed still published whatever built, so the tree is
     # checked either way; skipped is not failed
     if: always() && needs.wave0.result != 'cancelled'

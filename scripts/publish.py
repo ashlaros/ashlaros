@@ -209,6 +209,20 @@ def refuse_overwrite(s3, bucket: str, key: str, local: str) -> None:
         refuse(f"md5 {etag} published, {digest.hexdigest()} built")
 
 
+def upload_databases(s3, bucket: str, arch: str, pkg_dir: str) -> None:
+    """The databases and their signatures, as repo-add or repo-remove left them."""
+    prefix = f"{arch}/"
+    for suffix in DB_SUFFIXES:
+        for name in (f"{DB_NAME}{suffix}", f"{DB_NAME}{suffix}.sig"):
+            local = os.path.join(pkg_dir, name)
+            # repo-add writes .db/.files as symlinks; upload the real bytes
+            real = os.path.realpath(local)
+            if not os.path.exists(real):
+                continue
+            s3.upload_file(real, bucket, prefix + name, Config=SINGLE_PART)
+            log(f"{arch}: uploaded {name}")
+
+
 def publish(s3, bucket: str, arch: str, pkg_dir: str, packages: list[str], key: str | None) -> None:
     prefix = f"{arch}/"
     db_file = os.path.join(pkg_dir, f"{DB_NAME}.db.tar.gz")
@@ -261,15 +275,7 @@ def publish(s3, bucket: str, arch: str, pkg_dir: str, packages: list[str], key: 
 
     # the database goes last: until it names them, the objects above are
     # simply unreferenced, and a client mid-publish sees the old repository
-    for suffix in DB_SUFFIXES:
-        for name in (f"{DB_NAME}{suffix}", f"{DB_NAME}{suffix}.sig"):
-            local = os.path.join(pkg_dir, name)
-            # repo-add writes .db/.files as symlinks; upload the real bytes
-            real = os.path.realpath(local)
-            if not os.path.exists(real):
-                continue
-            s3.upload_file(real, bucket, prefix + name, Config=SINGLE_PART)
-            log(f"{arch}: uploaded {name}")
+    upload_databases(s3, bucket, arch, pkg_dir)
 
     # After the database, never before it. Pruning first deletes the object
     # the CURRENTLY PUBLISHED database still names, so for the whole length
