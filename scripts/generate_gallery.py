@@ -82,7 +82,10 @@ def frames() -> list[dict]:
             "kind": "video",
             "src": f"{BASE}/video/tour.webm",
             "alt": "A short silent tour of the desktop",
-            "caption": "a short silent tour: tiling, the launcher, the theme switching",
+            "caption": (
+                "a short silent tour: tiling, the launcher, "
+                "the help narrowing as keys are held, a theme switch"
+            ),
             # the first screenshot, so the video has something to show
             # before it is played rather than a black rectangle
             "poster": f"{BASE}/screenshots/{shots[0]['name']}.png",

@@ -4,8 +4,9 @@
 # artefacts, and merging them would compromise both - a still wants the
 # screen to stop moving, a scene wants it not to.
 #
-# Three scenes that show motion, not a tour of every application. Tiling,
-# the launcher and the theme switch are the things a still cannot show.
+# Four scenes that show motion, not a tour of every application. Tiling,
+# the launcher, the keybinding help narrowing as keys are held, and the
+# theme switch are the things a still cannot show.
 #
 # `commands` run in order, each detached, except a `swaymsg` which runs in
 # the foreground because sway applies a split to whatever is focused. `hold`
@@ -36,8 +37,29 @@
   overlay_settle: 2
   hold: 4
 
+# The help overlay follows the keys held (#89), which only motion can show:
+# hold Super and its bindings appear, add Shift and they narrow, let go and
+# they are gone. wtype is the desktop's own typer, and -M holds a modifier
+# until -m releases it, so this is a real hold on sway's seat - the same
+# modifier state the overlay's watcher reads - rather than a picture of the
+# overlay forced open. Local, 1920x1080 headless: 38 bindings for Super,
+# 16 for Super+Shift.
+#
+# rofi has to go first: it grabs the keyboard and never returns, so the
+# previous scene leaves it on screen, over the overlay. The terminals stay -
+# the overlay is drawn over whatever is open, and that is what a user sees.
+- name: help
+  description: the keybinding help narrowing as Super, then Shift, is held
+  commands:
+    - pkill -x rofi
+    # 2.5 s on each, which is long enough to read that the list changed
+    - wtype -M logo -s 2500 -M shift -s 2500 -m shift -m logo
+  step: 1
+  # past the release, so the overlay is seen to go as well as to come
+  hold: 6
+
 - name: theme
-  description: the desktop switching between dark and light
+  description: the desktop switching from the AshlarOS theme to matcha-green
   # Measured rather than assumed: after the toggle, waybar repaints by 79%
   # while the terminal panes change by under 14%. A foot window keeps the
   # colours it started with, and a client started after the switch still
@@ -51,13 +73,16 @@
   # unchanged panes reads as a glitch, and one clean switch reads as a
   # switch.
   #
-  # rofi also has to go: it grabs the keyboard and never returns, so the
-  # previous scene leaves it on screen, and a theme switch behind a
-  # launcher is a switch nobody can see. Recorded once with it up, which
-  # showed exactly that.
+  # To matcha-green rather than to the AshlarOS light palette: the stone
+  # palette is deliberately colourless, so its light half against its dark
+  # half reads as a brightness change, not as a theme. The switch is set up
+  # the way Settings -> Theme sets it up - matcha-green written as the
+  # night half, the files that entry writes - and then the bar is clicked,
+  # so what plays is still the toggle a user performs.
   commands:
-    - pkill -x rofi
     - swaymsg '[app_id="foot"] kill'
+    - cp /usr/share/sway/themes/matcha-green/theme.conf "$HOME/.config/sway/definitions.d/theme.light.conf_"
+    - cp /usr/share/sway/themes/matcha-green/foot-theme.ini "$HOME/.config/foot/foot-theme.light.ini_"
     # The click a user actually performs, not the rofi-driven picker: this
     # is what the waybar theme module runs. It needs both stashed halves,
     # which is what #18 settled.

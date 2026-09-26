@@ -33,7 +33,13 @@ jobs:
       # capability is outside the bounding set fails with EPERM - even as
       # root, which reads like a corrupt binary rather than a missing
       # capability. Not --privileged: one capability is what is needed.
-      options: --cap-add=SYS_NICE
+      #
+      # --hostname because the settings menu's header prints `uname -n`, and
+      # a container's is its id - published as "64465f96a3f2" once the shot
+      # grew tall enough to show the header. `ashlaros` is the installer's
+      # default. The kernel beside it stays the runner's (`-azure`): a
+      # container shares the host's kernel and cannot report another.
+      options: --cap-add=SYS_NICE --hostname ashlaros
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: install the desktop
