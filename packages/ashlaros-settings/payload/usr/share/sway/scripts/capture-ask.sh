@@ -32,10 +32,11 @@ selection=$(slurp 2>/dev/null) || exit 0
 # cancelled selection sends nothing
 [ -n "$selection" ] || exit 0
 
-# rofi in dmenu mode with no candidates is the shipped way to ask for a
-# line of text - $clipboard and inhibit-idle use the same shape.
-question=$(printf '' | rofi -dmenu -lines 0 \
-    -p "Ask about this region" 2>/dev/null) || exit 0
+# fuzzel's --prompt-only is the shipped way to ask for a line of text: no
+# list, and it does not wait for stdin - $clipboard and inhibit-idle use the
+# same menu.
+question=$(fuzzel --dmenu --prompt-only "Ask about this region: " \
+    </dev/null 2>/dev/null) || exit 0
 [ -n "$question" ] || exit 0
 
 shot=$(mktemp -t ashlaros-ask-XXXXXX.png) || exit 1

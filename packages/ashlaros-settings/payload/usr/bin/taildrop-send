@@ -43,14 +43,11 @@ targets=$(tailscale file cp --targets 2>&1) || {
 if [[ -t 2 ]] && command -v fzf >/dev/null; then
   picked=$(printf '%s\n' "$targets" | fzf --with-nth=2.. --prompt='Send to: ') || exit 0
 else
-  # the theme's font, read back from the sink definitions:37 pushes it to on
-  # every reload - rofi's own default is mono 12, which would not match the
-  # rest of the menus
-  font=$(gsettings get org.gnome.desktop.interface font-name 2>/dev/null | tr -d "'")
-  fontarg=()
-  [[ -n $font ]] && fontarg=(-font "$font")
+  # fuzzel takes the theme's font and colours from ~/.config/fuzzel, like
+  # every other menu; --only-match because a name nobody listed is not a
+  # device to send to
   chosen=$(printf '%s\n' "$targets" | cut -f2 |
-    rofi -dmenu "${fontarg[@]}" -p 'Send to' -lines 10) || exit 0
+    fuzzel --dmenu --only-match --prompt 'Send to: ') || exit 0
   # A literal comparison, not a pattern: a device name is whatever its owner
   # typed, and one containing a regex metacharacter - "lap(top" - made
   # `grep -P` fail with "missing closing parenthesis" and the send silently

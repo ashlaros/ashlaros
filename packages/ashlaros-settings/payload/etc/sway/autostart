@@ -60,8 +60,6 @@ set $run_migrations '[ -x "$(command -v ashlaros-migrate)" ] && ashlaros-migrate
 
 ## apply the keyboard layout from localectl if no keyboard layout has been set via config.d
 set $auto_xdg_keyboard 'grep -q xkb_layout ~/.config/sway/config.d/*.conf || /usr/share/sway/scripts/keyboard.sh'
-set $update_rofi_theme 'mkdir -p $HOME/.config/rofi/ && echo $rofi_theme > $HOME/.config/rofi/ashlaros.rasi'
-set $create_rofi_config 'mkdir -p $HOME/.config/rofi/ && cp -n /usr/share/sway/templates/rofi/config.rasi $HOME/.config/rofi/config.rasi'
 set $disable_nm_applet_autostart '[ -x "$(command -v nm-applet)" ] && [ ! -f $HOME/.config/autostart/nm-applet.desktop ] && cp /etc/xdg/autostart/nm-applet.desktop $HOME/.config/autostart/nm-applet.desktop && echo "Hidden=true" >> $HOME/.config/autostart/nm-applet.desktop'
 set $apply_background swaymsg 'output * bg $background fill'
 

@@ -30,10 +30,10 @@
   hold: 4
 
 - name: launcher
-  description: rofi over the tiled desktop
-  # rofi grabs the keyboard and does not return, so it is detached and the
-  # scene plays with it on screen
-  overlay: rofi -show drun -show-icons -font 'JetBrainsMono Nerd Font 10' -lines 10
+  description: the launcher over the tiled desktop
+  # the desktop's own $menu, as in shots.yaml. It grabs the keyboard and does
+  # not return, so it is detached and the scene plays with it on screen
+  overlay: fuzzel
   overlay_settle: 2
   hold: 4
 
@@ -45,13 +45,13 @@
 # overlay forced open. Local, 1920x1080 headless: 38 bindings for Super,
 # 16 for Super+Shift.
 #
-# rofi has to go first: it grabs the keyboard and never returns, so the
-# previous scene leaves it on screen, over the overlay. The terminals stay -
+# The launcher has to go first: it grabs the keyboard and never returns, so
+# the previous scene leaves it on screen, over the overlay. The terminals stay -
 # the overlay is drawn over whatever is open, and that is what a user sees.
 - name: help
   description: the keybinding help narrowing as Super, then Shift, is held
   commands:
-    - pkill -x rofi
+    - pkill -x fuzzel
     # 2.5 s on each, which is long enough to read that the list changed
     - wtype -M logo -s 2500 -M shift -s 2500 -m shift -m logo
   step: 1
@@ -83,7 +83,7 @@
     - swaymsg '[app_id="foot"] kill'
     - cp /usr/share/sway/themes/matcha-green/theme.conf "$HOME/.config/sway/definitions.d/theme.light.conf_"
     - cp /usr/share/sway/themes/matcha-green/foot-theme.ini "$HOME/.config/foot/foot-theme.light.ini_"
-    # The click a user actually performs, not the rofi-driven picker: this
+    # The click a user actually performs, not a picker: this
     # is what the waybar theme module runs. It needs both stashed halves,
     # which is what #18 settled.
     - /usr/share/sway/scripts/theme-toggle.sh toggle

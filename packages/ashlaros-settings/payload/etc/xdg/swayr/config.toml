@@ -1,24 +1,33 @@
+# The desktop's menu, fuzzel, in dmenu mode. It themes itself from
+# ~/.config/fuzzel, so nothing here names a font or a colour.
 [menu]
-executable = 'rofi'
+executable = 'fuzzel'
 args = [
-    '-dmenu',
-    '-markup-rows',
-    '-show-icons',
-    '-no-case-sensitive',
-    '-no-drun-use-desktop-cache',
-    '-p','{prompt}',
-    '-font','Roboto 11',
+    '--dmenu',
+    '--prompt', '{prompt}: ',
+    '--width', '90',
 ]
 
+# Plain text, because fuzzel draws no markup: every <b>, <i> and <span> the
+# rofi rows carried would be printed as it is. So the structure a bold face
+# gave is words and separators instead, and the id rofi faded to 20% alpha is
+# gone - swayr matches the chosen row back to its window itself, and the id
+# is not something anyone picks by.
+#
+# The icon stays: fuzzel reads rofi's \0icon\x1f<path> row suffix. It has to
+# be a double-quoted TOML string for the escapes to be processed.
 [format]
-output_format = '{indent}<b>Output {name}</b>    <span alpha="20000">({id})</span>'
-workspace_format = '{indent}<b>Workspace {name} [{layout}]</b> on output {output_name}    <span alpha="20000">({id})</span>'
-container_format = '{indent}<b>Container [{layout}]</b> <i>{marks}</i> on workspace {workspace_name}    <span alpha="20000">({id})</span>'
-window_format = "{indent}<i>{app_name}</i> — {urgency_start}<b>“{title}”</b>{urgency_end} <i>{marks}</i> on workspace {workspace_name} / {output_name}    <span alpha=\"20000\">({id})</span>\u0000icon\u001f{app_icon}"
+output_format = '{indent}Output {name}'
+workspace_format = '{indent}Workspace {name} [{layout}] on {output_name}'
+container_format = '{indent}Container [{layout}] {marks} on workspace {workspace_name}'
+window_format = "{indent}{urgency_start}{app_name} — {title}{urgency_end}   {marks}  workspace {workspace_name} · {output_name}\u0000icon\u001f{app_icon}"
 indent = '    '
-urgency_start = '<span background="darkred" foreground="yellow">'
-urgency_end = '</span>'
-html_escape = true
+# a marker rather than a colour, since there is no colour to give it
+urgency_start = '! '
+urgency_end = ''
+# off with the markup: escaping only matters to a menu that parses tags, and
+# fuzzel would show a title's "&" as "&amp;"
+html_escape = false
 icon_dirs = [
     '/usr/share/icons/Papirus-Dark/64x64/apps',
     '/usr/share/icons/Papirus-Dark/48x48/apps',

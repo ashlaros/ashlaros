@@ -26,8 +26,9 @@ depends=(
     'waybar'                  # configurable bar
     'foot'                    # terminal application
     'foot-terminfo'           # terminal info for foot
-    'rofi'                    # launcher; provides rofi-wayland since 2.0
-    'rofimoji'                # emoji picker
+    'fuzzel'                  # launcher and every picker; wayland-only,
+                              # where rofi carried an xcb stack it never used
+    'rofimoji'                # emoji picker, shown in fuzzel
     'wtype'                   # the only wayland typer rofimoji supports;
                               # without it the picker falls through to its
                               # NoopTyper and raises NoTyperFoundException

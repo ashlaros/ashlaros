@@ -36,14 +36,14 @@ ashlaros-release
 
 # desktop
 #
-# sway, waybar, foot, rofi, mako, grim and the rest are not listed: they
+# sway, waybar, foot, fuzzel, mako, grim and the rest are not listed: they
 # are depends= of ashlaros-settings above, and listing them again would
 # be a second place to keep in step. Only what the settings package does
 # NOT pull belongs here.
 #
-# rofi in particular is plain `rofi`, not `rofi-wayland` - that package
-# was folded upstream and exists in no repository today; rofi provides it
-# since 2.0, which is what the settings PKGBUILD already says.
+# fuzzel is in ALARM's extra (1.15.0, the same as Arch's), with resvg beside
+# it. rofi was the one that did not fit: ALARM still ships 1.7.5, the X11
+# build from before the Wayland fork was folded back in.
 greetd
 greetd-tuigreet
 # firefox, not zen: zen-browser-bin comes from CachyOS, and this image has

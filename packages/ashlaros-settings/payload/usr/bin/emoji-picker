@@ -1,3 +1,7 @@
 #!/bin/sh
 
-rofimoji -a clipboard
+# --selector: rofimoji picks rofi by default, and fuzzel is the desktop's
+# menu - the one it themes. Escape still closes it, but rofimoji 6.8's
+# fuzzel selector parses the empty answer as an index and prints a
+# traceback on the way out; stderr goes nowhere from a sway binding.
+rofimoji --selector fuzzel -a clipboard

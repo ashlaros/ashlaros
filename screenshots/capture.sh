@@ -98,8 +98,8 @@ while read -r shot; do
 
     if [ -n "$overlay" ]; then
         log "  overlay: $overlay"
-        # rofi grabs the keyboard and does not return, so it is detached and
-        # the capture happens with it on screen
+        # a launcher grabs the keyboard and does not return, so it is
+        # detached and the capture happens with it on screen
         setsid sh -c "$overlay" >/dev/null 2>&1 &
         sleep "$overlay_settle"
     fi

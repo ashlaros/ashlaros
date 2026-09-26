@@ -357,7 +357,7 @@ round-trip faithfully; it is the only thing that really does.
 
 Settings → **Web apps** installs Google Docs, Sheets and Slides, or
 Microsoft 365, as real web apps: own window, own icon, launchable from
-rofi. It needs `firefoxpwa` and downloads a browser runtime of about
+the launcher. It needs `firefoxpwa` and downloads a browser runtime of about
 300 MB the first time.
 
 `rclone` mounts Drive or OneDrive as a directory, which is the version of

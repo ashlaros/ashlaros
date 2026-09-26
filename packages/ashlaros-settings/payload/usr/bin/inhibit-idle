@@ -11,13 +11,16 @@ inhibit() {
 
 case $1'' in
 'interactive')
-    MINUTES=$(printf '%s\n' 1 10 15 20 30 45 60 90 120 Unlimited | rofi -dmenu -p "Select how many minutes to inhibit idle:")
+    # --only-match, so what comes back is one of these or nothing: typed
+    # text is not a number of minutes. Cancelling inhibits nothing, as
+    # before, and still falls through to the status line below.
+    MINUTES=$(printf '%s\n' 1 10 15 20 30 45 60 90 120 Unlimited |
+        fuzzel --dmenu --only-match --minimal-lines --prompt "Inhibit idle for (minutes): ")
     if [ "$MINUTES" = "Unlimited" ]; then
-        seconds=$((365 * 24 * 60 * 60))
-    else
-        seconds=$((MINUTES * 60))
+        inhibit $((365 * 24 * 60 * 60))
+    elif [ -n "$MINUTES" ]; then
+        inhibit $((MINUTES * 60))
     fi
-    inhibit "$seconds"
     ;;
 'off')
     pkill -U $USER -f "systemd-inhibit --what=idle" || true

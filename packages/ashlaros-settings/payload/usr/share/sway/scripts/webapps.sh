@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install Google Docs or Office 365 as web apps: own window, own icon,
-# launchable from rofi like anything else.
+# launchable from the launcher like anything else.
 #
 # This exists because the desktop otherwise cannot open a .docx at all -
 # no suite, no viewer. LibreOffice is 147 MB and the only thing that
