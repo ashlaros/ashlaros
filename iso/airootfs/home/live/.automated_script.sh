@@ -3,7 +3,11 @@
 # Live ISO installer script: set the console up, run the configurator,
 # then hand off to the dashboard.
 #
-# Run inside a terminal window by sway at startup.
+# Run inside a terminal window by sway at startup, as the live user; it
+# re-executes itself as root first, since every step after the forms -
+# partitioning, cryptsetup, pacstrap - needs root, and the configurator
+# writes its JSON to /root where the orchestrator reads it (#101). The live
+# user's sudo is passwordless (etc/sudoers.d/live), so this asks nothing.
 #
 # The stream contract matters:
 #   - stdout is teed to the log with the CSI sequences stripped, and to the tty
@@ -11,6 +15,14 @@
 #   - COLUMNS/LINES so gum picks up the real terminal size
 set -uo pipefail
 
+# Before anything is set up, so the log, the tee and the tty are all root's.
+# --preserve-env names what sudo's env_reset would otherwise drop: TERM, or
+# the TUI draws for a "dumb" terminal, and the locale. `ps` then shows two
+# sudo processes - sudo keeps a parent to hold the pty it allocated - which
+# is one re-exec, not two.
+if [ "$(id -u)" -ne 0 ]; then
+  exec sudo --preserve-env=TERM,LANG,LC_ALL,WAYLAND_DISPLAY,XDG_RUNTIME_DIR "$0" "$@"
+fi
 
 export ASHLAROS_PATH=/usr/share/ashlaros
 export ASHLAROS_INSTALL_LOG_FILE=/var/log/ashlaros-install.log

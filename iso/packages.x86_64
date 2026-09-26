@@ -62,8 +62,8 @@ tpm2-tools
 tpm2-tss
 chwd
 
-# a live session, for looking something up mid-install. Started on tty2 by
-# root/.live_session.sh; the installer keeps tty1 (#83). The wlroots and
+# the live session: sway on tty1, logged in as the live user, running the
+# installer in a window (#83, #101). The wlroots and
 # mesa stack behind sway was already on the medium for these four, so the
 # ones below cost single-digit MiB on top of it.
 sway

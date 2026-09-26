@@ -1,5 +1,8 @@
 The AshlarOS installer opens automatically in a window. If you closed it,
-run ashlaros-install to start it again.
+run ~/.automated_script.sh to start it again.
+
+This session is the live user, with sudo and no password. root has no
+password on the other consoles, for rescue work.
 
 Press Super+Return to open a new terminal, Super+d for the application
 menu, or Super+b for Firefox.

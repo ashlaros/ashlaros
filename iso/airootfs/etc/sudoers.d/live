@@ -1,0 +1,7 @@
+# The live session's user may run anything as root without a password
+# (#101). It is the ISO's own account, locked against password login, and
+# the installer it launches needs root for every disk it touches - so a
+# password prompt here would guard nothing and only stop the install.
+# Live-only, like everything under iso/airootfs: the installed system gets
+# none of it.
+live ALL=(ALL:ALL) NOPASSWD: ALL

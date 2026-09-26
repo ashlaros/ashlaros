@@ -23,10 +23,15 @@ airootfs_image_tool_options=('-comp' 'zstd' '-Xcompression-level' '19' '-b' '1M'
 bootstrap_tarball_compression=('zstd' '-c' '-T0' '--auto-threads=logical' '--long' '-19')
 file_permissions=(
   ["/etc/shadow"]="0:0:400"
+  # sudo refuses a sudoers.d file that is group- or world-writable, and
+  # ignores one it cannot parse - either way the live user has no sudo and
+  # the installer it launches cannot touch a disk (#101)
+  ["/etc/sudoers.d/live"]="0:0:440"
   ["/root"]="0:0:750"
-  ["/root/.automated_script.sh"]="0:0:755"
-  # .zlogin invokes it directly, so a non-executable copy is a silent
-  # "permission denied" and no live session at all
-  ["/root/.live_session.sh"]="0:0:755"
+  # The live session's user. mkarchiso gives uid 1000..59999 homes their
+  # owner and fills them from /etc/skel, but only after the packages are
+  # in; the executable bit is ours to keep - sway runs this directly, and a
+  # non-executable copy is a silent "permission denied" and no installer
+  ["/home/live/.automated_script.sh"]="1000:1000:755"
   ["/usr/local/bin/choose-mirror"]="0:0:755"
 )

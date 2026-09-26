@@ -1,0 +1,30 @@
+# The live session's user: its own group, and the groups the desktop needs
+# (#101). etc/passwd and etc/shadow in the profile declare the account.
+#
+# Groups at boot rather than in an etc/group of the profile's. wheel, video,
+# input and seat get their gids from the packages' sysusers files during
+# pacstrap, so they do not exist when the profile is copied in. And an
+# etc/group in the profile would be live-only - every file under
+# iso/airootfs is - so the installer's copy of the medium would leave the
+# installed system with no group file at all.
+#
+#   wheel  sudo, through etc/sudoers.d/live
+#   video  the backlight, for the brightness keys
+#   input  way-displays reads the lid switch through libinput
+#   seat   seatd hands sway the GPU and input devices
+#
+# Before getty, so the autologin finds the memberships in place.
+[Unit]
+Description=Give the live user its groups
+DefaultDependencies=no
+After=systemd-sysusers.service
+Before=getty@tty1.service systemd-user-sessions.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/groupadd -f -g 1000 live
+ExecStart=/usr/bin/usermod -g live -aG wheel,video,input,seat live
+
+[Install]
+WantedBy=multi-user.target

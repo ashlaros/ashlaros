@@ -38,8 +38,8 @@ ISO_PACKAGE_CACHES = (Path("/var/cache/ashlaros/pkg"),)
 # NAME against a database and only then looks for the file, so with no
 # database it answers "target not found" however full the cache is -
 # which is how an offline install failed two minutes in with the disk
-# already partitioned. Offline there is no `pacman -Sy` to build one, so
-# the databases have to come off the medium too.
+# already partitioned. Offline, this directory is the mirror: see
+# medium_pacman_conf.
 ISO_PACKAGE_DB = Path("/var/cache/ashlaros/db")
 
 PACMAN_CONF = """\
@@ -310,6 +310,32 @@ def live_pacman_conf() -> str:
     return PACMAN_CONF.replace("[options]\n", added, 1)
 
 
+def medium_pacman_conf() -> str:
+    """live_pacman_conf with every repository served from the medium.
+
+    For an install with no network. Every pacman call in it refreshes
+    first, and none of them can be told not to: archinstall's strap() runs
+    `pacman -Syy` before each transaction and raises when it fails, and
+    pacstrap itself runs pacman in -Sy mode with no flag to change it. With
+    no route, either one stops the install at "installing the base system"
+    with the disk already partitioned (#101).
+
+    So rather than stop them refreshing, give them something to refresh
+    from: the databases the ISO was built against, as a file:// server.
+    Each refresh then copies them into whichever dbpath it runs against -
+    the live system's for archinstall, the target's for pacstrap - and the
+    packages themselves still come from the CacheDir above. Measured both
+    ways with the network namespace empty: the mirror stack fails both
+    refreshes, this one passes both and resolves every package from the
+    cache.
+    """
+    server = f"Server = file://{ISO_PACKAGE_DB}/sync"
+    return "\n".join(
+        server if line.startswith("Include = ") else line
+        for line in live_pacman_conf().split("\n")
+    )
+
+
 def write_live_repository_stack() -> bool:
     """Give the LIVE system the repositories the target will be built from.
 
@@ -356,56 +382,21 @@ def write_live_repository_stack() -> bool:
         info("› live repositories configured for the target's package stack")
         return True
 
-    # The live system's own copy, so anything run outside the target -
-    # pacman -Si, a hook, a retry - resolves too. The target gets its own
-    # in install_system, once there is a filesystem to put it on.
-    staged = use_staged_databases(Path("/"))
-    if staged:
+    # This file is what archinstall and pacstrap both read, so from here on
+    # every refresh of the install is served by the medium. The target's
+    # own pacman.conf is write_repository_stack's and keeps the mirrors.
+    live.joinpath("pacman.conf").write_text(medium_pacman_conf())
+    offline = subprocess.run(
+        ["pacman", "-Sy", "--noconfirm"], capture_output=True, text=True
+    )
+    if offline.returncode == 0:
         info("› no usable mirrors; installing from the packages on this medium")
     else:
         error(
-            "no usable mirrors and no databases staged on this medium: "
-            f"{result.stderr.strip() or result.stdout.strip()}"
+            "no usable mirrors, and the databases on this medium would not "
+            f"load either: {offline.stderr.strip() or offline.stdout.strip()}"
         )
     return False
-
-
-def use_staged_databases(*roots: Path) -> bool:
-    """Put the medium's sync databases where pacman will read them.
-
-    Returns whether any were found.
-
-    Without this an offline install has a full package cache and no way to
-    use it: pacman resolves a name against a database first, so every
-    target is "not found" and pacstrap dies with the disk already
-    partitioned. `pacman -Sy` is what normally writes these and it is
-    exactly what just failed, so they are copied off the medium instead.
-
-    Into each root's own `var/lib/pacman/sync`, and the TARGET's is the one
-    that matters: `pacman --root` defaults its dbpath to
-    `<root>/var/lib/pacman`, so the databases the live system holds are not
-    the databases a pacstrap of the target reads. Measured both ways - live
-    only reproduces `error: target not found`, and the target's copy
-    resolves.
-
-    Copied rather than pointed at with --dbpath: pacstrap runs inside
-    archinstall and takes no dbpath of ours, and /var/lib/pacman on the
-    live ISO is a tmpfs that is thrown away with the session anyway.
-
-    mkarchiso empties /var/lib/pacman/sync and /var/cache/pacman/pkg before
-    it packs the squashfs, which is why the staged copies live under
-    /var/cache/ashlaros - a path it does not touch.
-    """
-    staged = sorted(ISO_PACKAGE_DB.glob("sync/*"))
-    if not staged:
-        return False
-
-    for root in roots:
-        sync = root / "var/lib/pacman/sync"
-        sync.mkdir(parents=True, exist_ok=True)
-        for database in staged:
-            shutil.copy2(database, sync / database.name)
-    return True
 
 
 def prepare_live(ctx: InstallContext) -> None:
@@ -458,14 +449,6 @@ def install_system(ctx: InstallContext) -> None:
             checks["offline"] = not online
         installer.sanity_check(**checks)
 
-        # The target's own databases, now that it is mounted. This is the
-        # copy pacstrap actually reads: `pacman --root` defaults its dbpath
-        # to <root>/var/lib/pacman, so the live system's are not consulted
-        # and an offline install without this fails "target not found" with
-        # the disk already written.
-        if not online:
-            use_staged_databases(ctx.target)
-
         # Seed the target from the medium before anything is installed
         # into it. The ISO already carries a working userland, so this
         # replaces unpacking those packages a second time - and lets the
@@ -515,9 +498,15 @@ def install_system(ctx: InstallContext) -> None:
         if config.swap and config.swap.enabled:
             installer.setup_swap(algo=config.swap.algorithm)
 
+        # One transaction, because that is how seed_install_cache resolved
+        # what the medium carries. Split, the first half chooses providers
+        # with none of the desktop in view - pulse-native-provider and
+        # pipewire-session-manager for ashlaros-settings' pulsemixer, where
+        # the desktop's pipewire-pulse and wireplumber would do - and those
+        # are packages the medium never staged, so an offline install
+        # stopped there (#101).
         info("› installing the AshlarOS package set")
-        installer.add_additional_packages(config.packages)
-        installer.add_additional_packages(DESKTOP_PACKAGES)
+        installer.add_additional_packages([*config.packages, *DESKTOP_PACKAGES])
 
         info("› creating the user")
         users = arch.users(config)

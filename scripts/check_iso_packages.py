@@ -113,11 +113,7 @@ def unstaged_requests(rootfs: Path) -> list[str]:
     here would disagree with the staging the first time either file changed
     shape, and disagree silently.
     """
-    requested = {
-        "base",
-        *seed_install_cache.iso_packages(),
-        *seed_install_cache.desktop_packages(),
-    }
+    requested = set(seed_install_cache.requested_packages())
 
     cache = rootfs / seed_install_cache.cache_path().relative_to("/")
     cached = {

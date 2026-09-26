@@ -135,6 +135,21 @@ is absent, so the ISO installs sway, foot and firefox and nothing else of
 the configured desktop, because pulling it in twice only makes the image
 bigger.
 
+What an install asks pacman for comes from three places - the
+configurator's `packages`, `DESKTOP_PACKAGES`, and `base` - and
+`scripts/seed_install_cache.py` stages all three on the medium, so an
+install needs no network. `requested_packages()` is the one list;
+`check_iso_packages.py` checks the staged cache against it, so a package
+added to any of the three and not staged fails the ISO build rather than
+the first offline install.
+
+The configurator's packages and `DESKTOP_PACKAGES` go to pacman as one
+transaction, and that has to stay true. The stage resolves them together,
+and pacman picks a provider for a virtual dependency by what else is in the
+same transaction: split in two, the first half chose
+`pulse-native-provider` for `pulsemixer` where the desktop's
+`pipewire-pulse` would do, and that package was never staged.
+
 `DESKTOP_PACKAGES` in `installer/orchestrator/phases_impl.py` is the
 **installed** system: everything the desktop needs that is not implied by a
 config file we ship.

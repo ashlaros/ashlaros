@@ -41,5 +41,5 @@ bindsym $mod+Shift+space floating toggle
 
 # Start the installer in a terminal window. The user can start more instances
 # or open other applications alongside it.
-exec $term -a ashlaros-installer -e /root/.automated_script.sh
+exec $term -a ashlaros-installer -e /home/live/.automated_script.sh
 include /etc/sway/config.d/*

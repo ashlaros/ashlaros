@@ -18,6 +18,12 @@ Write it with `dd` or `cp` straight to the device; it is a hybrid image
 with a protective MBR and a GPT, so it needs no preparation. A writer that
 repacks the image can leave the EFI partition unbootable.
 
+The medium boots to a desktop session as its own `live` user, with the
+installer already open in a window beside a terminal and a browser. It
+installs without a network: every package an install needs is on the
+medium, so a machine with no connection finishes the same install as one
+with, and one with a connection only uses it to rank mirrors for later.
+
 The installer asks four questions, each with a default, so Enter through all
 of them installs: locale and keyboard, user and password, encryption, disk
 layout. Encryption is on by default and the disk is LUKS2 with the root

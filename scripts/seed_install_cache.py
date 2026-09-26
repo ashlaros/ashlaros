@@ -40,17 +40,20 @@ ROOT = Path(__file__).resolve().parent.parent
 # Imported rather than reimplemented: it already parses the same two lists
 # this file does, and a second copy of that parsing is one that drifts.
 sys.path.insert(0, str(ROOT / "installer"))
-from expected_package_count import count  # noqa: E402
-
-DESKTOP_PACKAGES_RE = re.compile(
-    r"^DESKTOP_PACKAGES\s*[:=].*?[\(\[](.*?)[\)\]]\s*$",
-    re.MULTILINE | re.DOTALL,
+from expected_package_count import (  # noqa: E402
+    configurator_packages,
+    count,
+    desktop_packages,
 )
-# A quoted name alone on its line, which is how the tuple spells an entry.
-# Scraping every quoted word instead also picks up prose: the comment beside
-# "mise" says arch=('x86_64'), and x86_64 became a package the cache tried to
-# download - "error: target not found: x86_64".
-ENTRY = re.compile(r"""^\s*["']([\w.+@-]+)["']\s*,\s*$""", re.MULTILINE)
+
+# What archinstall itself straps during an install, beyond the lists it is
+# handed, that the live medium does not already carry. setup_swap() straps
+# zram-generator, and the configurator enables swap; everything else it can
+# strap - sudo, linux-firmware, mkinitcpio, the microcode, efibootmgr,
+# lvm2, libfido2, iwd - is installed on the medium and reaches the target
+# through the live copy. Checked against archinstall 4.4's pacman.strap()
+# calls and the 2026.09.26 ISO.
+ARCHINSTALL_EXTRAS = ("zram-generator",)
 
 
 def cache_path() -> Path:
@@ -71,18 +74,21 @@ def cache_path() -> Path:
     return Path(paths[0])
 
 
-def desktop_packages() -> list[str]:
-    """The package names install_system() adds after the base system.
+def requested_packages() -> list[str]:
+    """Every name an install asks pacman for, from every list it reads.
 
-    Read out of the orchestrator rather than duplicated here: a second list
-    beside it is one that drifts, and the drift is silent - the cache would
-    simply stop covering what the installer asks for.
+    One function, so the staging here and check_iso_packages.py's check of
+    it read the same set: the check built its own and, missing the
+    configurator's list the same way, passed an ISO that could not install
+    offline (#101).
     """
-    source = (ROOT / "installer" / "orchestrator" / "phases_impl.py").read_text()
-    match = DESKTOP_PACKAGES_RE.search(source)
-    if not match:
-        raise SystemExit("seed_install_cache: DESKTOP_PACKAGES not found in phases_impl.py")
-    return ENTRY.findall(match.group(1))
+    return sorted({
+        "base",
+        *iso_packages(),
+        *configurator_packages(),
+        *desktop_packages(),
+        *ARCHINSTALL_EXTRAS,
+    })
 
 
 def iso_packages() -> list[str]:
@@ -225,10 +231,15 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    # `base` explicitly: minimal_installation() pacstraps it and it appears
-    # in neither list, so without it the one transaction that runs before
-    # any other is the one with nothing cached to serve it.
-    packages = sorted({"base", *iso_packages(), *desktop_packages()})
+    # Every list the install asks for, read from where the installer keeps
+    # it. `base` explicitly: minimal_installation() pacstraps it and it
+    # appears in none of them. The configurator's packages were missing
+    # until 2026-09-26 - base-devel, chwd, the ashlaros-* set and
+    # ashlaros-settings, which phases_impl installs with DESKTOP_PACKAGES
+    # and which pull 141 packages the cache did not hold. An install with no
+    # network failed at its first package transaction, and nothing ran one
+    # to notice (#101).
+    packages = requested_packages()
     cache = args.rootfs / cache_path().relative_to("/")
 
     print(f"staging {len(packages)} requested packages, with dependencies, into {cache}")
