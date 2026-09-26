@@ -5,10 +5,13 @@ set $mode_recording "<span foreground='$color10'></span>  \
 set $recorder /usr/share/sway/scripts/recorder.sh
 
 mode --pango_markup $mode_recording {
+        ## Recording // Record the screen // r ##
         $bindsym r exec $recorder, mode "default"
+        ## Recording // Record with sound // Shift + r ##
         $bindsym Shift+r exec $recorder -a, mode "default"
 
         # Return to default mode.
+        ## Recording // Cancel // Escape ##
         $bindsym Escape mode "default"
 }
 

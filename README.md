@@ -102,6 +102,25 @@ counts ISO downloads, and `/stats.json` is the same data
 machine-readable. A download is one whole-image request that succeeded, so
 a resumed download counts once and a checksum file does not count at all.
 
+## Keybindings
+
+Hold a modifier and the bindings that use it appear at the top of the
+screen: hold Super for the Super bindings, add Shift and the list narrows
+to Super+Shift. It disappears as soon as a binding runs, and a second
+chord in the same hold does not bring it back. Inside a mode, the
+screenshot or resize one, it lists that mode's keys. Shift on its own
+shows nothing, since that is typing.
+
+`Super+?` opens every binding at once, and closes it again. The list is
+read from the comments in the sway config, so a binding you add under
+`~/.config/sway/config.d/` with a `## Category // Action // Keys ##` line
+above it shows up too.
+
+The overlay follows the theme's colours. sway has no event for a key
+being pressed, so it watches four bars that are never drawn, one per
+modifier, which sway updates as each goes down and up. No key is bound
+for it and nothing reads the keyboard.
+
 ## Settings
 
 `ashlaros-settings-tui` (`Super+,`, or "AshlarOS Settings" in the

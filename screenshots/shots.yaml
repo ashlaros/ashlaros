@@ -160,18 +160,21 @@
   # photographed exactly that, twice, while the job stayed green: a picture
   # nobody looks at asserts nothing.
   #
-  # So assert on the text eww holds. `eww get` returns the variable the
-  # label renders from - the poll command's output after eww has been
-  # through it - so a mangled command fails here as surely as a mangled
-  # config would.
+  # So assert on what eww holds. `eww get help-sheet` is the parsed sheet the
+  # window renders from, after eww has run the poll command - so a mangled
+  # command fails here as surely as a mangled config would. Every entry
+  # needs an action and a keybinding, and the count guards the other
+  # direction: an empty sheet passes a test that only asks what entries
+  # look like. 45 in the default mode today; the modes' own keys (#89) take
+  # it to 66.
   #
-  # The invariant, rather than the symptom: every line the parser emits is
-  # one `action: <b>binding</b>` pair, so a line that is not one is a line
-  # something split. That is what any future mangling produces, not just
-  # this bug's n and r. The count guards the other direction - an empty
-  # variable passes a test that only asks what the lines look like.
+  # help-keys is the held-keys window, open all session and empty until a
+  # modifier is down. Nothing here can hold a key, so the check is that it
+  # opened and that its watcher reports the resting state: nothing to show.
   assert:
-    - test "$(eww get help-text | wc -l)" -ge 40
-    - '! eww get help-text | grep -qvx ''.*: <b>.*</b>'''
+    - test "$(eww get help-sheet | jq '[.[] | select(.mode == "default")] | length')" -ge 40
+    - eww get help-sheet | jq -e 'all(.action != "" and .keybinding != "")'
+    - eww active-windows | grep -qx 'help-keys: help-keys'
+    - eww get help-held | jq -e '.show == false'
   after:
     - /usr/share/sway/scripts/help.sh --toggle

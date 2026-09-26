@@ -29,4 +29,4 @@ awk -v ROOT="$root" \
 	-v POWER="󰐥" \
 	-f "$here/sbdp.awk" </dev/null |
 	jq -R -s 'split("\n") | map(select(length > 0)) | map(split("\u001f"))
-	          | map({category: .[0], action: .[1], keybinding: .[2]})'
+	          | map({category: .[0], action: .[1], keybinding: .[2], mods: .[3], mode: .[4]})'

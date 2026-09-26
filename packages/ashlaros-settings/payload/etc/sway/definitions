@@ -43,6 +43,9 @@ set $apply_vscode_settings $script_path/update-vscode-settings.sh "$term-font" "
 set $apply_zed_settings $script_path/update-zed-settings.sh "$term-font" "$vscode-theme"
 set $generate_background $script_path/generate-bg.sh "$accent-color" "$text-color" "$background-color"
 set $generate_waybar_style $script_path/generate-waybar-style.sh "$background-color" "$text-color" "$accent-color" "$color8" "$color9"
+# The help overlay's palette, beside waybar's: the same three colours, into
+# ~/.config/eww/colors.css, which eww.css imports (#89)
+set $generate_help_style $script_path/generate-help-style.sh "$background-color" "$text-color" "$accent-color"
 # aerc is an optdepend, so this writes a styleset for a client that may not
 # be installed - cheap, and it means mail is themed the moment it is
 set $generate_aerc_styleset $script_path/generate-aerc-styleset.sh "$background-color" "$text-color" "$accent-color" "$color8" "$color9"

@@ -1,51 +1,93 @@
-; The keybinding help overlay.
+; The keybinding help overlay: every binding, or only the ones that fit
+; what is being held (#89).
 ;
 ; Replaces nwg-wrapper, which needed one process per output, a manual
 ; `swaymsg -t get_outputs` loop to spawn them, and a pkill over an argv
-; pattern to toggle them. eww's daemon owns the window, so `eww open
+; pattern to toggle them. eww's daemon owns the windows, so `eww open
 ; --toggle help` is the whole toggle and a reload does not respawn anything.
 ;
 ; :monitor 0 rather than a name: eww takes either, and the overlay belongs
 ; on one screen rather than every screen at once - which is also what the
 ; old per-output loop got wrong when a display was hotplugged.
+;
+; Two windows. `help` is the whole sheet, Super+? and the first login, as it
+; always was. `help-keys` is the same sheet narrowed while keys are held:
+; hold Super and it lists the Super bindings, add Shift and it narrows to
+; Super+Shift, enter screenshot mode and it lists that mode's keys. It
+; hides once a binding fires, and stays hidden until the modifiers are all
+; up, so a second Super+d in the same hold does not flash it back.
 
-(defpoll help-text
+; The sheet as JSON, one object per binding: category, action, keybinding,
+; mods (a Super/sHift/Ctrl/Alt mask, "s---" for Super alone) and the mode it
+; lives in. Re-read hourly, so a binding added in config.d shows up without
+; a restart.
+(defpoll help-sheet
   :interval "1h"
-  :initial ""
-  ; sbdp.sh parses the sway config and emits JSON; jq turns it into the
-  ; Pango markup that label :markup renders. Sorting is stable, so entries
-  ; within a category keep the order the parser produced them in.
-  ;
-  ; jq's own newlines are the line breaks; nothing reshapes them afterwards.
-  ; This used to end `| tr '\n' '\r' | sed 's/\r/\\n/g'`, which never
-  ; reached /bin/sh as written: yuck's lexer unescapes \(.) inside a string
-  ; literal first, so sh ran `tr 'n' 'r' | sed 's/r/\n/g'` and broke every
-  ; line at each n and r - "window" as "wi/dow", "Super" as "Supe/",
-  ; "[number]" as "/umbe/]". Nothing needed escaping to begin with: eww's
-  ; run_command only trims newlines off the ends of a command's output, so
-  ; the ones between entries survive into the markup pango renders.
-  `/usr/share/sway/scripts/sbdp.sh $HOME/.config/sway/config | jq --raw-output 'sort_by(.category) | .[] | .action + ": <b>" + .keybinding + "</b>"'`)
+  :initial "[]"
+  `/usr/share/sway/scripts/sbdp.sh $HOME/.config/sway/config`)
 
-; :show-truncated false is what stops the text being cut. For a :markup
-; label eww's default is show-truncated true, which sets pango's
-; EllipsizeMode::End; with the label narrower than its content that ate
-; every line down to "…" and, once the window had a width, broke them
-; mid-word instead. eww's own doc: disabling it "will completly disable
-; truncation on pango markup", which is exactly what a cheatsheet wants -
-; a binding shown as "Move focused wo…" tells nobody anything.
+; What is held and what fits it, from help-keys.sh: {"show": bool,
+; "entries": [...]}, the bindings already filtered and sorted. The filter is
+; in the script rather than here because it compares against sway's mode
+; names, which are pango markup full of quotes that would have to be
+; spliced into jq source. deflisten, so eww runs it only while a window
+; reads it - and help-keys is open all session.
+(deflisten help-held
+  :initial '{"show": false, "entries": []}'
+  `/usr/share/sway/scripts/help-keys.sh`)
+
+; One line of the sheet. :show-truncated false stops pango eating a long
+; action down to "…": eww's default is EllipsizeMode::End, which turned every
+; line into a bare ellipsis once the window had a width.
+(defwidget help-entry [entry]
+  (box :class "help-entry" :space-evenly false :spacing 16
+    (label :class "help-action" :xalign 0 :hexpand true :show-truncated false
+           :text {entry.action})
+    (label :class "help-binding" :xalign 1 :show-truncated false
+           :text {entry.keybinding})))
+
+; The whole sheet, default mode, in two columns: 45 bindings in one ran
+; 960 px tall, off the bottom of a 1080p screen once the bar is counted.
+; Sorted by category - a stable sort, so bindings within one keep the order
+; the parser found them in - then split at the middle, the first half on
+; the left.
 (defwidget help-box []
-  (box :class "help" :orientation "vertical" :halign "start" :valign "end"
-    (label :markup help-text :xalign 0 :wrap false :show-truncated false)))
+  (box :class "help" :orientation "horizontal" :space-evenly true :spacing 32
+    (for column in {jq(help-sheet, 'map(select(.mode == "default")) | sort_by(.category)
+                                    | ((length + 1) / 2 | floor) as $half
+                                    | [.[:$half], .[$half:]]')}
+      (box :orientation "vertical" :space-evenly false
+        (for entry in column
+          (help-entry :entry entry))))))
 
+(defwidget help-keys-box []
+  (box :class "help help-keys" :orientation "vertical" :space-evenly false
+    (for entry in {help-held.entries}
+      (help-entry :entry entry))))
+
+; :stacking "overlay", above windows and the bar: the sheet is looked at
+; while working, and "bg" put it behind every window, visible only on an
+; empty workspace. :focusable false, or the layer takes the keyboard and
+; the binding being looked up never reaches sway.
+;
 ; :width is not optional. Omitted, eww's geometry defaults to Pixels(0)
 ; and app.rs calls set_size_request(0, 0), so GTK allocates the minimum
 ; and every label ellipsizes to a bare "…" - which is what the overlay
-; actually shipped as. The height is left to the content: the number of
-; keybindings changes with the config, and a fixed height would either
-; clip the list or leave a gap under it.
+; actually shipped as. The height is left to the content.
 (defwindow help
   :monitor 0
-  :stacking "bg"
-  :geometry (geometry :x "20px" :y "20px" :width "620px"
-                      :anchor "bottom left")
+  :stacking "overlay"
+  :focusable false
+  :geometry (geometry :y "40px" :width "1280px" :anchor "top center")
   (help-box))
+
+; Open for the whole session and empty until a key is held. A revealer
+; flipping on a variable costs the same 55 ms as `eww open`, measured, and
+; needs no second process to drive it.
+(defwindow help-keys
+  :monitor 0
+  :stacking "overlay"
+  :focusable false
+  :geometry (geometry :y "40px" :width "720px" :anchor "top center")
+  (revealer :transition "none" :reveal {help-held.show}
+    (help-keys-box)))

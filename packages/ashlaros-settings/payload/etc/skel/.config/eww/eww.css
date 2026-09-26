@@ -1,9 +1,14 @@
-/* The help overlay. Carried over from the nwg-wrapper stylesheet: a
- * transparent window with shadowed text, so the keybindings read over
- * whatever wallpaper is behind them.
+/* The help overlay (#89): a panel in the theme's colours at the top of
+ * the screen, so it reads over whatever window is under it - it sits on
+ * the overlay layer now, not behind everything on the background.
+ *
+ * colors.css is written by generate-help-style.sh from the sway theme on
+ * every reload, and changes with it. This file is yours to edit.
  *
  * eww refuses to start when both eww.css and eww.scss exist, so there is
  * exactly one of them. */
+
+@import url("colors.css");
 
 window {
   background-color: rgba(0, 0, 0, 0);
@@ -12,7 +17,18 @@ window {
 }
 
 .help {
-  background-color: rgba(0, 0, 0, 0);
-  padding: 10px;
-  text-shadow: 2px 2px 4px #282828;
+  background-color: alpha(@help_bg, 0.92);
+  color: @help_fg;
+  border: 1px solid alpha(@help_accent, 0.6);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.help-entry {
+  padding: 1px 0;
+}
+
+.help-binding {
+  color: @help_accent;
+  font-weight: bold;
 }

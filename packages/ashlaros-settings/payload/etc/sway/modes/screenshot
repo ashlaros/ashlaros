@@ -8,28 +8,36 @@ set $mode_screenshot "<span foreground='$color10'>󰄄</span>  \
 
 mode --pango_markup $mode_screenshot {
     # output = currently active output
+    ## Screenshot // The whole screen // o ##
     $bindsym o mode "default", exec $screenshot_screen
+    ## Screenshot // The whole screen, and upload it // Shift + o ##
     $bindsym Shift+o mode "default", exec $screenshot_screen_upload
 
     # pick the region to screenshot
+    ## Screenshot // A region you pick // p ##
     $bindsym p mode "default", exec $screenshot_selection
+    ## Screenshot // A region, and upload it // Shift + p ##
     $bindsym Shift+p mode "default", exec $screenshot_selection_upload
 
     # the useful half of Circle to Search: the region's text, on the
     # clipboard, decoded locally. No Shift variant - there is no upload
     # here and deliberately so, see the scripts.
+    ## Screenshot // Copy a region's text // t ##
     $bindsym t mode "default", exec $capture_text
 
     # decode a QR in the region. The value goes to the clipboard and
     # nowhere else; it is routinely a secret.
+    ## Screenshot // Copy a QR code's contents // q ##
     $bindsym q mode "default", exec $capture_qr
 
     # ask a model about the region. Unlike t and q this leaves the
     # machine - deliberately its own key, and nothing happens at all
     # unless the user configured a provider.
+    ## Screenshot // Ask a model about a region // a ##
     $bindsym a mode "default", exec $capture_ask
 
     # Return to default mode.
+    ## Screenshot // Cancel // Escape ##
     $bindsym Escape mode "default"
 }
 
