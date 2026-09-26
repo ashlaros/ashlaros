@@ -61,6 +61,18 @@ def frames() -> list[dict]:
         }
         for shot in shots
     ]
+    # The installer is photographed by build-iso's boot test, not by the
+    # capture job - the desktop container has no ISO to boot - and
+    # published by the same release that passed it. Not in shots.yaml for
+    # that reason, and after the desktop's pictures rather than among them.
+    out.append(
+        {
+            "kind": "image",
+            "src": f"{BASE}/screenshots/installer.png",
+            "alt": "AshlarOS: the installer, open in a window on the live medium",
+            "caption": "the installer, open in a window on the live medium",
+        }
+    )
     # The tour is one file the record job always writes under this name,
     # so it is not in shots.yaml to be read from. It goes last because it
     # is the longest thing to load and the least likely to be wanted

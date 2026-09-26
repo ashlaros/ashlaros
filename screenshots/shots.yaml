@@ -63,13 +63,15 @@
     # wallpaper and waybar, and the point of this picture is the tool in
     # its place rather than the tool alone.
     #
-    # Sized to the menu rather than to the terminal. gum draws a seven-line
-    # list at the top of whatever it is given, so a window big enough to
-    # look like a terminal is mostly empty space below the thing being
-    # photographed - and `move position center` centres the window, which
-    # leaves the content off-centre by however much of it is blank.
+    # Tall enough for the whole menu, which is the point of the picture.
+    # This was 320 when the menu was seven rows; it grew into groups, gum
+    # scrolls a list longer than its window, and the published shot began
+    # halfway down at "Location" with no sign there was anything above it.
+    # 600 holds every row a fully equipped machine shows - 36, measured in
+    # a headless session - and the container here shows fewer, so there is
+    # room below rather than a list cut short.
     - '[app_id="foot"] floating enable'
-    - '[app_id="foot"] resize set 720 320'
+    - '[app_id="foot"] resize set 720 600'
     - '[app_id="foot"] move position center'
 
 # rofi is detached so the capture happens with it on screen, and it draws

@@ -53,7 +53,10 @@ boot)
   # finds the loader entry, the kernel and squashfs come up, and the
   # autostart runs the configurator. A broken import in the orchestrator,
   # or an ISO with no bootable EFI partition, cannot get here.
-  SECONDS_TO_RUN=1800 "$here/run.sh" install-start
+  #
+  # At 1920x1080 because this picture is also the installer's on the
+  # landing page: publish uploads it once the ISO it shows has passed.
+  RES=1920x1080 SECONDS_TO_RUN=1800 "$here/run.sh" install-start
   "$here/run.sh" shot ci-installer >/dev/null
   echo "== the ISO reaches the installer"
 

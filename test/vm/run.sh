@@ -49,7 +49,7 @@ start() {
   docker run -d --rm --name "$container" --platform linux/amd64 \
     --device /dev/kvm -v "$workspace:/vm" \
     ${TPM:+-e "TPM=$TPM"} ${CDROM:+-e "CDROM=$CDROM"} ${LID:+-e "LID=$LID"} \
-    ${VGA:+-e "VGA=$VGA"} ${NET:+-e "NET=$NET"} \
+    ${VGA:+-e "VGA=$VGA"} ${NET:+-e "NET=$NET"} ${RES:+-e "RES=$RES"} \
     "$image" bash /vm/boot.sh "${SECONDS_TO_RUN:-10800}" >/dev/null
   echo "## $container started, workspace $workspace"
   # boot.sh runs detached, so its own output goes to the container's log

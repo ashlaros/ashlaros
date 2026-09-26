@@ -7,6 +7,12 @@ publishes, which moves independently of the ISO: writing them under
 `<version>/screenshots/` would say "this is what that ISO looked like" while
 meaning "what the desktop looked like whenever this last ran". The ISO build
 is welcome to publish its own versioned shots; this job does not pretend to.
+
+build-iso uses it too, for the one picture the desktop container cannot
+take: the installer, photographed by the boot test of the ISO being
+published. Same prefix, so the landing page reads every picture from one
+place, and latest/ is the right word for it - it is replaced with each
+release that passes.
 """
 
 import argparse

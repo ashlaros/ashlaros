@@ -11,6 +11,8 @@
 #   TPM    no  - run without a TPM, for the passphrase-only path
 #   CDROM  no  - boot the installed disk instead of the installer
 #   NET    no  - no network device at all, for the offline install
+#   RES    WxH - the std adapter's preferred mode, for a picture meant to
+#                be published rather than read
 set -u
 
 seconds="${1:-180}"
@@ -19,10 +21,16 @@ cdrom="${CDROM:-yes}"
 net="${NET:-yes}"
 lid="${LID:-no}"
 
+# RES is the resolution the adapter's EDID offers, which the kernel and
+# sway take as the monitor's own. Without it the std adapter comes up at
+# 1280x800, a size nobody's screen is.
 case "${VGA:-std}" in
   virtio) vga=(-device virtio-vga) ;;
   *) vga=(-vga std) ;;
 esac
+if [[ -n ${RES:-} && ${VGA:-std} == std ]]; then
+  vga=(-vga none -device "VGA,xres=${RES%x*},yres=${RES#*x}")
+fi
 
 mkdir -p /vm/tpm /vm/out
 [ -f /vm/target.qcow2 ] || qemu-img create -f qcow2 /vm/target.qcow2 20G >/dev/null
