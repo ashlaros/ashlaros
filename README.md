@@ -142,7 +142,8 @@ know. The menu groups them by what you are looking for:
   brightness, when the screen dims, locks and sleeps, whether it stays on
   while media plays, the night light's warmth and hours, power profiles
 - **Appearance:** the day and night theme, the wallpaper, focus flashing,
-  automatic tiling, gaps and borders
+  automatic tiling, gaps and borders. The sun or moon in the bar switches
+  between the two; right-click it to have it follow sunrise and sunset
 - **Software:** kernel variants, hardware profiles, packages, packages
   nothing needs any more, snapshots
 - **Security:** how the disk unlocks, fingerprint enrolment, face unlock

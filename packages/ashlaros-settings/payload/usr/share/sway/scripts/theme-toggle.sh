@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+#
+# The day/night theme: a pair of themes, one live in theme.conf and the
+# other stashed beside it, swapped by the waybar module and - when the lock
+# file is there - at sunrise and sunset.
+#
+# The stash is named for when it is shown, in the files' own spelling:
+# theme.light.conf_ is the DAY theme, theme.dark.conf_ the NIGHT one, and
+# foot-theme.light/.dark.ini_ likewise. "light" and "dark" are those file
+# names and nothing more - a night theme can be a light one, and the
+# automatic switch has always shown `light` between sunrise and sunset.
+# Everything a person reads says day and night.
 set -u
 
 LOCKFILE="$HOME/.local/auto-theme-toggle"
@@ -52,6 +63,14 @@ if [ -f "$LOCKFILE" ]; then
         NEXT_SECONDARY_THEME="light"
     fi
 fi
+
+# the stash's name, as a person says it
+when() {
+    case $1 in
+    light) echo day ;;
+    dark) echo night ;;
+    esac
+}
 
 merge_foot_themes() {
     local primary_theme=$1
@@ -126,9 +145,16 @@ case $1'' in
     ;;
 'status')
     #Returns a string for Waybar
-    text="switch to ${CURRENT_SECONDARY_THEME} theme\r(Right click to switch automatically)"
-    alt=$CURRENT_PRIMARY_THEME
+    text="switch to the $(when "$CURRENT_SECONDARY_THEME") theme\r(Right click to switch automatically)"
+    alt=$(when "$CURRENT_PRIMARY_THEME")
     if [ -f "$LOCKFILE" ]; then
+        # Applied first, so what the bar says is the half now showing. The
+        # CURRENT_ names were read before this swap, which is how the icon
+        # said "night" at noon for the whole interval after a switch.
+        ensure_theme $NEXT_PRIMARY_THEME $NEXT_SECONDARY_THEME >/dev/null
+        CURRENT_PRIMARY_THEME=$NEXT_PRIMARY_THEME
+        CURRENT_SECONDARY_THEME=$NEXT_SECONDARY_THEME
+
         next_switch_unix=$(sunrise_unix)
         if [ $current_unix -ge $next_switch_unix ]; then
             next_switch_unix=$(sunset_unix)
@@ -138,10 +164,8 @@ case $1'' in
         fi
         hours=$((($next_switch_unix - $current_unix) / (60 * 60)))
         minutes=$((($next_switch_unix - $current_unix) / 60 % 60))
-        text="switching to ${CURRENT_SECONDARY_THEME} theme in ${hours}h ${minutes}m\r(Right click to disable)"
-        alt="auto_${CURRENT_PRIMARY_THEME}"
-
-        ensure_theme $NEXT_PRIMARY_THEME $NEXT_SECONDARY_THEME
+        text="switching to the $(when "$CURRENT_SECONDARY_THEME") theme in ${hours}h ${minutes}m\r(Right click to disable)"
+        alt="auto_$(when "$CURRENT_PRIMARY_THEME")"
     fi
 
     jq -cn --arg alt "$alt" --arg text "$text" '{"alt":$alt,"tooltip":$text}'

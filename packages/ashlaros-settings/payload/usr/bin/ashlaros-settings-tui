@@ -3056,11 +3056,18 @@ wluma_entry() {
 # prompts and a separate foot window just to ask for sudo. The same steps
 # here, in the terminal this already runs in.
 #
-# A theme is a pair. The day theme becomes the active one; the night theme
-# is stashed beside it as theme.light.conf_ and foot-theme.light.ini_ -
-# the names theme-toggle.sh reads to tell which half is live and writes
-# back when the waybar toggle flips them. "light" is that contract, not a
-# description of the theme.
+# A theme is a pair, one for the day and one for the night. theme-toggle.sh
+# keeps the half that is not showing stashed beside theme.conf, and names
+# the stash for when it is shown: .light. is the day half and .dark. the
+# night half, in both theme.*.conf_ and foot-theme.*.ini_ - what its
+# automatic switch applies between sunrise and sunset is `light`. The file
+# names are that contract, not a description of either theme.
+#
+# This entry used to write the day theme into theme.conf and the night theme
+# into theme.light.conf_, which is to say the night theme into the slot the
+# toggle shows by day: with the automatic switch on, the pair ran the wrong
+# way round, night theme at noon. Migration 1790459411 swaps pairs it can
+# tell were written that way.
 THEME_DIR=/usr/share/sway/themes
 
 # Missing packages a theme names, one per line; empty when all are there.
@@ -3105,12 +3112,19 @@ theme_entry() {
   screen "Theme"
 
   local defs="$HOME/.config/sway/definitions.d"
-  local day night
-  day=$(theme_name_of "$defs/theme.conf")
-  night=$(theme_name_of "$defs/theme.light.conf_")
-  say "Day theme:   ${day:-a theme.conf you edited}"
-  say "Night theme: ${night:-a theme.light.conf_ you edited}"
-  say "The waybar toggle switches between them."
+  # Which file holds which half depends on which is showing: the live one
+  # is theme.conf, the other is stashed as .light. (day) or .dark. (night).
+  local day_file night_file day night
+  if [[ -f $defs/theme.dark.conf_ ]]; then
+    day_file=$defs/theme.conf night_file=$defs/theme.dark.conf_
+  else
+    day_file=$defs/theme.light.conf_ night_file=$defs/theme.conf
+  fi
+  day=$(theme_name_of "$day_file")
+  night=$(theme_name_of "$night_file")
+  say "Day theme:   ${day:-$(basename "$day_file"), which you edited}"
+  say "Night theme: ${night:-$(basename "$night_file"), which you edited}"
+  say "The waybar toggle switches between them, and can follow sunrise and sunset."
   echo
 
   local -a themes=()
@@ -3135,18 +3149,27 @@ theme_entry() {
   theme_install "$THEME_DIR/$new_day" || { pause; return 1; }
   theme_install "$THEME_DIR/$new_night" || { pause; return 1; }
 
+  # The night theme goes live and the day theme into its stash, .light.;
+  # then theme-toggle.sh swaps them if it is daytime and the switch is
+  # automatic. One layout to write, and the toggle - not this - decides
+  # which half fits the hour. theme.dark.conf_ is the night half's stash,
+  # so a copy left from the other layout would be read as one: it goes.
   mkdir -p "$defs" "$HOME/.config/foot"
-  cp --backup "$THEME_DIR/$new_day/theme.conf" "$defs/theme.conf"
-  cp --backup "$THEME_DIR/$new_night/theme.conf" "$defs/theme.light.conf_"
+  cp --backup "$THEME_DIR/$new_night/theme.conf" "$defs/theme.conf"
+  cp --backup "$THEME_DIR/$new_day/theme.conf" "$defs/theme.light.conf_"
+  [[ -f $defs/theme.dark.conf_ ]] && mv --backup "$defs/theme.dark.conf_" "$defs/theme.dark.conf_~"
   # foot-theme.ini is not one of the pair: theme-toggle.sh builds it from
   # the .dark. and .light. halves, so writing it directly would be undone
   # by the first toggle. Write the halves, then have it merged.
   [[ -f $THEME_DIR/$new_day/foot-theme.ini ]] &&
-    cp --backup "$THEME_DIR/$new_day/foot-theme.ini" "$HOME/.config/foot/foot-theme.dark.ini_"
+    cp --backup "$THEME_DIR/$new_day/foot-theme.ini" "$HOME/.config/foot/foot-theme.light.ini_"
   [[ -f $THEME_DIR/$new_night/foot-theme.ini ]] &&
-    cp --backup "$THEME_DIR/$new_night/foot-theme.ini" "$HOME/.config/foot/foot-theme.light.ini_"
+    cp --backup "$THEME_DIR/$new_night/foot-theme.ini" "$HOME/.config/foot/foot-theme.dark.ini_"
   /usr/share/sway/scripts/theme-toggle.sh merge-foot >/dev/null 2>&1 || true
-  # last, so the reload applies the day theme with everything in place
+  # `status` applies the half the hour calls for when the switch is
+  # automatic, and reloads sway if that meant a swap; otherwise the reload
+  # here shows the night theme, which the toggle then flips on a click
+  /usr/share/sway/scripts/theme-toggle.sh status >/dev/null 2>&1 || true
   swaymsg reload >/dev/null 2>&1
 
   say "Day: $new_day, night: $new_night."

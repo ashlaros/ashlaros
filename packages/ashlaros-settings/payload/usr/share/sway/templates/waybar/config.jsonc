@@ -242,11 +242,12 @@
         "format": "{icon}",
         "interval": 300,
         "tooltip": true,
+        // keyed by which half is live, day or night - theme-toggle.sh says
         "format-icons": {
-            "light": "",
-            "dark": "",
-            "auto_light": "󱩷",
-            "auto_dark": "󱩸"
+            "day": "",
+            "night": "",
+            "auto_day": "󱩷",
+            "auto_night": "󱩸"
         },
         "return-type": "json",
         "exec-if": "/usr/share/sway/scripts/theme-toggle.sh check",
