@@ -23,7 +23,12 @@ license=('GPL-3.0-or-later')
 depends=('raylib' 'libx11' 'glibc' 'gcc-libs')
 # clang, because raylib-sys generates its bindings with bindgen at build
 # time and bindgen loads libclang to parse raylib.h
-makedepends=('cargo' 'clang')
+#
+# nodejs, because the cues are synthesized rather than shipped as
+# tracked binary files - the same script the web page runs at
+# development time runs here, so both the site and the package always
+# carry the current mix rather than a WAV someone forgot to regenerate.
+makedepends=('cargo' 'clang' 'nodejs')
 options=('!lto')  # the crate sets its own in the release profile
 
 prepare() {
@@ -33,6 +38,10 @@ prepare() {
     rm -rf "${srcdir}/build"
     mkdir -p "${srcdir}/build"
     cp -a "${startdir}/../../core" "${startdir}/../../client" "${srcdir}/build/"
+    # the generator script, not the audio directory it writes: the
+    # WAVs it produces are gitignored, so a checkout has the recipe and
+    # never the bytes
+    install -Dm644 "${startdir}/../../scripts/game-sfx.mjs" "${srcdir}/build/game-sfx.mjs"
 
     cd "${srcdir}/build/client"
     export RUSTUP_TOOLCHAIN=stable
@@ -44,6 +53,8 @@ build() {
     export RUSTUP_TOOLCHAIN=stable
     export CARGO_TARGET_DIR=target
     cargo build --release
+
+    node "${srcdir}/build/game-sfx.mjs" "${srcdir}/build/audio"
 }
 
 check() {
@@ -61,4 +72,7 @@ package() {
     install -Dm0755 target/release/ashlaros-arcade "${pkgdir}/usr/bin/ashlaros-arcade"
     install -Dm644 "${startdir}/ashlaros-arcade.desktop" \
         "${pkgdir}/usr/share/applications/ashlaros-arcade.desktop"
+    install -d "${pkgdir}/usr/share/ashlaros-arcade/audio"
+    install -m644 "${srcdir}/build/audio/"*.wav \
+        -t "${pkgdir}/usr/share/ashlaros-arcade/audio"
 }

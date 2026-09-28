@@ -6,36 +6,32 @@
 //! browser are the same run, scored the same way, and `ci/cross-target`
 //! is what keeps that true.
 //!
-//! Deliberately small. A launcher, two games, and the event log a
-//! submission is made of.
+//! Music is out of scope here: it is rendered by `docs/game/music.js` on
+//! the web page, and this client has nowhere equivalent to synthesize a
+//! multi-minute loop without carrying that renderer over. The cue set
+//! plays in full; only the background track does not.
 
-use ashlaros_games::{courses, quarry, Event};
+mod audio;
+mod courses_view;
+mod effects;
+mod palette;
+mod quarry_view;
+mod rng;
+
+use ashlaros_games::Event;
 use raylib::prelude::*;
 
-const WINDOW_W: i32 = 480;
-const WINDOW_H: i32 = 720;
-const TICK_HZ: f32 = 60.0;
+use audio::Audio;
+use courses_view::CoursesRun;
+use palette::{ACCENT, BG, FG};
+use quarry_view::QuarryRun;
 
-/// The palette the rest of the distribution uses. Named here rather than
-/// imported because a client that pulled in a theme crate to draw seven
-/// rectangles would be carrying more configuration than program.
-const BG: Color = Color::new(0x14, 0x1a, 0x1b, 255);
-const FG: Color = Color::new(0xc9, 0xcc, 0xd1, 255);
-const ACCENT: Color = Color::new(0x3a, 0x40, 0x43, 255);
-const PIECE_COLOURS: [Color; 7] = [
-    Color::new(0x4e, 0x9a, 0xa6, 255),
-    Color::new(0x5a, 0x7d, 0xa8, 255),
-    Color::new(0xa8, 0x7d, 0x5a, 255),
-    Color::new(0xa6, 0x9a, 0x4e, 255),
-    Color::new(0x6f, 0xa6, 0x4e, 255),
-    Color::new(0x8a, 0x6f, 0xa6, 255),
-    Color::new(0xa6, 0x5a, 0x5a, 255),
-];
+const TICK_HZ: f32 = 60.0;
 
 enum Screen {
     Menu,
-    Courses(CoursesRun),
-    Quarry(QuarryRun),
+    Courses(CoursesRun, Submission),
+    Quarry(QuarryRun, Submission),
 }
 
 /// Where a finished run goes, and what happened to it.
@@ -47,6 +43,7 @@ struct Submission {
     cursor: usize,
     status: Option<String>,
     sent: bool,
+    gameover_played: bool,
 }
 
 impl Submission {
@@ -56,6 +53,7 @@ impl Submission {
             cursor: 0,
             status: None,
             sent: false,
+            gameover_played: false,
         }
     }
 
@@ -164,30 +162,11 @@ fn quoted(haystack: &str, key: &str) -> Option<String> {
     Some(rest.split('"').next()?.to_string())
 }
 
-struct CoursesRun {
-    state: courses::State,
-    events: Vec<Event>,
-    submission: Submission,
-}
-
-struct QuarryRun {
-    state: quarry::State,
-    events: Vec<Event>,
-    submission: Submission,
-    /// Where the mouse last put the paddle, in sub-pixels. Recorded only
-    /// when it changes: the log is edges, not a sample per tick, or a
-    /// two-minute run would be fourteen thousand numbers.
-    last_target: i32,
-}
-
 /// Drive the three-initial entry and the submit key.
 ///
 /// Shared by both games because the rules it implements are about the
 /// board rather than the game - the same reason scores.js keeps the day,
 /// the seed and the one-attempt rule outside the per-game modules.
-///
-/// Returns true when a run was just sent, so the caller can stop offering
-/// to send it again.
 fn handle_submission(
     handle: &RaylibHandle,
     submission: &mut Submission,
@@ -271,125 +250,106 @@ fn today() -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// The window fits whichever game needs the most room - Courses' hold
+/// and next-three sidebar is the wider requirement of the two.
+fn window_size() -> (i32, i32) {
+    (
+        courses_view::WINDOW_W.max(quarry_view::WINDOW_W).max(480),
+        courses_view::WINDOW_H.max(quarry_view::WINDOW_H).max(520),
+    )
+}
+
 fn main() {
+    let (window_w, window_h) = window_size();
     let (mut handle, thread) = raylib::init()
-        .size(WINDOW_W, WINDOW_H)
+        .size(window_w, window_h)
         .title("AshlarOS Arcade")
         .vsync()
         .build();
     handle.set_target_fps(60);
+    // Esc returns to the menu the way the on-screen text promises, rather
+    // than raylib's default of closing the window outright - quitting is
+    // still there, just at the window's own close button.
+    handle.set_exit_key(None);
+
+    // A device that fails to open is a silent game, never a panic or a
+    // refusal to start: a machine with no sound card still plays.
+    let device = RaylibAudio::init_audio_device().ok();
+    let mut audio = Audio::load(device.as_ref(), &audio::audio_dir());
 
     let day = today();
     let mut screen = Screen::Menu;
     let mut accumulator = 0.0f32;
+    let mut rng = rng::Rng::new(0x5eed_1234);
 
     while !handle.window_should_close() {
-        accumulator += handle.get_frame_time();
+        let dt = handle.get_frame_time();
+        accumulator += dt;
+
+        let entering_initials = match &screen {
+            Screen::Courses(run, submission) => run.state.over && !submission.sent,
+            Screen::Quarry(run, submission) => run.state.over && !submission.sent,
+            Screen::Menu => false,
+        };
+        if !entering_initials && handle.is_key_pressed(KeyboardKey::KEY_M) {
+            audio.toggle_mute();
+        }
 
         match &mut screen {
             Screen::Menu => {
                 if handle.is_key_pressed(KeyboardKey::KEY_ONE) {
                     let seed = ashlaros_games::seed_for("courses", &day);
-                    let mut state = courses::State::new(seed);
-                    state.spawn();
-                    screen = Screen::Courses(CoursesRun {
-                        state,
-                        events: Vec::new(),
-                        submission: Submission::new(),
-                    });
+                    let mut run = CoursesRun::new(seed, seed ^ 0x9e37_79b9);
+                    run.start_fanfare(&audio);
+                    screen = Screen::Courses(run, Submission::new());
                     accumulator = 0.0;
                 } else if handle.is_key_pressed(KeyboardKey::KEY_TWO) {
                     let seed = ashlaros_games::seed_for("quarry", &day);
-                    screen = Screen::Quarry(QuarryRun {
-                        // seeded from the state's own target rather than
-                        // a sentinel: the threshold below is a distance,
-                        // so starting from -1 would mean the first small
-                        // move near the left wall is never logged
-                        last_target: quarry::State::new(seed).target,
-                        state: quarry::State::new(seed),
-                        events: Vec::new(),
-                        submission: Submission::new(),
-                    });
+                    let mut run = QuarryRun::new(seed, seed ^ 0x9e37_79b9);
+                    run.start_fanfare(&audio);
+                    screen = Screen::Quarry(run, Submission::new());
                     accumulator = 0.0;
                 }
             }
-            Screen::Courses(run) => {
-                for (key, action) in [
-                    (KeyboardKey::KEY_LEFT, courses::ACTION_LEFT),
-                    (KeyboardKey::KEY_RIGHT, courses::ACTION_RIGHT),
-                    (KeyboardKey::KEY_UP, courses::ACTION_ROTATE_CW),
-                    (KeyboardKey::KEY_Z, courses::ACTION_ROTATE_CCW),
-                    (KeyboardKey::KEY_DOWN, courses::ACTION_SOFT_DROP),
-                    (KeyboardKey::KEY_SPACE, courses::ACTION_HARD_DROP),
-                    (KeyboardKey::KEY_C, courses::ACTION_HOLD),
-                ] {
-                    if handle.is_key_pressed(key) && !run.state.over {
-                        run.events.push(Event {
-                            action,
-                            tick: run.state.tick as i32,
-                            value: 0,
-                        });
-                        run.state.apply(action, 0);
-                    }
+            Screen::Courses(run, submission) => {
+                if !run.state.over {
+                    run.input(&handle, &audio, &mut rng);
                 }
                 while accumulator >= 1.0 / TICK_HZ {
                     accumulator -= 1.0 / TICK_HZ;
-                    run.state.step();
+                    if !run.state.over {
+                        run.tick(&audio, &mut rng);
+                    }
                 }
+                run.update_effects(dt);
                 if run.state.over {
-                    handle_submission(
-                        &handle,
-                        &mut run.submission,
-                        "courses",
-                        &day,
-                        &run.events,
-                    );
+                    if !submission.gameover_played {
+                        submission.gameover_played = true;
+                        audio.play("gameover");
+                    }
+                    handle_submission(&handle, submission, "courses", &day, &run.events);
                 }
                 if handle.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
                     screen = Screen::Menu;
                 }
             }
-            Screen::Quarry(run) => {
-                let mouse = handle.get_mouse_x();
-                let target = (mouse - 60).max(0) * quarry::SUB;
-                // Only when the aim has moved far enough to be worth an
-                // event. The page does the same (quarry-play.js:161) and
-                // for a hard reason: quarry's log is capped at 4000
-                // events, and logging every pixel of mouse travel spends
-                // that in under a minute - the server then refuses an
-                // honest run with "too many events". Measured: a scripted
-                // run that logged every change was rejected; the same run
-                // with this threshold is accepted.
-                const SAMPLE: i32 = quarry::FIELD_W / 40;
-                if (target - run.last_target).abs() >= SAMPLE && !run.state.over {
-                    run.events.push(Event {
-                        action: quarry::ACTION_TARGET,
-                        tick: run.state.tick as i32,
-                        value: target,
-                    });
-                    run.state.apply(quarry::ACTION_TARGET, target);
-                    run.last_target = target;
-                }
-                if handle.is_key_pressed(KeyboardKey::KEY_SPACE) && !run.state.over {
-                    run.events.push(Event {
-                        action: quarry::ACTION_LAUNCH,
-                        tick: run.state.tick as i32,
-                        value: 0,
-                    });
-                    run.state.apply(quarry::ACTION_LAUNCH, 0);
+            Screen::Quarry(run, submission) => {
+                if !run.state.over {
+                    run.input(&handle, &audio);
                 }
                 while accumulator >= 1.0 / TICK_HZ {
                     accumulator -= 1.0 / TICK_HZ;
-                    run.state.step();
+                    if !run.state.over {
+                        run.tick(&audio);
+                    }
                 }
+                run.update_effects(dt);
                 if run.state.over {
-                    handle_submission(
-                        &handle,
-                        &mut run.submission,
-                        "quarry",
-                        &day,
-                        &run.events,
-                    );
+                    if !submission.gameover_played {
+                        submission.gameover_played = true;
+                        audio.play("gameover");
+                    }
+                    handle_submission(&handle, submission, "quarry", &day, &run.events);
                 }
                 if handle.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
                     screen = Screen::Menu;
@@ -399,88 +359,49 @@ fn main() {
 
         let mut d = handle.begin_drawing(&thread);
         d.clear_background(BG);
-        match &screen {
-            Screen::Menu => draw_menu(&mut d, &day),
-            Screen::Courses(run) => draw_courses(&mut d, run),
-            Screen::Quarry(run) => draw_quarry(&mut d, run),
+        match &mut screen {
+            Screen::Menu => draw_menu(&mut d, &day, &audio),
+            Screen::Courses(run, submission) => {
+                run.draw(&mut d);
+                if run.state.over {
+                    draw_gameover(&mut d, run.state.score, submission);
+                }
+            }
+            Screen::Quarry(run, submission) => {
+                run.draw(&mut d);
+                if run.state.over {
+                    draw_gameover(&mut d, run.state.score, submission);
+                }
+            }
         }
     }
 }
 
-fn draw_menu(d: &mut RaylibDrawHandle, day: &str) {
+fn draw_menu(d: &mut RaylibDrawHandle, day: &str, audio: &Audio) {
     d.draw_text("ASHLAROS ARCADE", 40, 80, 30, FG);
     d.draw_text(day, 40, 120, 20, ACCENT);
     d.draw_text("1  Courses", 40, 220, 24, FG);
     d.draw_text("2  Quarry", 40, 260, 24, FG);
     d.draw_text("Esc  back to this menu", 40, 340, 16, ACCENT);
-    d.draw_text("A run ends with three initials and enter.", 40, 370, 16, ACCENT);
+    d.draw_text("M  mute", 40, 364, 16, ACCENT);
+    d.draw_text("A run ends with three initials and enter.", 40, 388, 16, ACCENT);
+    if audio.muted() {
+        d.draw_text("Muted.", 40, 412, 16, ACCENT);
+    }
     d.draw_text(
         "The same seed as the web board, the same rules.",
         40,
-        WINDOW_H - 60,
+        d.get_screen_height() - 30,
         14,
         ACCENT,
     );
 }
 
-fn draw_courses(d: &mut RaylibDrawHandle, run: &CoursesRun) {
-    const CELL: i32 = 28;
-    let ox = 60;
-    let oy = 60;
-
-    d.draw_rectangle_lines(
-        ox - 2,
-        oy - 2,
-        courses::WIDTH * CELL + 4,
-        courses::HEIGHT * CELL + 4,
-        ACCENT,
-    );
-
-    // only the visible rows: the two spawn rows above the board are where
-    // a piece enters, and showing them would move the floor
-    for row in courses::SPAWN_ROWS..courses::TOTAL_HEIGHT {
-        for col in 0..courses::WIDTH {
-            let cell = run.state.board[(row * courses::WIDTH + col) as usize];
-            if cell != 0 {
-                d.draw_rectangle(
-                    ox + col * CELL,
-                    oy + (row - courses::SPAWN_ROWS) * CELL,
-                    CELL - 1,
-                    CELL - 1,
-                    PIECE_COLOURS[(cell - 1) as usize % 7],
-                );
-            }
-        }
-    }
-
-    if run.state.has_piece && !run.state.over {
-        let cells = courses::PIECES[run.state.piece as usize][(run.state.rotation & 3) as usize];
-        for (cx, cy) in cells {
-            let (x, y) = (run.state.x + cx, run.state.y + cy - courses::SPAWN_ROWS);
-            if y >= 0 {
-                d.draw_rectangle(
-                    ox + x * CELL,
-                    oy + y * CELL,
-                    CELL - 1,
-                    CELL - 1,
-                    PIECE_COLOURS[run.state.piece as usize],
-                );
-            }
-        }
-    }
-
-    d.draw_text(&format!("score {}", run.state.score), ox, 20, 20, FG);
-    d.draw_text(
-        &format!("lines {}  level {}", run.state.lines, run.state.level),
-        ox,
-        oy + courses::HEIGHT * CELL + 16,
-        18,
-        ACCENT,
-    );
-    if run.state.over {
-        d.draw_text("game over", ox, oy + courses::HEIGHT * CELL / 2, 28, FG);
-        draw_submission(d, &run.submission, ox, oy + courses::HEIGHT * CELL / 2 + 40);
-    }
+fn draw_gameover(d: &mut RaylibDrawHandle, score: u32, submission: &Submission) {
+    let cx = d.get_screen_width() / 2 - 90;
+    let cy = d.get_screen_height() / 2 - 40;
+    d.draw_text(&format!("game over  {score}"), cx, cy, 24, FG);
+    draw_submission(d, submission, cx, cy + 36);
 }
 
 /// The entry prompt and whatever the board said back.
@@ -501,90 +422,3 @@ fn draw_submission(d: &mut RaylibDrawHandle, submission: &Submission, x: i32, y:
     d.draw_text("A-Z to type, backspace, enter to submit", x, y + 44, 14, ACCENT);
 }
 
-fn draw_quarry(d: &mut RaylibDrawHandle, run: &QuarryRun) {
-    let ox = 60;
-    let oy = 60;
-    // sub-pixels to pixels: a shift, because SUB is a power of two and
-    // the simulation never has a fractional position to round
-    let to_px = |n: i32| n / quarry::SUB;
-
-    d.draw_rectangle_lines(
-        ox - 2,
-        oy - 2,
-        to_px(quarry::FIELD_W) + 4,
-        to_px(quarry::FIELD_H) + 4,
-        ACCENT,
-    );
-
-    for row in 0..quarry::BRICK_ROWS {
-        for col in 0..quarry::BRICK_COLS {
-            let tier = run.state.bricks[(row * quarry::BRICK_COLS + col) as usize];
-            if tier == quarry::EMPTY {
-                continue;
-            }
-            let colour = if tier == quarry::SOLID {
-                ACCENT
-            } else {
-                PIECE_COLOURS[(tier as usize).min(6)]
-            };
-            d.draw_rectangle(
-                ox + to_px(col * quarry::BRICK_W),
-                oy + to_px(quarry::BRICK_TOP + row * quarry::BRICK_H),
-                to_px(quarry::BRICK_W) - 2,
-                to_px(quarry::BRICK_H) - 2,
-                colour,
-            );
-        }
-    }
-
-    d.draw_rectangle(
-        ox + to_px(run.state.paddle_x),
-        oy + to_px(quarry::PADDLE_Y),
-        to_px(run.state.paddle_w),
-        to_px(quarry::PADDLE_H).max(3),
-        FG,
-    );
-
-    for i in 0..run.state.ball_count {
-        let ball = run.state.balls[i];
-        d.draw_circle(
-            ox + to_px(ball.x),
-            oy + to_px(ball.y),
-            to_px(quarry::BALL_R) as f32,
-            FG,
-        );
-    }
-
-    for i in 0..run.state.capsule_count {
-        let capsule = run.state.capsules[i];
-        d.draw_rectangle(
-            ox + to_px(capsule.x) - 5,
-            oy + to_px(capsule.y) - 3,
-            10,
-            6,
-            PIECE_COLOURS[(capsule.kind as usize) % 7],
-        );
-    }
-
-    d.draw_text(&format!("score {}", run.state.score), ox, 20, 20, FG);
-    d.draw_text(
-        &format!("lives {}  bricks {}", run.state.lives, run.state.bricks_broken),
-        ox,
-        oy + to_px(quarry::FIELD_H) + 16,
-        18,
-        ACCENT,
-    );
-    if run.state.held {
-        d.draw_text(
-            "space to launch",
-            ox,
-            oy + to_px(quarry::FIELD_H) + 40,
-            16,
-            ACCENT,
-        );
-    }
-    if run.state.over {
-        d.draw_text("game over", ox, oy + to_px(quarry::FIELD_H) / 2, 28, FG);
-        draw_submission(d, &run.submission, ox, oy + to_px(quarry::FIELD_H) / 2 + 40);
-    }
-}
