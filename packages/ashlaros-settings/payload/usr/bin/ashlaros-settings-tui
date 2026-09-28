@@ -2281,48 +2281,129 @@ face_entry() {
 # finger that fails falls through to the prompt that always worked.
 readonly FPRINT_LINE="auth       sufficient   pam_fprintd.so"
 readonly FPRINT_SUDO=/etc/pam.d/sudo
+readonly FPRINT_LOCK=/etc/pam.d/swaylock
 
-fingerprint_enabled() {
-  grep -q "^auth .*pam_fprintd.so" "$FPRINT_SUDO" 2>/dev/null
+# The lock screen cannot take the sudo line. swaylock answers every PAM
+# prompt with what was typed and only calls PAM on enter, so with
+# pam_fprintd first a typed password sits behind a 30 s wait for a finger,
+# and a reader that stopped responding after a suspend - where a lock
+# screen is used most - holds every unlock that long.
+#
+# So the stack routes on what was typed. The gate hands the typed text to
+# grep (expose_authtok, which also keeps it as PAM_AUTHTOK for pam_unix's
+# try_first_pass): anything typed jumps over the reader to the password
+# stack exactly as it was, and only enter on an empty field asks for a
+# finger. `die` rather than `sufficient` on that path: an empty password
+# can never succeed, and falling through would only count a missed finger
+# against faillock, which after three locks the password out as well.
+readonly FPRINT_LOCK_GATE="auth       [success=1 default=ignore]   pam_exec.so quiet quiet_log expose_authtok /usr/bin/grep -q ."
+readonly FPRINT_LOCK_LINE="auth       [success=done default=die]   pam_fprintd.so"
+# nothing else in a stack execs grep, so the command is what finds the gate
+readonly FPRINT_GATE_RE='pam_exec\.so.* /usr/bin/grep -q \.$'
+
+fingerprint_on() {
+  grep -q "^auth .*pam_fprintd.so" "$1" 2>/dev/null
 }
 
-# Only the narrowest stack that pays for itself. sudo prompts many times a
-# day; the lock screen is where a reader failing after suspend bites
-# hardest, and greetd is a TUI greeter where the interaction is poor - so
-# neither is offered here.
-fingerprint_enable() {
-  say "This changes sudo only. Your password keeps working:"
-  say "  pam_fprintd is 'sufficient', so a finger that fails or a reader"
-  say "  that has stopped responding falls through to the password."
-  echo
-  gum confirm --affirmative "Enable for sudo" --negative "Cancel" \
-    "Use a fingerprint for sudo?" || return 0
-
-  # Inserted before the first auth line, because PAM takes the first
-  # sufficient match: after `auth include system-auth` the password has
-  # already been asked for and the finger would never be reached.
-  #
-  # sed -i on a package-owned file edits it in place rather than replacing
-  # it, so pacman still owns it and no .pacnew appears.
-  #
-  # Any existing line is deleted first, so enabling twice cannot stack two
-  # of them. The menu already guards on fingerprint_enabled, but an edit
-  # to an authentication file should be idempotent on its own terms.
+# Inserted before the first auth line, because PAM takes the first
+# sufficient match: after `auth include system-auth` the password has
+# already been asked for and the finger would never be reached.
+#
+# sed -i on a package-owned file edits it in place rather than replacing
+# it, so pacman still owns it and no .pacnew appears.
+#
+# Any existing line is deleted first, so enabling twice cannot stack two
+# of them. The menu already guards on fingerprint_on, but an edit to an
+# authentication file should be idempotent on its own terms.
+fingerprint_enable_sudo() {
   root_run sed -i -e "/pam_fprintd.so/d" \
     -e "0,/^auth/s//$FPRINT_LINE\nauth/" "$FPRINT_SUDO" || return 1
+}
+
+fingerprint_enable_lock() {
+  root_run sed -i -e "/pam_fprintd.so/d" -e "\|$FPRINT_GATE_RE|d" \
+    -e "0,/^auth/s|^auth|$FPRINT_LOCK_GATE\n$FPRINT_LOCK_LINE\nauth|" \
+    "$FPRINT_LOCK" || return 1
+  # a stack with no auth line is not one this knows how to edit
+  fingerprint_on "$FPRINT_LOCK" && return 0
+  oops "$FPRINT_LOCK has no auth line; nothing was changed."
+  return 1
+}
+
+# Every line either stack can have gained, chwd's own sudo line included,
+# so turning it off leaves the file as the package shipped it.
+fingerprint_disable() {
+  root_run sed -i -e "/pam_fprintd.so/d" -e "\|$FPRINT_GATE_RE|d" "$1"
+}
+
+# Refused until verification has actually succeeded: enabling on a reader
+# that has never read anything is how someone ends up with an extra
+# prompt and no working finger.
+fingerprint_verify() {
+  say "Testing the reader first. Touch it."
+  echo
+  fprintd-verify 2>&1 | sed "s/^/  /" | grep -q "verify-match" && return 0
+  echo
+  oops "That did not verify, so nothing was changed."
+  oops "Enrol a finger and test it before enabling."
+  return 1
+}
+
+# greetd is not offered: it is a TUI greeter where the interaction is
+# poor, and the first login unlocks the keyring with the password anyway.
+fingerprint_places() {
+  local sudo_on=0 lock_on=0 selected=""
+  fingerprint_on "$FPRINT_SUDO" && sudo_on=1 && selected="sudo"
+  fingerprint_on "$FPRINT_LOCK" && lock_on=1 && selected+="${selected:+,}Lock screen"
+
+  screen "Fingerprint"
+  say "sudo asks for the finger first; a password typed at its prompt"
+  say "  once the reader gives up still works."
+  say "The lock screen takes a finger when you press enter with nothing"
+  say "  typed. A typed password never waits for the reader."
+  # lock.sh prefers either of these to swaylock, and neither reads its stack
+  if command -v gtklock >/dev/null || command -v waylock >/dev/null; then
+    warn "! gtklock or waylock is installed and locks the screen instead of"
+    warn "  swaylock, so the lock screen setting has no effect."
+  fi
+  if grep -qs "^ignore-empty-password" "$HOME/.config/swaylock/config"; then
+    warn "! your swaylock config ignores an empty enter, so the lock screen"
+    warn "  can never ask for a finger. Remove ignore-empty-password."
+  fi
+  echo
+
+  local out want_sudo=0 want_lock=0
+  out=$(gum choose --no-limit ${selected:+--selected "$selected"} \
+    --header "Ask for a fingerprint at (x ticks, enter saves)" \
+    "sudo" "Lock screen") || return 0
+  grep -qx "sudo" <<<"$out" && want_sudo=1
+  grep -qx "Lock screen" <<<"$out" && want_lock=1
+
+  if ((want_sudo > sudo_on || want_lock > lock_on)); then
+    screen "Fingerprint"
+    fingerprint_verify || { pause; return 0; }
+    echo
+  fi
+
+  if ((want_sudo && !sudo_on)); then
+    fingerprint_enable_sudo || { pause; return 0; }
+  elif ((!want_sudo && sudo_on)); then
+    fingerprint_disable "$FPRINT_SUDO" || { pause; return 0; }
+  fi
+  if ((want_lock && !lock_on)); then
+    fingerprint_enable_lock || { pause; return 0; }
+  elif ((!want_lock && lock_on)); then
+    fingerprint_disable "$FPRINT_LOCK" || { pause; return 0; }
+  fi
 
   # The safety rail: prove the password still authenticates before
   # leaving the user with a stack they cannot reach.
-  echo
-  say "Enabled. Check it now, while this menu is still open:"
-  say "  open another terminal and run: sudo -k true"
-  say "A password must still work there. If it does not, choose Disable."
-  pause
-}
-
-fingerprint_disable() {
-  root_run sed -i "/pam_fprintd.so/d" "$FPRINT_SUDO" || return 1
-  say "Disabled. sudo is back to password only."
+  if ((want_sudo != sudo_on || want_lock != lock_on)); then
+    say "Saved. Check your password still works, while this menu is open:"
+    ((want_sudo != sudo_on)) && say "  sudo: open another terminal and run: sudo -k true"
+    ((want_lock != lock_on)) && say "  lock screen: lock it and unlock with your password"
+    say "If it does not, come back here and untick it."
+  fi
   pause
 }
 
@@ -2341,10 +2422,15 @@ fingerprint_entry() {
       warn "! no fingers enrolled yet"
     fi
 
-    if fingerprint_enabled; then
+    if fingerprint_on "$FPRINT_SUDO"; then
       say "✓ sudo accepts a fingerprint (password still works)"
     else
       say "  sudo is password only"
+    fi
+    if fingerprint_on "$FPRINT_LOCK"; then
+      say "✓ the lock screen accepts a fingerprint (enter, then touch)"
+    else
+      say "  the lock screen is password only"
     fi
 
     # Nothing here touches disk unlock: LUKS happens long before PAM
@@ -2355,11 +2441,7 @@ fingerprint_entry() {
     echo
 
     local entries=("Enrol a finger")
-    ((enrolled > 0)) && entries+=("Test it" "Delete enrolled fingers")
-    if ((enrolled > 0)) && ! fingerprint_enabled; then
-      entries+=("Use it for sudo")
-    fi
-    fingerprint_enabled && entries+=("Stop using it for sudo")
+    ((enrolled > 0)) && entries+=("Test it" "Choose where it is asked for" "Delete enrolled fingers")
     entries+=("Back")
 
     choice=$(gum choose --header "Fingerprint" "${entries[@]}") || return 0
@@ -2382,27 +2464,11 @@ fingerprint_entry() {
         fprintd-delete "$ME" 2>&1 | sed "s/^/  /"
         # Leaving PAM asking for a finger that no longer exists would
         # mean a pointless prompt before every password.
-        fingerprint_enabled && root_run sed -i "/pam_fprintd.so/d" "$FPRINT_SUDO"
+        fingerprint_on "$FPRINT_SUDO" && fingerprint_disable "$FPRINT_SUDO"
+        fingerprint_on "$FPRINT_LOCK" && fingerprint_disable "$FPRINT_LOCK"
         pause
         ;;
-      "Use it for sudo")
-        screen "Fingerprint"
-        # Refused until verification has actually succeeded: enabling on
-        # a reader that has never read anything is how someone ends up
-        # with an extra prompt and no working finger.
-        say "Testing the reader first."
-        echo
-        if fprintd-verify 2>&1 | sed "s/^/  /" | grep -q "verify-match"; then
-          echo
-          fingerprint_enable
-        else
-          echo
-          oops "That did not verify, so nothing was changed."
-          oops "Enrol a finger and test it before enabling."
-          pause
-        fi
-        ;;
-      "Stop using it for sudo") fingerprint_disable ;;
+      "Choose where it is asked for") fingerprint_places ;;
       "Back") return 0 ;;
     esac
   done
@@ -3920,7 +3986,7 @@ main() {
     # installed everywhere, so the binary existing proves nothing
     if command -v fprintd-enroll >/dev/null &&
       fprintd-list "$ME" >/dev/null 2>&1; then
-      sec+=("$(menu_row fingerprint $'\U000f0237' "Fingerprint" "for sudo")")
+      sec+=("$(menu_row fingerprint $'\U000f0237' "Fingerprint" "sudo and lock screen")")
     fi
     # howdy-next is an optdepend, so the binary existing is already a
     # choice someone made - but a machine with no camera at all should

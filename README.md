@@ -199,6 +199,23 @@ headphones too. Measuring needs `python-numpy`, which the entry offers to
 install; a calibration keeps working without it. Remove one from the same
 entry.
 
+## Fingerprint
+
+On a machine with a reader, Settings → **Fingerprint** enrols and tests a
+finger, then asks where it should be accepted: `sudo`, the lock screen,
+both, or neither. Nothing is turned on until a test has matched, and a
+password keeps working everywhere.
+
+On `sudo` the finger is asked for first, and the password prompt follows
+if the reader gives up. The lock screen works the other way round: press
+enter with nothing typed, then touch the reader. A typed password goes
+straight to the password check and never waits for the reader, even if the
+reader has stopped responding after a suspend, and a missed touch does not
+count towards locking the password out. This covers swaylock; with gtklock
+or waylock installed, those lock the screen instead and the entry says so.
+Unticking a place restores that file as it was, and the disk passphrase is
+untouched either way.
+
 ## Face unlock
 
 Not installed, and off even when it is. Install `howdy-next` and, on a
