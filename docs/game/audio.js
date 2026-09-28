@@ -43,6 +43,13 @@ const CUES = [
   'catch',
   'lost',
   'levelclear',
+  'softdrop',
+  'backtoback',
+  'warning',
+  'start',
+  'launch',
+  'speedup',
+  'multi',
 ];
 
 export function createAudio() {
@@ -50,6 +57,9 @@ export function createAudio() {
   const buffers = new Map();
   let muted = false;
   let music = null;
+  // The pace the track is played at, kept so one that starts late is
+  // already at the speed the run has reached.
+  let musicRate = 1;
   try {
     muted = localStorage.getItem(MUTE_KEY) === '1';
   } catch {
@@ -128,6 +138,7 @@ export function createAudio() {
         const source = ctx.createBufferSource();
         source.buffer = buffer;
         source.loop = true;
+        source.playbackRate.value = musicRate;
         const volume = ctx.createGain();
         // under the cues by a wide margin: the cues carry information and
         // the track carries none, so it must never compete
@@ -143,7 +154,7 @@ export function createAudio() {
 
     stopMusic,
 
-    play(name, gain = 1) {
+    play(name, gain = 1, rate = 1) {
       if (muted || !context) return;
       const buffer = buffers.get(name);
       // still loading, missing, or never requested: silence, not an error
@@ -151,12 +162,36 @@ export function createAudio() {
       try {
         const source = context.createBufferSource();
         source.buffer = buffer;
+        // Rate is a presentation choice and never a rule: two players may
+        // hear slightly different detune on the same cue and the run they
+        // logged is identical. So it is decided here, by the caller, and
+        // never by anything that can reach the score.
+        source.playbackRate.value = rate;
         const volume = context.createGain();
         volume.gain.value = gain;
         source.connect(volume).connect(context.destination);
         source.start();
       } catch {
         // an exhausted or closed context must not take the game with it
+      }
+    },
+
+    /**
+     * The running track's pace, as a rate on its playback.
+     *
+     * playbackRate rather than a re-render: the loop is already built,
+     * and rebuilding it at a new tempo is hundreds of milliseconds of
+     * main thread in the middle of a run. Pitch moves with the rate,
+     * which is what a tape speeding up does and what "the music speeds
+     * up" has always sounded like.
+     */
+    tempo(rate) {
+      musicRate = rate;
+      if (!music) return;
+      try {
+        music.source.playbackRate.value = rate;
+      } catch {
+        // a source that has already stopped simply does not speed up
       }
     },
 

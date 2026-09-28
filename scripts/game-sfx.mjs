@@ -149,6 +149,18 @@ const CUES = {
     release: 0.05,
     tone: (t) => triangle(sweep(500, 400, t, 0.06) * t),
   },
+  // Held down this repeats at key-repeat rate, which makes it the most
+  // frequent cue in either game - so it is the quietest thing here and
+  // deliberately dull. It confirms the input without ever asking to be
+  // listened to, and it falls rather than rises so it never reads as
+  // "something good happened".
+  softdrop: {
+    seconds: 0.018,
+    gain: db(-31),
+    attack: 0.001,
+    release: 0.01,
+    tone: (t) => triangle(sweep(700, 380, t, 0.018) * t),
+  },
 
   // --- Courses: the ladder ---
   // Four files, never one repitched. Resampling shortens a sound, so a
@@ -187,6 +199,46 @@ const CUES = {
     attack: 0.01,
     release: 0.6,
     tone: (t) => sine(sweep(330, 60, t, 0.9) * t) * 0.8 + triangle(sweep(165, 30, t, 0.9) * t) * 0.2,
+  },
+  // A second tetris on the trot, which is the best thing that happens in
+  // a run and rare enough to earn its loudness. It lands on top of
+  // clear-4 rather than replacing it, so it has to be a different colour
+  // of sound: a bright shimmer over the chord the clear already made.
+  backtoback: {
+    seconds: 0.32,
+    gain: db(-5),
+    attack: 0.003,
+    release: 0.24,
+    tone: (t) =>
+      sine(sweep(880, 1760, t, 0.32) * t) * 0.5 + sine(1320 * t) * 0.3 + sine(660 * t) * 0.2,
+  },
+  // The run begins. Once per run, so it can afford to be the widest thing
+  // in the set - three octaves rising together is the sound of attention
+  // arriving, and nothing else in Courses has that shape.
+  start: {
+    seconds: 0.4,
+    gain: db(-7),
+    attack: 0.004,
+    release: 0.3,
+    tone: (t) =>
+      sine(sweep(440, 880, t, 0.4) * t) * 0.5 +
+      sine(sweep(660, 1320, t, 0.4) * t) * 0.3 +
+      triangle(sweep(220, 440, t, 0.4) * t) * 0.2,
+  },
+  // The stack is four rows from the top, which is where a run ends. This
+  // is the only cue that means "act now", so it is bright and it moves -
+  // a single held tone reads as one more brick landing. A siren rather
+  // than a pulse, because gating a tone on and off mid-cue clicks.
+  warning: {
+    seconds: 0.3,
+    gain: db(-8),
+    attack: 0.002,
+    release: 0.2,
+    tone: (t) =>
+      (t < 0.15
+        ? square(sweep(620, 940, t, 0.15) * t) * 0.3 + sine(sweep(310, 470, t, 0.15) * t) * 0.7
+        : square(sweep(940, 620, t - 0.15, 0.15) * t) * 0.3 +
+          sine(sweep(470, 310, t - 0.15, 0.15) * t) * 0.7),
   },
 
   // --- Quarry ---
@@ -267,6 +319,40 @@ const CUES = {
         (sum, note, index) => sum + (t > index * 0.08 ? sine(note * t) * 0.25 : 0),
         0,
       ),
+  },
+  // A ball leaves the paddle: once a life, and again every time a caught
+  // one is released. Upward and quick, because it is the player acting
+  // rather than something happening to them.
+  launch: {
+    seconds: 0.09,
+    gain: db(-14),
+    attack: 0.001,
+    release: 0.07,
+    tone: (t, i) => triangle(sweep(300, 1200, t, 0.09) * t) * 0.7 + noise(i) * 0.3,
+  },
+  // The ball got faster, which is the game getting harder while the
+  // player watches. A step up and bright, so it reads as a shift in the
+  // situation rather than as one more brick.
+  speedup: {
+    seconds: 0.16,
+    gain: db(-11),
+    attack: 0.002,
+    release: 0.12,
+    tone: (t) =>
+      square(sweep(440, 880, t, 0.16) * t) * 0.3 + triangle(sweep(660, 1320, t, 0.16) * t) * 0.7,
+  },
+  // The MULTI capsule, the one that changes the shape of the point rather
+  // than helping one ball. Two voices a fifth apart rising together, so
+  // it reads as a split where catch reads as a pickup.
+  multi: {
+    seconds: 0.24,
+    gain: db(-9),
+    attack: 0.002,
+    release: 0.18,
+    tone: (t) =>
+      sine(sweep(523, 1568, t, 0.24) * t) * 0.55 +
+      sine(sweep(784, 2093, t, 0.24) * t) * 0.25 +
+      triangle(262 * t) * 0.2,
   },
 };
 

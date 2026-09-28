@@ -309,6 +309,26 @@ aside {
   font-size: 1.6rem;
 }
 
+/* Level, lines, lives and speed: numbers read between inputs rather than
+   looked at, so they sit above prose and well below the score. */
+.stat {
+  color: var(--foreground);
+  font-size: 1.15rem;
+}
+
+/* The ball's pace as a bar. A number the player has to hold in mind and
+   compare against another number is not a speed gauge. */
+.meter {
+  background: var(--edge);
+  height: 0.5rem;
+  margin: 0.3rem 0 0.8rem;
+}
+
+.meter > div {
+  background: var(--foreground);
+  height: 100%;
+}
+
 button,
 input {
   background: var(--base);
