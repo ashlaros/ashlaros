@@ -20,6 +20,12 @@ pub const SOFT_DROP_POINTS: u32 = 1;
 pub const BACK_TO_BACK_MULTIPLIER: u32 = 3;
 pub const BACK_TO_BACK_DIVISOR: u32 = 2;
 pub const HARD_DROP_POINTS: u32 = 2;
+/// Ticks a grounded piece may still slide or turn before it sets. Without
+/// it the top of the gravity curve locks a piece the instant it lands.
+pub const LOCK_DELAY: u32 = 30;
+/// Grounded moves that may restart the delay, per row reached: unlimited
+/// resets let a piece be spun forever, which is a stall, not a skill.
+pub const LOCK_RESETS: u32 = 15;
 
 pub const ACTION_LEFT: i32 = 0;
 pub const ACTION_RIGHT: i32 = 1;
@@ -107,15 +113,16 @@ pub fn piece_at(seed: u32, index: u32) -> u8 {
     bag_at(seed, index / 7)[(index % 7) as usize]
 }
 
-/// Gravity in ticks per row. Level 15 and above is one row per tick,
-/// which nobody sustains - that is what bounds a run by skill rather than
-/// by stamina.
+/// Gravity in ticks per row, eased in and then steepening. Shaped to the
+/// levels a run can reach: 300 pieces is at most 120 lines, so level 12
+/// is the ceiling, and a row per tick arrives at 11 where the lock delay
+/// is what keeps it playable.
 pub fn gravity_interval(level: u32) -> u32 {
-    const TABLE: [u32; 15] = [48, 43, 38, 33, 28, 23, 18, 13, 8, 6, 5, 5, 4, 4, 3];
-    if level >= 15 {
-        1
-    } else {
+    const TABLE: [u32; 11] = [48, 40, 32, 25, 19, 14, 10, 7, 5, 3, 2];
+    if (level as usize) < TABLE.len() {
         TABLE[level as usize]
+    } else {
+        1
     }
 }
 
@@ -140,6 +147,11 @@ pub struct State {
     pub lines: u32,
     pub level: u32,
     pub gravity_counter: u32,
+    pub lock_counter: u32,
+    pub lock_resets: u32,
+    /// The lowest row the piece has reached; only a new one refreshes the
+    /// reset allowance, or a floor kick into the air would spin forever.
+    pub lock_floor: i32,
     pub back_to_back: bool,
     pub over: bool,
 }
@@ -163,6 +175,9 @@ impl State {
             lines: 0,
             level: 0,
             gravity_counter: 0,
+            lock_counter: 0,
+            lock_resets: 0,
+            lock_floor: 0,
             back_to_back: false,
             over: false,
         }
@@ -197,6 +212,9 @@ impl State {
         self.y = 0;
         self.hold_used = false;
         self.gravity_counter = 0;
+        self.lock_counter = 0;
+        self.lock_resets = 0;
+        self.lock_floor = 0;
         if self.collides(self.piece, 0, self.x, self.y) {
             self.over = true;
         }
@@ -252,6 +270,16 @@ impl State {
         self.spawn();
     }
 
+    /// A successful grounded move or turn buys the piece more time, up to
+    /// LOCK_RESETS per row reached - what makes the delay a control rather
+    /// than a timer.
+    fn reset_lock(&mut self) {
+        if self.lock_counter > 0 && self.lock_resets < LOCK_RESETS {
+            self.lock_counter = 0;
+            self.lock_resets += 1;
+        }
+    }
+
     pub fn apply(&mut self, action: i32, _value: i32) {
         if self.over || !self.has_piece {
             return;
@@ -260,11 +288,13 @@ impl State {
             ACTION_LEFT => {
                 if !self.collides(self.piece, self.rotation, self.x - 1, self.y) {
                     self.x -= 1;
+                    self.reset_lock();
                 }
             }
             ACTION_RIGHT => {
                 if !self.collides(self.piece, self.rotation, self.x + 1, self.y) {
                     self.x += 1;
+                    self.reset_lock();
                 }
             }
             ACTION_ROTATE_CW | ACTION_ROTATE_CCW => {
@@ -291,6 +321,7 @@ impl State {
                         self.rotation = next;
                         self.x += dx;
                         self.y += dy;
+                        self.reset_lock();
                         return;
                     }
                 }
@@ -334,6 +365,10 @@ impl State {
                         self.rotation = 0;
                         self.x = 3;
                         self.y = 0;
+                        self.gravity_counter = 0;
+                        self.lock_counter = 0;
+                        self.lock_resets = 0;
+                        self.lock_floor = 0;
                         if self.collides(self.piece, 0, self.x, self.y) {
                             self.over = true;
                         }
@@ -357,11 +392,21 @@ impl State {
         self.gravity_counter += 1;
         if self.gravity_counter >= gravity_interval(self.level) {
             self.gravity_counter = 0;
-            if self.collides(self.piece, self.rotation, self.x, self.y + 1) {
-                self.lock_piece();
-            } else {
+            if !self.collides(self.piece, self.rotation, self.x, self.y + 1) {
                 self.y += 1;
             }
+        }
+        // the lock is its own clock, not the next gravity step: falling
+        // gets faster with the level and settling does not
+        if self.collides(self.piece, self.rotation, self.x, self.y + 1) {
+            self.lock_counter += 1;
+            if self.lock_counter >= LOCK_DELAY {
+                self.lock_piece();
+            }
+        } else if self.y > self.lock_floor {
+            self.lock_floor = self.y;
+            self.lock_counter = 0;
+            self.lock_resets = 0;
         }
         // after gravity, not before: the replay steps until `tick` equals
         // the event's, so incrementing first shifts every gravity step one

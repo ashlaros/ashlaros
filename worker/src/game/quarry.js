@@ -50,7 +50,22 @@ export const PADDLE_Y = FIELD_H - px(16);
 export const PADDLE_SPEED = px(7);
 
 export const BALL_R = px(3);
-export const BALL_SPEED = px(3);
+// The ball starts slower than it used to and earns its speed. At a fixed
+// px(3) a novice lost all three lives inside ten seconds while a player
+// who could read the bounce survived the whole two minutes at the same
+// pace, so the run neither let anyone in nor pushed anyone who got in.
+// A rally ramp is the genre's own answer: every SPEED_RALLY returns off
+// the paddle add SPEED_STEP, up to BALL_SPEED_MAX, and losing the ball
+// gives the speed back. Each wall cleared starts a notch faster.
+//
+// The numbers are test/quarry-balance.mjs's: from 32 the slowest band
+// lasts about fifty seconds instead of ten, and the best reach the cap.
+// The cap is a tunnelling bound as well as a difficulty one - at 96 a
+// sub-step moves less than a brick's height, so no row can be jumped.
+export const BALL_SPEED = 32;
+export const BALL_SPEED_MAX = 96;
+export const SPEED_STEP = 4;
+export const SPEED_RALLY = 2;
 
 export const BRICK_W = px(24);
 export const BRICK_H = px(10);
@@ -171,7 +186,16 @@ export function createState(seed) {
     slow: 0,
     over: false,
     bricksBroken: 0,
+    // the ball's pace this rally, and the paddle returns counted towards
+    // the next step up
+    speed: BALL_SPEED,
+    rally: 0,
   };
+}
+
+/** Where the speed starts for the current wall: a notch up per wall cleared. */
+export function baseSpeed(level) {
+  return Math.min(BALL_SPEED_MAX, BALL_SPEED + level * SPEED_STEP);
 }
 
 function spawnBall(state, vx) {
@@ -180,7 +204,7 @@ function spawnBall(state, vx) {
     x: state.paddleX + (state.paddleW >> 1),
     y: PADDLE_Y - BALL_R,
     vx,
-    vy: -BALL_SPEED,
+    vy: -state.speed,
   });
 }
 
@@ -199,7 +223,14 @@ function hitBrick(state, index) {
   const left = tier - 1;
   state.bricks[index] = left;
   if (left === EMPTY) {
-    state.score += BRICK_SCORES[Math.min(tier, BRICK_SCORES.length - 1)];
+    // Paid at the ball's pace, so speed is the risk the score rewards:
+    // without it a player who dropped the ball to reset the speed lost
+    // nothing by it, and the fast rally that is the fun was worth the same
+    // as a slow one. Integer, and relative to the start speed, so the
+    // first brick of a run is worth exactly its listed score.
+    state.score += Math.trunc(
+      (BRICK_SCORES[Math.min(tier, BRICK_SCORES.length - 1)] * state.speed) / BALL_SPEED,
+    );
     state.bricksBroken += 1;
     maybeDropCapsule(state, index);
   } else {
@@ -265,7 +296,7 @@ export function applyAction(state, action, value) {
     case ACTIONS.LAUNCH:
       if (state.held) {
         state.held = false;
-        spawnBall(state, BALL_SPEED >> 1);
+        spawnBall(state, state.speed >> 1);
       }
       break;
   }
@@ -282,14 +313,22 @@ export function applyAction(state, action, value) {
  * the horizontal component.
  */
 function bounceOffPaddle(state, ball) {
+  // the rally ramp: counted on returns rather than on time, so a player
+  // who is keeping the ball alive is the one who makes it faster
+  state.rally += 1;
+  if (state.rally >= SPEED_RALLY) {
+    state.rally = 0;
+    state.speed = Math.min(BALL_SPEED_MAX, state.speed + SPEED_STEP);
+  }
+  const speed = state.speed;
   const centre = state.paddleX + (state.paddleW >> 1);
   const offset = ball.x - centre;
   // scale the offset into a horizontal velocity, integer-only
-  let vx = Math.trunc((offset * BALL_SPEED * 2) / (state.paddleW >> 1));
-  const floor = BALL_SPEED >> 2;
+  let vx = Math.trunc((offset * speed * 2) / (state.paddleW >> 1));
+  const floor = speed >> 2;
   if (vx > -floor && vx < floor) vx = offset < 0 ? -floor : floor;
-  ball.vx = Math.max(-BALL_SPEED * 2, Math.min(BALL_SPEED * 2, vx));
-  ball.vy = -BALL_SPEED;
+  ball.vx = Math.max(-speed * 2, Math.min(speed * 2, vx));
+  ball.vy = -speed;
   ball.y = PADDLE_Y - BALL_R;
 }
 
@@ -401,6 +440,10 @@ export function stepTick(state) {
     state.paddleW = PADDLE_W;
     state.catching = false;
     state.slow = 0;
+    // and the rally's speed: a lost ball is a fresh start at the wall's
+    // own pace, not a relaunch at the speed that just beat you
+    state.speed = baseSpeed(state.level);
+    state.rally = 0;
     if (state.lives <= 0) state.over = true;
     else state.held = true;
   }
@@ -413,6 +456,8 @@ export function stepTick(state) {
     state.capsules = [];
     state.held = true;
     state.paddleW = PADDLE_W;
+    state.speed = baseSpeed(state.level);
+    state.rally = 0;
   }
 
   if (state.tick >= MAX_TICKS) state.over = true;

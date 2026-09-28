@@ -29,7 +29,14 @@ pub const PADDLE_Y: i32 = FIELD_H - px(16);
 pub const PADDLE_SPEED: i32 = px(7);
 
 pub const BALL_R: i32 = px(3);
-pub const BALL_SPEED: i32 = px(3);
+/// The ball earns its speed: every SPEED_RALLY paddle returns add
+/// SPEED_STEP up to BALL_SPEED_MAX, a lost ball gives it back, and each
+/// wall cleared starts a notch faster. The cap keeps a sub-step under a
+/// brick's height, so no row can be tunnelled through.
+pub const BALL_SPEED: i32 = 32;
+pub const BALL_SPEED_MAX: i32 = 96;
+pub const SPEED_STEP: i32 = 4;
+pub const SPEED_RALLY: u32 = 2;
 
 pub const BRICK_W: i32 = px(24);
 pub const BRICK_H: i32 = px(10);
@@ -132,6 +139,8 @@ pub struct State {
     pub slow: u32,
     pub over: bool,
     pub bricks_broken: u32,
+    pub speed: i32,
+    pub rally: u32,
 }
 
 impl State {
@@ -155,6 +164,8 @@ impl State {
             slow: 0,
             over: false,
             bricks_broken: 0,
+            speed: BALL_SPEED,
+            rally: 0,
         }
     }
 
@@ -166,7 +177,7 @@ impl State {
             x: self.paddle_x + (self.paddle_w >> 1),
             y: PADDLE_Y - BALL_R,
             vx,
-            vy: -BALL_SPEED,
+            vy: -self.speed,
         };
         self.ball_count += 1;
     }
@@ -212,7 +223,12 @@ impl State {
         let left = tier - 1;
         self.bricks[index as usize] = left;
         if left == EMPTY {
-            self.score += BRICK_SCORES[(tier as usize).min(BRICK_SCORES.len() - 1)];
+            // paid at the ball's pace, so speed is the risk the score
+            // rewards; relative to the start speed, so the first brick of
+            // a run is worth exactly its listed score
+            self.score += (BRICK_SCORES[(tier as usize).min(BRICK_SCORES.len() - 1)]
+                * self.speed as u32)
+                / BALL_SPEED as u32;
             self.bricks_broken += 1;
             self.drop_capsule(index);
         } else {
@@ -264,7 +280,7 @@ impl State {
             ACTION_LAUNCH => {
                 if self.held {
                     self.held = false;
-                    self.spawn_ball(BALL_SPEED >> 1);
+                    self.spawn_ball(self.speed >> 1);
                 }
             }
             _ => {}
@@ -275,15 +291,23 @@ impl State {
     /// straight up: a vertical return is a soft-lock and a stalling
     /// strategy.
     fn bounce(&mut self, index: usize) {
+        // counted on returns rather than on time, so the player keeping
+        // the ball alive is the one who makes it faster
+        self.rally += 1;
+        if self.rally >= SPEED_RALLY {
+            self.rally = 0;
+            self.speed = (self.speed + SPEED_STEP).min(BALL_SPEED_MAX);
+        }
+        let speed = self.speed;
         let centre = self.paddle_x + (self.paddle_w >> 1);
         let offset = self.balls[index].x - centre;
-        let mut vx = (offset * BALL_SPEED * 2) / (self.paddle_w >> 1);
-        let floor = BALL_SPEED >> 2;
+        let mut vx = (offset * speed * 2) / (self.paddle_w >> 1);
+        let floor = speed >> 2;
         if vx > -floor && vx < floor {
             vx = if offset < 0 { -floor } else { floor };
         }
-        self.balls[index].vx = vx.max(-BALL_SPEED * 2).min(BALL_SPEED * 2);
-        self.balls[index].vy = -BALL_SPEED;
+        self.balls[index].vx = vx.max(-speed * 2).min(speed * 2);
+        self.balls[index].vy = -speed;
         self.balls[index].y = PADDLE_Y - BALL_R;
     }
 
@@ -404,6 +428,10 @@ impl State {
             self.paddle_w = PADDLE_W;
             self.catching = false;
             self.slow = 0;
+            // a lost ball restarts at the wall's own pace, not at the
+            // speed that just beat the player
+            self.speed = base_speed(self.level);
+            self.rally = 0;
             if self.lives <= 0 {
                 self.over = true;
             } else {
@@ -419,12 +447,19 @@ impl State {
             self.capsule_count = 0;
             self.held = true;
             self.paddle_w = PADDLE_W;
+            self.speed = base_speed(self.level);
+            self.rally = 0;
         }
 
         if self.tick >= MAX_TICKS {
             self.over = true;
         }
     }
+}
+
+/// Where the speed starts for a wall: a notch up per wall cleared.
+pub fn base_speed(level: u32) -> i32 {
+    (BALL_SPEED as u32 + level.min(64) * SPEED_STEP as u32).min(BALL_SPEED_MAX as u32) as i32
 }
 
 pub fn replay(seed: u32, events: &[Event]) -> Outcome {

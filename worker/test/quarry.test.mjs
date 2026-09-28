@@ -14,6 +14,7 @@ import { verify } from '../src/game/scores.js';
 import {
   ACTIONS,
   BALL_SPEED,
+  BALL_SPEED_MAX,
   BRICK_COLS,
   BRICK_ROWS,
   EMPTY,
@@ -22,6 +23,7 @@ import {
   MAX_TICKS,
   PADDLE_SPEED,
   PADDLE_W,
+  PADDLE_Y,
   SOLID,
   applyAction,
   cleared,
@@ -33,6 +35,15 @@ import {
 } from '../src/game/quarry.js';
 
 const aim = (x) => [ACTIONS.TARGET, 0, x];
+
+/** Keep a ball in play by parking the paddle under a ball about to land. */
+function returnBall(state) {
+  const ball = state.balls[0];
+  if (!ball || ball.vy <= 0) return;
+  const target = ball.x - (state.paddleW >> 1);
+  applyAction(state, ACTIONS.TARGET, target);
+  state.paddleX = Math.max(0, Math.min(FIELD_W - state.paddleW, target));
+}
 
 test('the same seed and inputs give the same score, every time', () => {
   // the property the whole design rests on: the page plays this and the
@@ -109,6 +120,65 @@ test('the paddle centre never returns the ball straight up', () => {
   for (const ball of state.balls) {
     assert.notEqual(ball.vx, 0, 'a centred bounce returned straight up');
   }
+});
+
+test('a rally speeds the ball up, and never past the cap', () => {
+  // the ramp is what makes a long rally exciting and what ends a run that
+  // would otherwise last the full two minutes at one pace
+  const state = createState(3);
+  state.bricks.fill(EMPTY);
+  // one brick that will not break inside the test, so the wall never
+  // clears and resets the speed to the next wall's start
+  state.bricks[BRICK_COLS] = 100;
+  applyAction(state, ACTIONS.LAUNCH);
+  let peak = state.speed;
+  for (let i = 0; i < MAX_TICKS && !state.over && state.lives === 3; i++) {
+    returnBall(state);
+    stepTick(state);
+    peak = Math.max(peak, state.speed);
+    for (const ball of state.balls) {
+      assert.ok(Math.abs(ball.vy) <= BALL_SPEED_MAX, `vy ${ball.vy} beyond the cap`);
+    }
+  }
+  assert.equal(peak, BALL_SPEED_MAX, 'a long rally never reached top speed');
+});
+
+test('losing the ball gives the speed back', () => {
+  // relaunching at the speed that just beat the player is a death spiral:
+  // three lives gone in the time the first took
+  const state = createState(3);
+  applyAction(state, ACTIONS.LAUNCH);
+  state.speed = BALL_SPEED_MAX;
+  state.balls = [{ x: 10, y: PADDLE_Y + 200, vx: 0, vy: BALL_SPEED_MAX }];
+  applyAction(state, ACTIONS.TARGET, FIELD_W);
+  state.paddleX = FIELD_W - state.paddleW;
+  while (state.lives === 3) stepTick(state);
+  assert.equal(state.speed, BALL_SPEED);
+});
+
+test('a brick broken at speed pays more than one broken slowly', () => {
+  // otherwise dropping the ball on purpose to reset the speed costs a
+  // life and nothing else, and the fast rally is worth no more than a
+  // slow one
+  const scored = (speed) => {
+    const state = createState(3);
+    state.bricks.fill(EMPTY);
+    state.bricks[0] = SOLID;
+    const index = (BRICK_ROWS - 1) * BRICK_COLS + 3;
+    state.bricks[index] = 1;
+    state.bricks[index + 1] = 1; // a second, so the wall does not clear and pay its bonus
+    applyAction(state, ACTIONS.LAUNCH);
+    state.speed = speed;
+    state.balls = [{ x: 3 * 24 * 16 + 100, y: PADDLE_Y - 400, vx: 0, vy: -speed }];
+    const before = state.score;
+    for (let i = 0; i < 200 && state.bricksBroken === 0; i++) stepTick(state);
+    assert.equal(state.bricksBroken, 1, 'the brick was not reached');
+    return state.score - before;
+  };
+  assert.ok(scored(BALL_SPEED * 2) > scored(BALL_SPEED));
+  // and the start speed pays exactly the listed score, so a run's first
+  // brick means what the rules say it does
+  assert.equal(scored(BALL_SPEED), 50);
 });
 
 test('a run ends, whatever the player does or does not do', () => {

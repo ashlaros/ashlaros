@@ -56,6 +56,17 @@ export const HARD_DROP_POINTS = 2;
 export const BACK_TO_BACK_MULTIPLIER = 3;
 export const BACK_TO_BACK_DIVISOR = 2;
 
+// Lock delay: how long a grounded piece may still slide or turn before it
+// sets. Without one, the top of the gravity curve is unplayable rather than
+// hard - at a row per tick a piece locks the instant it lands, so the
+// placement is decided by where it spawned. Half a second, as the
+// Guideline has it.
+export const LOCK_DELAY = 30;
+// A successful move or turn on the ground restarts the delay, but only this
+// many times per row the piece reaches: unlimited resets let a player spin
+// a piece forever, which is a stall rather than a skill.
+export const LOCK_RESETS = 15;
+
 export const ACTIONS = {
   LEFT: 0,
   RIGHT: 1,
@@ -171,13 +182,19 @@ export function pieceAt(seed, i) {
  *
  * A curve steep enough that everyone tops out: TGM's lesson is that a
  * speed that eventually exceeds reaction is what bounds a run and keeps
- * the board a contest of skill rather than of stamina. At level 15 and
- * above gravity is one row per tick, which no one sustains.
+ * the board a contest of skill rather than of stamina.
+ *
+ * Shaped to the levels a run can actually reach. MAX_PIECES is 300 and a
+ * piece is four cells, so no run clears more than 120 lines or passes
+ * level 12 - the old table spent its steep end on levels 13-15, which no
+ * one ever saw, and ran level 0 to 8 in equal steps, so the first levels
+ * felt no faster and the last ones jumped. This one eases in and then
+ * accelerates, each level a similar felt step, and reaches a row per tick
+ * at level 11 where the lock delay is what keeps it playable.
  */
 export function gravityInterval(level) {
-  if (level >= 15) return 1;
-  const table = [48, 43, 38, 33, 28, 23, 18, 13, 8, 6, 5, 5, 4, 4, 3];
-  return table[level];
+  const table = [48, 40, 32, 25, 19, 14, 10, 7, 5, 3, 2];
+  return level < table.length ? table[level] : 1;
 }
 
 export function levelFor(lines) {
@@ -205,6 +222,9 @@ export function createState(seed) {
     lines: 0,
     level: 0,
     gravityCounter: 0,
+    lockCounter: 0,
+    lockResets: 0,
+    lockFloor: 0,
     backToBack: false,
     over: false,
   };
@@ -240,6 +260,9 @@ export function spawn(state) {
   state.y = 0;
   state.holdUsed = false;
   state.gravityCounter = 0;
+  state.lockCounter = 0;
+  state.lockResets = 0;
+  state.lockFloor = 0;
   // a spawn that cannot be placed is the top-out
   if (collides(state, state.piece, 0, state.x, state.y)) state.over = true;
   return state;
@@ -263,6 +286,20 @@ const KICKS = [
   [0, -2],
 ];
 
+/**
+ * A successful move or turn while grounded buys the piece more time.
+ *
+ * This is what makes the lock delay a control rather than a timer: sliding
+ * a piece under an overhang at speed takes several inputs, and each has to
+ * be allowed to finish. Capped per piece by LOCK_RESETS.
+ */
+function resetLock(state) {
+  if (state.lockCounter > 0 && state.lockResets < LOCK_RESETS) {
+    state.lockCounter = 0;
+    state.lockResets += 1;
+  }
+}
+
 export function rotate(state, direction) {
   if (!state.piece) return state;
   const next = (state.rotation + (direction > 0 ? 1 : 3)) & 3;
@@ -271,6 +308,7 @@ export function rotate(state, direction) {
       state.rotation = next;
       state.x += dx;
       state.y += dy;
+      resetLock(state);
       return state;
     }
   }
@@ -281,6 +319,7 @@ export function move(state, dx) {
   if (!state.piece) return state;
   if (!collides(state, state.piece, state.rotation, state.x + dx, state.y)) {
     state.x += dx;
+    resetLock(state);
   }
   return state;
 }
@@ -382,6 +421,10 @@ export function applyAction(state, action) {
         state.rotation = 0;
         state.x = 3;
         state.y = 0;
+        state.gravityCounter = 0;
+        state.lockCounter = 0;
+        state.lockResets = 0;
+        state.lockFloor = 0;
         if (collides(state, state.piece, 0, state.x, state.y)) state.over = true;
       }
       return state;
@@ -391,7 +434,15 @@ export function applyAction(state, action) {
   }
 }
 
-/** One simulation step: gravity, and a lock when the piece has landed. */
+/**
+ * One simulation step: gravity, and a lock once the piece has sat on the
+ * stack for LOCK_DELAY ticks.
+ *
+ * The lock is its own clock rather than the next gravity step, because at
+ * level 0 that gave a grounded piece 48 ticks and at level 11 it gave one -
+ * the time to finish a placement shrank with the speed, which punished the
+ * last inputs twice. Now falling gets faster and settling does not.
+ */
 export function stepTick(state) {
   if (state.over) return state;
   if (!state.piece) spawn(state);
@@ -400,11 +451,19 @@ export function stepTick(state) {
   state.gravityCounter += 1;
   if (state.gravityCounter >= gravityInterval(state.level)) {
     state.gravityCounter = 0;
-    if (!collides(state, state.piece, state.rotation, state.x, state.y + 1)) {
-      state.y += 1;
-    } else {
-      lockPiece(state);
-    }
+    if (!collides(state, state.piece, state.rotation, state.x, state.y + 1)) state.y += 1;
+  }
+  if (collides(state, state.piece, state.rotation, state.x, state.y + 1)) {
+    state.lockCounter += 1;
+    if (state.lockCounter >= LOCK_DELAY) lockPiece(state);
+  } else if (state.y > state.lockFloor) {
+    // Only a row the piece has never reached refreshes it. A floor kick
+    // lifts a grounded piece into the air, and if being airborne were
+    // enough, turning in place would reset the clock forever once
+    // LOCK_RESETS ran out - the infinite spin the cap exists to stop.
+    state.lockFloor = state.y;
+    state.lockCounter = 0;
+    state.lockResets = 0;
   }
   state.tick += 1;
   return state;

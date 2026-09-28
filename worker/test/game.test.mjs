@@ -12,6 +12,8 @@ import { test } from 'node:test';
 
 import {
   ACTIONS,
+  LOCK_DELAY,
+  LOCK_RESETS,
   MAX_EVENTS_PER_TICK,
   MAX_PIECES,
   PIECE_NAMES,
@@ -19,7 +21,9 @@ import {
   WIDTH,
   applyAction,
   bagAt,
+  collides,
   createState,
+  gravityInterval,
   hash32,
   pieceAt,
   replay,
@@ -404,6 +408,86 @@ test('the page and the verifier score a played-out run identically', () => {
     assert.equal(server.score, page.score, `seed ${seed} scores differently`);
     assert.equal(server.lines, page.lines, `seed ${seed} clears differently`);
   }
+});
+
+test('the page and the verifier agree on pieces that land by gravity', () => {
+  // The run above hard-drops everything, so it never reaches the lock
+  // delay: every piece there locks the instant it is dropped. This one
+  // lets pieces fall, then slides and turns them on the stack, which is
+  // the path where the two implementations each keep their own counters.
+  for (const seed of [5, 6, 7]) {
+    const events = [];
+    let rand = seed;
+    for (let tick = 3; events.length < 3000; tick += 1 + (rand % 6)) {
+      rand = hash32(rand, tick);
+      // no hard drops, and soft drops rare, so most time is spent falling
+      // and sitting grounded
+      const roll = rand % 20;
+      const action = roll < 7 ? ACTIONS.LEFT : roll < 14 ? ACTIONS.RIGHT : roll < 18 ? ACTIONS.ROTATE_CW : roll < 19 ? ACTIONS.ROTATE_CCW : ACTIONS.SOFT_DROP;
+      events.push([action, tick]);
+    }
+    const page = replay(seed, events);
+    const server = verify('courses', seed, events);
+    assert.ok(page.index > 20, `seed ${seed} barely played`);
+    assert.equal(server.score, page.score, `seed ${seed} scores differently`);
+    assert.equal(server.lines, page.lines, `seed ${seed} clears differently`);
+  }
+});
+
+test('a grounded piece waits for the lock delay, and a move buys it time', () => {
+  // without a delay a piece at the top of the curve locks on landing, so
+  // the last slide under an overhang is impossible however fast the player
+  const state = createState(11);
+  spawn(state);
+  state.level = 12; // a row per tick
+  const first = state.index;
+  while (!collides(state, state.piece, state.rotation, state.x, state.y + 1)) stepTick(state);
+  for (let i = 0; i < LOCK_DELAY - 2; i++) stepTick(state);
+  assert.equal(state.index, first, 'locked before the delay ran out');
+  // a successful slide restarts the delay
+  const x = state.x;
+  applyAction(state, ACTIONS.LEFT);
+  if (state.x === x) applyAction(state, ACTIONS.RIGHT);
+  assert.notEqual(state.x, x, 'the piece could not move either way');
+  for (let i = 0; i < LOCK_DELAY - 2; i++) stepTick(state);
+  assert.equal(state.index, first, 'the slide did not buy any time');
+  for (let i = 0; i < 4; i++) stepTick(state);
+  assert.ok(state.index > first, 'the piece never locked');
+});
+
+test('a piece cannot be spun on the ground forever', () => {
+  // unlimited resets are a stall, and a floor kick that lifts the piece
+  // must not be a way around the cap
+  const state = createState(11);
+  spawn(state);
+  const first = state.index;
+  while (!collides(state, state.piece, state.rotation, state.x, state.y + 1)) stepTick(state);
+  let ticks = 0;
+  while (state.index === first && ticks < 10000) {
+    applyAction(state, ticks % 2 ? ACTIONS.ROTATE_CW : ACTIONS.ROTATE_CCW);
+    stepTick(state);
+    ticks += 1;
+  }
+  assert.equal(state.index, first + 1, 'the piece never locked');
+  assert.ok(ticks <= (LOCK_RESETS + 2) * LOCK_DELAY, `spun for ${ticks} ticks`);
+});
+
+test('gravity keeps speeding up through every level a run can reach', () => {
+  // 300 pieces of four cells is at most 120 lines, so level 12 is the
+  // ceiling. The old table saved its steep end for levels 13-15, which no
+  // run could reach, and stood still between levels 10 and 11.
+  const ceiling = Math.floor((MAX_PIECES * 4) / WIDTH / 10);
+  for (let level = 1; level < ceiling; level++) {
+    assert.ok(gravityInterval(level) <= gravityInterval(level - 1), `level ${level} is slower`);
+  }
+  assert.equal(gravityInterval(ceiling - 1), 1, 'full speed is out of reach');
+  // and it never flattens for long: at most one repeated interval before
+  // the maximum, so every level up is felt
+  let repeats = 0;
+  for (let level = 1; gravityInterval(level) > 1; level++) {
+    if (gravityInterval(level) === gravityInterval(level - 1)) repeats += 1;
+  }
+  assert.ok(repeats === 0, `${repeats} levels that do not speed up`);
 });
 
 /**
