@@ -44,6 +44,10 @@ struct Submission {
     status: Option<String>,
     sent: bool,
     gameover_played: bool,
+    /// Seconds since the run ended. A key still held when the run tops out
+    /// arrives as a fresh press on the next frame, and without a pause it
+    /// started the next round before the final score was read.
+    ended_for: f32,
 }
 
 impl Submission {
@@ -54,6 +58,7 @@ impl Submission {
             status: None,
             sent: false,
             gameover_played: false,
+            ended_for: 0.0,
         }
     }
 
@@ -221,7 +226,22 @@ fn handle_submission(
         // one attempt per seed is the server's rule; not offering to send
         // twice is this side agreeing with it rather than discovering it
         submission.sent = true;
+    } else if handle.is_key_pressed(KeyboardKey::KEY_TAB) {
+        // letters are initials here, so skipping needs a key that is not one
+        submission.status = Some("not submitted".into());
+        submission.sent = true;
     }
+}
+
+/// Whether the finished run should give way to a fresh one. Only once the
+/// entry is done, since every letter is an initial until then, and never
+/// in the same frame the entry was confirmed - that Enter is not a restart.
+fn wants_again(handle: &RaylibHandle, submission: &Submission, confirmed_now: bool) -> bool {
+    const DELAY: f32 = 0.6;
+    submission.sent
+        && !confirmed_now
+        && submission.ended_for > DELAY
+        && (handle.is_key_pressed(KeyboardKey::KEY_ENTER) || handle.is_key_pressed(KeyboardKey::KEY_R))
 }
 
 /// Today, as the server derives it. The seed follows from this, so a
@@ -327,7 +347,16 @@ fn main() {
                         submission.gameover_played = true;
                         audio.play("gameover");
                     }
+                    submission.ended_for += dt;
+                    let was_sent = submission.sent;
                     handle_submission(&handle, submission, "courses", &day, &run.events);
+                    if wants_again(&handle, submission, !was_sent) {
+                        let seed = ashlaros_games::seed_for("courses", &day);
+                        let mut next = CoursesRun::new(seed, seed ^ 0x9e37_79b9);
+                        next.start_fanfare(&audio);
+                        screen = Screen::Courses(next, Submission::new());
+                        accumulator = 0.0;
+                    }
                 }
                 if handle.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
                     screen = Screen::Menu;
@@ -349,7 +378,16 @@ fn main() {
                         submission.gameover_played = true;
                         audio.play("gameover");
                     }
+                    submission.ended_for += dt;
+                    let was_sent = submission.sent;
                     handle_submission(&handle, submission, "quarry", &day, &run.events);
+                    if wants_again(&handle, submission, !was_sent) {
+                        let seed = ashlaros_games::seed_for("quarry", &day);
+                        let mut next = QuarryRun::new(seed, seed ^ 0x9e37_79b9);
+                        next.start_fanfare(&audio);
+                        screen = Screen::Quarry(next, Submission::new());
+                        accumulator = 0.0;
+                    }
                 }
                 if handle.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
                     screen = Screen::Menu;
@@ -408,6 +446,7 @@ fn draw_gameover(d: &mut RaylibDrawHandle, score: u32, submission: &Submission) 
 fn draw_submission(d: &mut RaylibDrawHandle, submission: &Submission, x: i32, y: i32) {
     if let Some(status) = &submission.status {
         d.draw_text(status, x, y, 18, FG);
+        d.draw_text("enter or R to play again, esc for the menu", x, y + 28, 14, ACCENT);
         return;
     }
     d.draw_text(&format!("initials  {}", submission.text()), x, y, 20, FG);
@@ -420,5 +459,6 @@ fn draw_submission(d: &mut RaylibDrawHandle, submission: &Submission, x: i32, y:
         ACCENT,
     );
     d.draw_text("A-Z to type, backspace, enter to submit", x, y + 44, 14, ACCENT);
+    d.draw_text("tab to skip", x, y + 62, 14, ACCENT);
 }
 

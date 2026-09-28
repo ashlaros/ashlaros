@@ -74,6 +74,7 @@ const entryEl = document.getElementById('entry');
 const initialEls = [...document.querySelectorAll('#initials button')];
 const submitEl = document.getElementById('submit');
 const noteEl = document.getElementById('submit-note');
+const againEl = document.getElementById('again');
 
 let state = null;
 let events = [];
@@ -86,6 +87,11 @@ let lastBoard = [];
 const BOARD_SIZE = 20;
 let accumulator = 0;
 let lastFrame = 0;
+// When the last run ended. A key still held from the run - a soft drop,
+// an arrow - arrives as a fresh keydown the instant it ends, and without
+// this pause it started the next round before the final score was read.
+let finishedAt = 0;
+const AGAIN_DELAY_MS = 600;
 // The danger cue fires on entering the top band and not on every tick
 // spent in it; this is what makes it "entering" rather than "still there".
 // It arms again only once a piece has left the band, so one piece cannot
@@ -451,7 +457,13 @@ window.addEventListener('keydown', (event) => {
     return;
   }
   if (!running) {
-    start();
+    // the first run starts on any key, as the page says; the next one only
+    // on a deliberate Enter or R, so the end of a run is never skipped
+    const deliberate = !event.repeat && (event.key === 'Enter' || event.key === 'r' || event.key === 'R');
+    if (!state || (deliberate && performance.now() - finishedAt > AGAIN_DELAY_MS)) {
+      event.preventDefault();
+      start();
+    }
     return;
   }
   const action = KEYS[event.key];
@@ -509,6 +521,7 @@ function start() {
   lastFrame = performance.now();
   statusEl.textContent = 'Playing.';
   entryEl.hidden = true;
+  againEl.hidden = true;
   noteEl.textContent = '';
   requestAnimationFrame(frame);
 }
@@ -552,11 +565,13 @@ function placed(score) {
 
 function finish() {
   running = false;
+  finishedAt = performance.now();
+  againEl.hidden = false;
   // the run is over, so what was mid-flight is debris frozen in the air
   // rather than anything still happening
   effects.clear();
   draw();
-  statusEl.textContent = `Topped out at ${state.score.toLocaleString('en-US')}.`;
+  statusEl.textContent = `Topped out at ${state.score.toLocaleString('en-US')}. R to play again.`;
   audio.stopMusic();
   audio.play('gameover');
   if (submittable && placed(state.score)) {
@@ -567,7 +582,7 @@ function finish() {
     drawInitials();
   } else {
     noteEl.textContent = submittable
-      ? 'That did not place. Try again tomorrow - one run per seed.'
+      ? 'That did not place. The board keeps one run per player per seed.'
       : 'Offline: this run cannot be submitted.';
   }
 }
@@ -598,6 +613,11 @@ submitEl.addEventListener('click', async () => {
   } catch (error) {
     noteEl.textContent = `Could not submit: ${error.message}`;
   }
+});
+
+againEl.addEventListener('click', () => {
+  againEl.blur();
+  start();
 });
 
 const boards = createBoards({
