@@ -5,7 +5,8 @@
 # open. --daemon-mode is what watches udisks without showing a window.
 Description=pcmanfm-qt mounting daemon
 PartOf=sway-session.target
-After=sway-session-pre.target
+After=sway-session.target
+Requisite=sway-session.target
 
 [Service]
 ExecStart=/usr/bin/pcmanfm-qt --daemon-mode
