@@ -2,8 +2,11 @@
 outputs=$(swaymsg -t get_outputs)
 make=$(echo "$outputs" | jq -r '.[] | select(.focused==true) | .make')
 model=$(echo "$outputs" | jq -r '.[] | select(.focused==true) | .model')
+serial=$(echo "$outputs" | jq -r '.[] | select(.focused==true) | .serial')
 name=$(echo "$outputs" | jq -r '.[] | select(.focused==true) | .name')
-current_screen="$make $model ($name"
+# way-displays matches the description, which carries the serial when the
+# EDID has one; sway reports a missing serial as "Unknown"
+[ "$serial" = "Unknown" ] && current_screen="$make $model ($name" || current_screen="$make $model $serial ($name"
 
 increment=0.25
 

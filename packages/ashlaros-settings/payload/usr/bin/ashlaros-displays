@@ -77,11 +77,15 @@ require_daemon() {
 # Identify by description, never by name. Upstream is explicit that names
 # are nondeterministic - DP-3 today is DP-5 after a reboot - and a rule
 # keyed on a name silently stops matching. This is the same
-# "<make> <model> (<name>" string scale.sh already builds, which is what
-# way-displays matches a rule against.
+# "<make> <model> [<serial>] (<name>" string scale.sh already builds, which
+# is what way-displays matches a rule against: wlroots puts the serial in
+# the description when the EDID has one, and sway reports a missing one as
+# "Unknown". Leave it out and a display with a serial matches no rule.
+DESC='"\(.make) \(.model)\(if .serial == "Unknown" then "" else " \(.serial)" end) (\(.name)"'
+
 descriptions() {
   swaymsg -t get_outputs |
-    jq -r '.[] | select(.active or .dpms != null) | "\(.make) \(.model) (\(.name)"'
+    jq -r ".[] | select(.active or .dpms != null) | $DESC"
 }
 
 # The modes that display reports, from the same place. Largest first,
@@ -96,7 +100,7 @@ descriptions() {
 modes_for() {
   swaymsg -t get_outputs |
     jq -r --arg d "$1" '
-      [ .[] | select("\(.make) \(.model) (\(.name)" == $d) | .modes[]
+      [ .[] | select('"$DESC"' == $d) | .modes[]
         | { w: .width, h: .height, hz: ((.refresh / 1000) | round) } ]
       | unique
       | sort_by(-.w, -.h, -.hz)[]
