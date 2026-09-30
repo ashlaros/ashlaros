@@ -1,0 +1,19 @@
+[Unit]
+# A unit rather than an xdg autostart entry: dex starts entries into the
+# login scope, which outlives sway on logout, so the old tray kept running
+# and registered itself again with the next session's bar - two Tailscale
+# icons after every re-login. PartOf stops it with the session instead.
+Description=Tailscale tray
+PartOf=sway-session.target
+After=sway-session.target waybar.service
+
+[Service]
+# The bar hosts the StatusNotifierWatcher; the same wait dex does before
+# starting tray applets
+ExecStartPre=/usr/bin/gdbus wait --session org.kde.StatusNotifierWatcher
+ExecStart=/usr/bin/tailscale systray
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=sway-session.target

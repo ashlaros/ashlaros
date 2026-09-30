@@ -44,6 +44,9 @@ set $initialize_scratchpad_urgent_watch '[ -x "$(command -v waybar)" ] && system
 # Taildrop receives are pull-based: without this running, a file someone
 # sends sits in an invisible inbox while their end reports success
 set $initialize_taildrop_receive '[ -x "$(command -v tailscale)" ] && systemctl --user enable --now --no-reload taildrop-receive.service'
+# the tray as a session unit, not an xdg autostart entry: dex starts into
+# the login scope, which survives logout, so every re-login added an icon
+set $initialize_tailscale_systray '[ -x "$(command -v tailscale)" ] && systemctl --user enable --now --no-reload tailscale-systray.service'
 
 # autostarts
 
