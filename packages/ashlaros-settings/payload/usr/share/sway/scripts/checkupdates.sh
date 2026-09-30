@@ -104,7 +104,9 @@ case $1'' in
     UPDATES=$(get_updates)
     FRESH=$?
     COUNT=$(echo "$UPDATES" | grep -cv '^$')
-    TOOLTIP=$(echo "$UPDATES" | awk 1 ORS='\\n' | sed 's/\\n$//')
+    # Real newlines: jq --arg escapes them for the JSON. A literal "\n"
+    # built here is escaped too, and waybar printed it as backslash-n.
+    TOOLTIP=$UPDATES
     # The badge counts pacman, AUR, flatpak, firmware and mise - the
     # sources that can say how much work they have without doing it.
     # Clicking runs topgrade, which has ~180 steps and no count-only mode,
@@ -112,12 +114,15 @@ case $1'' in
     # the run may find and the badge cannot see. The tooltip says which
     # side of that line the number is on rather than letting it read as a
     # prediction of the run.
-    TOOLTIP="$TOOLTIP\n\npacman, AUR, flatpak, firmware, mise. Updating runs topgrade's other steps too."
+    TOOLTIP="$TOOLTIP
+
+pacman, AUR, flatpak, firmware, mise. Updating runs topgrade's other steps too."
     if [ "$FRESH" -ne 0 ]; then
         # Say the number is old rather than presenting it as current. A
         # badge that silently stops moving is worse than one that admits
         # it cannot reach a mirror, because only the second is noticed.
-        TOOLTIP="$TOOLTIP\nCould not reach a mirror; this count may be out of date."
+        TOOLTIP="$TOOLTIP
+Could not reach a mirror; this count may be out of date."
         CLASS="stale"
     else
         CLASS="ok"
