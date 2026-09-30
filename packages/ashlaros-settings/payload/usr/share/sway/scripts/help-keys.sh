@@ -25,6 +25,14 @@
 # does not flash it back between the two.
 #
 # Measured on sway 1.12: the bar event arrives 1.8 ms after the key.
+#
+# help.sh opens one help-keys per output, each told its index; `screen` here
+# is the focused output's, so only that one draws. It is kept current from
+# workspace events, which sway sends whenever focus crosses to another
+# output, and not looked up per key: that would put a swaymsg round trip
+# between the modifier going down and the sheet appearing. An output event
+# is a hotplug or a mode change, which renumbers the monitors, so help.sh
+# reopens the windows on it.
 set -u
 
 sheet=$(/usr/share/sway/scripts/sbdp.sh "${1:-$HOME/.config/sway/config}")
@@ -32,6 +40,14 @@ sheet=$(/usr/share/sway/scripts/sbdp.sh "${1:-$HOME/.config/sway/config}")
 mods=----
 mode=default
 fired=false
+
+# the same index help.sh computes for --screen
+focused_screen() {
+	screen=$(swaymsg -t get_outputs --raw 2>/dev/null |
+		jq '[.[] | select(.active)] | map(.focused) | index(true) // 0' 2>/dev/null) || screen=
+	screen=${screen:-0}
+}
+focused_screen
 
 # The candidates: in the current mode, and needing every modifier held.
 # Needing it, not only it: with Super held, Super+Shift+q is still one key
@@ -41,7 +57,7 @@ fired=false
 # answer, modifiers or not. Fewest modifiers first, so the next key to
 # press is at the top.
 emit() {
-	printf '%s' "$sheet" | jq -c --arg mods "$mods" --arg mode "$mode" --argjson fired "$fired" '
+	printf '%s' "$sheet" | jq -c --arg mods "$mods" --arg mode "$mode" --argjson fired "$fired" --argjson screen "$screen" '
 		map(select(.mode == $mode)
 		    | select($mode != "default" or
 		             (.mods as $need | [range(4)]
@@ -52,14 +68,17 @@ emit() {
 		# screen on each one.
 		| {show: ((($mods != "----" and $mods != "-h--") or ($mode != "default"))
 		          and ($fired | not) and length > 0),
+		   screen: $screen,
 		   entries: map({action, keybinding})}'
 }
 
 emit
-swaymsg -t subscribe -m '["bar_state_update","binding","mode"]' |
+swaymsg -t subscribe -m '["bar_state_update","binding","mode","workspace","output"]' |
 	jq --unbuffered -r '
 		if .id then "bar\t\(.id)\t\(.visible_by_modifier)"
 		elif .binding then "binding"
+		elif .current then (if .change == "focus" then "focus" else empty end)
+		elif .change == "unspecified" then "output"
 		elif .change then "mode\t\(.change)"
 		else empty end' |
 	while IFS="$(printf '\t')" read -r kind a b; do
@@ -88,6 +107,15 @@ swaymsg -t subscribe -m '["bar_state_update","binding","mode"]' |
 		mode)
 			mode=$a
 			fired=false
+			;;
+		focus)
+			old=$screen
+			focused_screen
+			[ "$screen" = "$old" ] && continue
+			;;
+		output)
+			focused_screen
+			/usr/share/sway/scripts/help.sh --outputs &
 			;;
 		esac
 		emit

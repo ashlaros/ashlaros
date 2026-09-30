@@ -15,7 +15,8 @@
 ; hold Super and it lists the Super bindings, add Shift and it narrows to
 ; Super+Shift, enter screenshot mode and it lists that mode's keys. It
 ; hides once a binding fires, and stays hidden until the modifiers are all
-; up, so a second Super+d in the same hold does not flash it back.
+; up, so a second Super+d in the same hold does not flash it back. It is
+; open once per output, and draws on the focused one - see help.sh.
 
 ; The sheet as JSON, one object per binding: category, action, keybinding,
 ; mods (a Super/sHift/Ctrl/Alt mask, "s---" for Super alone) and the mode it
@@ -27,13 +28,15 @@
   `/usr/share/sway/scripts/sbdp.sh $HOME/.config/sway/config`)
 
 ; What is held and what fits it, from help-keys.sh: {"show": bool,
-; "entries": [...]}, the bindings already filtered and sorted. The filter is
-; in the script rather than here because it compares against sway's mode
-; names, which are pango markup full of quotes that would have to be
-; spliced into jq source. deflisten, so eww runs it only while a window
-; reads it - and help-keys is open all session.
+; "screen": index, "entries": [...]}, the bindings already filtered and
+; sorted, and the focused output's index. The filter is in the script
+; rather than here because it compares against sway's mode names, which are
+; pango markup full of quotes that would have to be spliced into jq source.
+; deflisten, so eww runs it only while a window reads it - and help-keys is
+; open all session. One script for every instance: eww shares a variable
+; across the windows that read it.
 (deflisten help-held
-  :initial '{"show": false, "entries": []}'
+  :initial '{"show": false, "screen": 0, "entries": []}'
   `/usr/share/sway/scripts/help-keys.sh`)
 
 ; One line of the sheet. :show-truncated false stops pango eating a long
@@ -83,11 +86,13 @@
 
 ; Open for the whole session and empty until a key is held. A revealer
 ; flipping on a variable costs the same 55 ms as `eww open`, measured, and
-; needs no second process to drive it.
-(defwindow help-keys
-  :monitor 0
+; needs no second process to drive it. One per output, `screen` its index
+; from help.sh: reopening on the focused output would cost those 55 ms on
+; every key, so each is open already and only the focused one reveals.
+(defwindow help-keys [screen]
+  :monitor screen
   :stacking "overlay"
   :focusable false
   :geometry (geometry :y "40px" :width "720px" :anchor "top center")
-  (revealer :transition "none" :reveal {help-held.show}
+  (revealer :transition "none" :reveal {help-held.show && help-held.screen == screen}
     (help-keys-box)))
