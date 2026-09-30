@@ -54,7 +54,7 @@ useradd -m -s /bin/zsh "$SHOT_USER"
 install -d -o "$SHOT_USER" -g "$SHOT_USER" "${OUT_DIR:-/out}"
 # no logind in a container, so nothing creates the runtime dir wayland needs
 install -d -m 700 -o "$SHOT_USER" -g "$SHOT_USER" "/run/user/$(id -u "$SHOT_USER")"
-# the bar's wob pipe lands here; a first login would have made it already
+# wob.sh writes wob's config here; a first login would have made it already
 install -d -o "$SHOT_USER" -g "$SHOT_USER" "/home/$SHOT_USER/.cache"
 
 echo "ready: $(pacman -Q ashlaros-settings)"

@@ -13,3 +13,7 @@ Documentation=man:systemd.special(7)
 Requires=basic.target
 BindsTo=wayland-session.target
 Before=wayland-session.target
+# XDG autostart entries, as the units systemd-xdg-autostart-generator makes
+# of them. The target refuses a manual start, so a dependency is the only
+# way in; it is PartOf this one, from xdg-desktop-autostart.target.d.
+Wants=xdg-desktop-autostart.target

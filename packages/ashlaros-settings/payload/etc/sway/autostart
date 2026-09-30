@@ -44,13 +44,18 @@ set $initialize_scratchpad_urgent_watch '[ -x "$(command -v waybar)" ] && system
 # Taildrop receives are pull-based: without this running, a file someone
 # sends sits in an invisible inbox while their end reports success
 set $initialize_taildrop_receive '[ -x "$(command -v tailscale)" ] && systemctl --user enable --now --no-reload taildrop-receive.service'
-# the tray as a session unit, not an xdg autostart entry: dex starts into
-# the login scope, which survives logout, so every re-login added an icon
+# the tray has its own unit rather than an xdg autostart entry, for
+# Restart=on-failure: a generated autostart unit is Restart=no
 set $initialize_tailscale_systray '[ -x "$(command -v tailscale)" ] && systemctl --user enable --now --no-reload tailscale-systray.service'
+# the socket, which starts wob on the first value wob.sh writes - see
+# /etc/systemd/user/wob.service.d
+set $initialize_wob '[ -x "$(command -v wob)" ] && systemctl --user enable --now --no-reload wob.socket'
 
 # autostarts
 
-set $initialize_dex '[ -x "$(command -v dex)" ] && gdbus wait --session org.kde.StatusNotifierWatcher && dex -a -e SWAY'
+# XDG autostart entries - /etc/xdg/autostart, ~/.config/autostart - are not
+# started from here: sway-session.target pulls in xdg-desktop-autostart,
+# whose units systemd generates from them. See app-@autostart.service.d.
 set $help_menu '[ -x "$(command -v eww)" ] && [ -f $HOME/.config/eww/eww.yuck ] && /usr/share/sway/scripts/help.sh'
 set $initialize_xdg_dirs '[ -x "$(command -v xdg-user-dirs-update)" ] && exec xdg-user-dirs-update'
 # /etc/skel is copied once at user creation, so a change to a shipped
@@ -68,4 +73,7 @@ set $apply_background swaymsg 'output * bg $background fill'
 
 # daemons
 
-set $nm_applet '[ -x "$(command -v nm-applet)" ] && pkill -U $USER -x nm-applet && nm-applet'
+# A transient unit rather than a plain spawn, so it stops with the session
+# like everything else; its autostart entry is hidden above. The name makes
+# a reload's second start fail as a duplicate instead of adding an applet.
+set $nm_applet '[ -x "$(command -v nm-applet)" ] && systemd-run --user --quiet --collect --unit=nm-applet -p PartOf=sway-session.target -p After=sway-session.target nm-applet'

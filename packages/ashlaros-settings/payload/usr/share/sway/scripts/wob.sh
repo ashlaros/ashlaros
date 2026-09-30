@@ -7,28 +7,19 @@
 # The config handed to wob is the managed colors followed by the user file, so
 # anything set in ~/.config/wob.ini overrides the theme (same model as waybar's
 # colors.css/style.css split).
+#
+# wob itself is wob.socket's: systemd holds the FIFO and starts wob.service
+# on the first value written, and stops it with the session - see
+# /etc/systemd/user/wob.service.d. This only writes values and the config.
 
 MARKER="# managed by ashlaros"
 
-# returns 0 (success) if wob is running and is attached to this sway session; else 1
-is_running_on_this_screen() {
-    pkill -U $USER -x -0 "wob" || return 1
-    for pid in $(pgrep "wob"); do
-        WOB_SWAYSOCK="$(tr '\0' '\n' </proc/"$pid"/environ | awk -F'=' '/^SWAYSOCK/ {print $2}')"
-        if [ "$WOB_SWAYSOCK" = "$SWAYSOCK" ]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-wob_pipe=~/.cache/$(basename "$SWAYSOCK").wob
-
-[ -p "$wob_pipe" ] || mkfifo "$wob_pipe"
+wob_pipe="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wob.sock"
 
 user_ini=~/.config/wob.ini
 colors_ini=~/.config/wob.colors.ini
-effective_ini=~/.cache/$(basename "$SWAYSOCK").wob.ini
+# the path wob.service.d passes to wob -c
+effective_ini=~/.cache/wob.ini
 
 to_wob_color() {
     # wob expects RRGGBB[AA]; sway themes provide #RRGGBB
@@ -75,17 +66,18 @@ if [ ! -f "$colors_ini" ] || [ "$3" = "--refresh" ]; then
 fi
 build_effective_ini
 
-# On a theme refresh, restart wob so the new colors take effect.
-[ "$3" = "--refresh" ] && pkill -U $USER -x wob
-
-# wob does not appear in $(swaymsg -t get_msg), so:
-is_running_on_this_screen || {
-    tail -f "$wob_pipe" | wob -c "$effective_ini" &
-}
-
+# On a theme refresh, restart wob so the new colors take effect. try-: one
+# that is not running reads the new file when it next starts.
 if [ "$3" = "--refresh" ]; then
-    exit 0;
-elif [ -n "$3" ]; then
+    systemctl --user try-restart wob.service
+    exit 0
+fi
+
+# Without the socket - no user manager, or wob.socket not enabled yet -
+# there is no reader, and a write here would create a regular file where
+# the socket's FIFO has to go.
+[ -p "$wob_pipe" ] || exit 0
+if [ -n "$3" ]; then
     echo "$3" >"$wob_pipe"
 else
     cat >"$wob_pipe"

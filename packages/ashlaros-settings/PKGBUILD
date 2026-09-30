@@ -65,7 +65,6 @@ depends=(
                               # all assume it, and without it the desktop
                               # loses auto-scale, hotplug and lid handling
     'eww'                     # widget system; draws the keybinding help overlay
-    'dex'                     # executes desktop entries on autostart
     'gum'                     # the TUI toolkit ashlaros-settings-tui and
                               # ashlaros-displays are built from; without
                               # it both exit with "gum is not installed"
