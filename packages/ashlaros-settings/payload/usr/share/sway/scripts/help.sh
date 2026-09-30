@@ -15,12 +15,27 @@
 # It is what screenshots/session.sh touches to keep the overlay out of
 # published screenshots, and it is what remembers a dismissal across a
 # logout. The held-keys window ignores it: it is empty until asked for.
+#
+# The sheet opens on the focused output, which with sway's default
+# focus_follows_mouse is the one under the cursor. eww cannot follow the
+# cursor itself: :monitor takes an index, a name or <primary> and nothing
+# else, and leaving it out fails outright - sway gives GTK no primary. So
+# `--screen` overrides the yuck's :monitor 0 on each open. An index, not a
+# name: under wayland eww 0.5.0 sees every monitor's model as "Unknown".
+# GDK numbers the wl_outputs in the order sway lists its active outputs,
+# measured on two - eDP-1 first there, and `--screen 0` landed on it.
 
 set -eu
 
 LOCKFILE="$HOME/.local/help_disabled"
 
 command -v eww >/dev/null || exit 0
+
+focused_screen() {
+	screen=$(swaymsg -t get_outputs --raw 2>/dev/null |
+		jq '[.[] | select(.active)] | map(.focused) | index(true) // 0' 2>/dev/null) || screen=
+	printf '%s' "${screen:-0}"
+}
 
 case "${1:-}" in
 --toggle)
@@ -30,7 +45,7 @@ case "${1:-}" in
 	else
 		touch "$LOCKFILE"
 	fi
-	eww open --toggle help >/dev/null 2>&1 || true
+	eww open --toggle --screen "$(focused_screen)" help >/dev/null 2>&1 || true
 	;;
 *)
 	# Session start, and every reload. eww starts its own daemon on
@@ -46,7 +61,7 @@ case "${1:-}" in
 	[ -f "$LOCKFILE" ] && exit 0
 	case "$open" in
 	*"help: help"*) ;;
-	*) eww open help >/dev/null 2>&1 || true ;;
+	*) eww open --screen "$(focused_screen)" help >/dev/null 2>&1 || true ;;
 	esac
 	;;
 esac
