@@ -5,6 +5,9 @@ v3-optimised repositories layered over it, `chwd` for hardware detection,
 `linux-cachyos` as the kernel, systemd-boot, and a sway desktop carried over
 from [manjaro-sway](https://github.com/manjaro-sway/manjaro-sway).
 
+Coming from Manjaro Sway? [The migration guide](MIGRATING.md) covers what
+changed and how to move your files over.
+
 ![The AshlarOS desktop](https://ashlaros.download/iso/latest/screenshots/desktop.png)
 
 ## Installing
