@@ -426,9 +426,9 @@ optional package, unconfigured.
 ## AppImages
 
 They run. `fuse2` and `fuse3` are installed, which is all an AppImage
-needs. Nothing integrates them into the launcher by itself:
-download, `chmod +x`, run. [Gear Lever](https://gearlever.mijorus.it) is
-the current tool for managing and updating them.
+needs, and [Gear Lever](https://gearlever.mijorus.it) is preinstalled to
+manage them: open an AppImage with it to add it to the launcher, and it
+checks the integrated ones for updates.
 
 `flatpak` is installed but **no remote is configured**. Adding Flathub is
 one command, and it is left to you. Flathub is a third-party software

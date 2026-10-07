@@ -236,6 +236,10 @@ DESKTOP_PACKAGES = [
     # fuse3 looks like it works until someone downloads an older one.
     "fuse2",
     "fuse3",
+    # Gear Lever: what turns a downloaded AppImage into a launcher entry,
+    # and updates it later. FUSE alone runs one; nothing else integrates it.
+    # Built here, with the three of its depends that are AUR-only.
+    "gearlever",
     # checkupdates.sh already counts flatpak updates and the badge tooltip
     # already claims it does. Without this the branch is dead on every
     # machine and the tooltip is a lie - the same rot as #7, except the

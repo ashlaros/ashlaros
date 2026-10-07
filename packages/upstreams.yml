@@ -72,6 +72,28 @@ packages:
   catppuccin-gtk-theme-mocha:
     upstream: https://aur.archlinux.org/catppuccin-gtk-theme-mocha.git
     arch: any
+  # Gear Lever, the AppImage manager, and the three of its depends no
+  # repository carries. Installed on every desktop, so on ARM too: all four
+  # build there, and ALARM has every other dependency.
+  gearlever:
+    upstream: https://aur.archlinux.org/gearlever.git
+    arch: both
+  dwarfs:
+    upstream: https://aur.archlinux.org/dwarfs.git
+    # One local edit: upstream makedepends on parallel-hashmap, which is
+    # AUR-only too, and a dependency built here costs a build wave -
+    # parallel-hashmap -> dwarfs -> gearlever is three, and
+    # build-packages.yml runs two. It is header-only, so ours fetches its
+    # release tarball as a second source and points dwarfs' FetchContent
+    # at it. Expect a conflict on makedepends= and source= when upstream
+    # moves either.
+    arch: both
+  python-desktop-entry-lib:
+    upstream: https://aur.archlinux.org/python-desktop-entry-lib.git
+    arch: any
+  python-ftputil:
+    upstream: https://aur.archlinux.org/python-ftputil.git
+    arch: any
   howdy-next:
     upstream: https://aur.archlinux.org/howdy-next.git
     # x86_64 only, and not by choice: libinih is not in Arch Linux ARM, so
