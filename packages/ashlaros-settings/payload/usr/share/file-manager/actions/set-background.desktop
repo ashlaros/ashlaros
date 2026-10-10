@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Action
+Name=Set as Background
+Icon=preferences-desktop-wallpaper
+Profiles=background
+TryExec=swaymsg
+
+# What swaybg decodes: gdk-pixbuf, which hands everything past png and jpeg
+# to glycin's loaders
+[X-Action-Profile background]
+MimeTypes=image/jpeg;image/png;image/webp;image/gif;image/bmp;image/tiff;image/svg+xml;image/avif;image/heif;image/jxl;
+# "=1", not "1": libfm-qt reads anything without a <, > or = as ">0"
+SelectionCount==1
+Exec=ashlaros-set-background %f

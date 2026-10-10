@@ -1620,7 +1620,8 @@ calendar_account() {
 # Both are avoided by writing `set $background` into definitions.d/, which
 # is user-owned, documented as the override path in its own README, and
 # untouched by the theme machinery. The generated background stays the
-# default and is always offered back.
+# default and is always offered back. ashlaros-set-background, the file
+# manager's Set as Background, writes the same file in the same format.
 BACKGROUND_OVERRIDE="$HOME/.config/sway/definitions.d/50-background.conf"
 
 background_entry() {

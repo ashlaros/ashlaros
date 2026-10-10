@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Make an image the wallpaper, now and after a theme switch and a login.
+#
+# The file-manager action's half of Settings -> Background: the same
+# override in definitions.d (see background_entry in ashlaros-settings-tui
+# for why there), applied to the running session at once. No preview and
+# no fit question - a right-click is the decision, and fill is what the
+# override persists anyway, since $apply_background hardcodes it.
+set -euo pipefail
+
+notify() { command -v notify-send >/dev/null && notify-send "Background" -- "$1" || printf '%s\n' "$1" >&2; }
+
+(($# == 1)) || {
+  notify "Pick one image to use as the background."
+  exit 1
+}
+
+[[ -n ${SWAYSOCK:-} ]] || {
+  notify "This needs a running sway session."
+  exit 1
+}
+
+picked=$(realpath -- "$1")
+[[ -f $picked && -r $picked ]] || {
+  notify "Cannot read ${1}."
+  exit 1
+}
+
+override="$HOME/.config/sway/definitions.d/50-background.conf"
+generated="$HOME/.config/sway/generated_background.svg"
+
+if [[ $picked == "$(realpath -m -- "$generated")" ]]; then
+  # the default is the absence of an override, as in the settings TUI
+  rm -f "$override"
+  swaymsg output "*" bg "$generated" fill >/dev/null
+  notify "Using the theme's background again."
+  exit 0
+fi
+
+# sway runs the path through wordexp, so a quote, a bracket or an ampersand
+# is a syntax error and a $ is expanded - measured, "it's.svg" is refused
+# outright. Ordinary in a photo's name, so such a file is copied under a
+# name sway takes rather than refused; into the directory the settings
+# TUI's picker lists, where it can be found again.
+if [[ $picked == *[\'\"\\\$\`\&\|\;\<\>\(\)\{\}$'\n']* ]]; then
+  dir="${XDG_DATA_HOME:-$HOME/.local/share}/backgrounds"
+  name=$(basename -- "$picked")
+  copy="$dir/${name//[\'\"\\\$\`\&\|\;\<\>\(\)\{\}$'\n']/_}"
+  mkdir -p "$dir"
+  cp -f -- "$picked" "$copy"
+  picked=$copy
+fi
+
+if ! out=$(swaymsg output "*" bg "$picked" fill 2>&1); then
+  notify "sway refused it: $(printf '%s' "$out" | sed -n 's/.*"error": "\(.*\)".*/\1/p')"
+  exit 1
+fi
+
+mkdir -p "$(dirname "$override")"
+# the TUI's format exactly: its Revert reads this line back
+{
+  echo "# written by ashlaros-set-background"
+  echo "# definitions.d survives theme switches; generated_background.svg does not"
+  echo "set \$background '$picked'"
+} >"$override"
+notify "Set as the background."
