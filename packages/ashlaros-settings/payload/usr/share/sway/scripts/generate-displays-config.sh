@@ -8,4 +8,6 @@ OUTFILE="$HOME/.config/sway/config.d/99-displays.conf"
 
 mkdir -p "$(dirname "$OUTFILE")"
 
-swaymsg -t get_outputs | jq -r '.[] | "output \(.name) scale \(.scale)"' > "$OUTFILE"
+# a disabled output, e.g. eDP-1 with the lid closed, reports scale null, which
+# sway rejects as "Invalid scale" on the next reload
+swaymsg -t get_outputs | jq -r '.[] | select(.scale != null) | "output \(.name) scale \(.scale)"' > "$OUTFILE"
