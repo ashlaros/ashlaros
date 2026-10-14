@@ -127,7 +127,7 @@ class Recogniser(threading.Thread):
 class Trigger:
     """Turns a stream of recognised hands into reactions: a pose held for
     HOLD seconds fires once, and fires again only after it was let go. A
-    wave or a clap is its own proof of intent and fires when it ends."""
+    wave is its own proof of intent and fires as it completes."""
 
     def __init__(self):
         self.candidate = None

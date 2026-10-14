@@ -256,7 +256,7 @@ reactions** installs `ashlaros-reactions` (about 450 MiB, almost all of it
 OpenCV) and turns it on. It adds a camera called **AshlarOS Camera**; pick
 that one in Teams, Meet, Zoom or OBS instead of your real camera.
 
-Hold a pose for half a second; wave and clap just happen:
+Hold a pose for half a second; a wave just happens:
 
 | Gesture | One hand | Both hands |
 |---|---|---|
@@ -270,7 +270,6 @@ Hold a pose for half a second; wave and clap just happen:
 | 🫶 heart hands | | hearts |
 | 🙌 both palms raised, apart | | spotlights |
 | 👋 wave, two swings | a wave bubble | |
-| 👏 clap, twice | | applause |
 
 Holding a pose longer does not repeat it; lower your hand and raise it
 again for another. An open palm, a fist or a pointing finger do nothing on

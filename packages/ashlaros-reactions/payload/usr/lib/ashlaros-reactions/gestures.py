@@ -8,8 +8,8 @@ these are geometry, not another model.
 Every threshold was measured on HaGRID v2's test split: 10,450 images of
 19 gesture classes, run through this pipeline. Each rule's docstring gives
 its recall on its own class and how often it fired on all the others,
-no_gesture included. Waves and claps are motions HaGRID cannot show, and
-Motion follows them across frames instead.
+no_gesture included. A wave is a motion HaGRID cannot show, and Motion
+follows it across frames instead.
 
 Which fingers are out is read in world landmarks: metres, centred on the
 hand, so neither distance from the camera nor a hand turned sideways
@@ -131,7 +131,7 @@ def heart_hands(hands) -> bool:
 
 def raised_palms(hands, height: int) -> bool:
     """🙌 both palms open and upright, wrists in the upper 60% of the
-    frame, and well apart: two palms together are a heart or a clap.
+    frame, and well apart: two palms together are a heart, or a prayer.
     HaGRID has no class for it; it fired on 0 of the 10,450 images."""
     up = [h for h in hands
           if open_palm(h) and upright(h) and h.pixels[WRIST, 1] < 0.6 * height]
@@ -168,22 +168,21 @@ def both(hands, height: int) -> str | None:
 
 
 class Motion:
-    """Waves and claps: gestures that only exist across frames.
+    """Waves: a gesture that only exists across frames.
 
-    A wave is one open, upright hand whose wrist turns back at least twice
-    within WAVE_WINDOW, each swing at least half a palm wide. A clap is the
-    gap between two hands closing to touching and opening again, twice
-    within CLAP_WINDOW. While palms overlap the detector often loses one
-    hand, so a hand vanishing between two sightings far apart counts as a
-    touch too.
+    One open, upright hand whose wrist turns back at least twice within
+    WAVE_WINDOW, each swing at least half a palm wide.
+
+    There is no clap. Measured on a real one, the palm detector found a
+    hand in 47 of 336 frames and both hands in one: palms in motion blur
+    and pressed together edge-on are not what it was trained to see, so
+    there is nothing for a rule on landmarks to read.
     """
 
     WAVE_WINDOW = 1.2
-    CLAP_WINDOW = 1.6
 
     def __init__(self):
         self.wrists: deque[tuple[float, float, float]] = deque()  # time, x, palm
-        self.gaps: deque[tuple[float, float | None]] = deque()  # time, gap in palms
 
     def update(self, hands, now: float) -> str | None:
         waving = [h for h in hands if open_palm(h) and upright(h)]
@@ -194,24 +193,9 @@ class Motion:
         while self.wrists and now - self.wrists[0][0] > self.WAVE_WINDOW:
             self.wrists.popleft()
 
-        if len(hands) == 2:
-            a, b = hands
-            scale = (palm_pixels(a) + palm_pixels(b)) / 2
-            gap = np.linalg.norm(a.pixels[MIDDLE_MCP] - b.pixels[MIDDLE_MCP]) / scale
-            self.gaps.append((now, float(gap)))
-        elif len(hands) == 1 and self.gaps:
-            self.gaps.append((now, None))
-        else:
-            self.gaps.clear()
-        while self.gaps and now - self.gaps[0][0] > self.CLAP_WINDOW:
-            self.gaps.popleft()
-
         if self._waved():
             self.wrists.clear()
             return "Wave"
-        if self._clapped():
-            self.gaps.clear()
-            return "Clap"
         return None
 
     def _waved(self) -> bool:
@@ -227,13 +211,3 @@ class Motion:
                 turns += 1
             direction, anchor = moving, x
         return turns >= 2
-
-    def _clapped(self) -> bool:
-        touches, apart = 0, False
-        for _, gap in self.gaps:
-            if gap is not None and gap > 2.0:
-                apart = True
-            elif apart and (gap is None or gap < 1.2):
-                touches += 1
-                apart = False
-        return touches >= 2

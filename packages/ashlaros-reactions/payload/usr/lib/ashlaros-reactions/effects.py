@@ -195,30 +195,6 @@ class Spotlights(Effect):
         cv2.multiply(frame, cv2.merge([shade, shade, shade]), dst=frame, scale=1 / 255)
 
 
-class Applause(Effect):
-    """Clapping hands popping up around the frame."""
-
-    length = 2.6
-
-    def __init__(self, width, height, x, y, sprite):
-        super().__init__(width, height, x, y)
-        n = 9
-        self.sprites = [scaled(sprite, s) for s in self.rng.uniform(0.45, 0.8, n)]
-        self.at = np.stack([self.rng.uniform(0.1, 0.9, n) * width,
-                            self.rng.uniform(0.15, 0.85, n) * height], 1)
-        self.born = np.sort(self.rng.uniform(0, 1.2, n))
-
-    def draw(self, frame, age):
-        for sprite, (x, y), born in zip(self.sprites, self.at, self.born, strict=True):
-            t = age - born
-            if not 0 < t < 1.2:
-                continue
-            # a beat: each pops, shrinks a little, pops again
-            beat = 1 + 0.15 * abs(math.sin(t * 2 * math.pi * 2.5))
-            blend(frame, scaled(sprite, min(1.0, t / 0.12) * beat), x, y - 40 * t,
-                  min(1.0, (1.2 - t) / 0.3))
-
-
 class Balloons(Effect):
     """Balloons rising from the bottom of the frame."""
 
@@ -382,7 +358,7 @@ class Lasers(Effect):
 SINGLE = {
     "Thumb_Up": "thumbs-up", "Thumb_Down": "thumbs-down", "Victory": "balloons",
     "ILoveYou": "sparkles", "Horns": "horns", "OK": "ok", "Shaka": "shaka",
-    "Wave": "wave", "Clap": "applause",
+    "Wave": "wave",
 }
 DOUBLE = {
     "Thumb_Up": "fireworks", "Thumb_Down": "rain", "Victory": "confetti",
@@ -402,16 +378,12 @@ class Library:
         size = round(height * 0.16)
         self.bubbles = {name: emoji(char, size, cache) for name, char in BUBBLES.items()}
         self.heart = emoji("\u2764\ufe0f", size, cache)
-        self.clap = emoji("\U0001f44f", size, cache)
 
     def make(self, name: str, width: int, height: int, x: float, y: float) -> Effect:
         if name in self.bubbles:
             return Bubble(width, height, x, y, self.bubbles[name])
-        match name:
-            case "hearts":
-                return Hearts(width, height, x, y, self.heart)
-            case "applause":
-                return Applause(width, height, x, y, self.clap)
+        if name == "hearts":
+            return Hearts(width, height, x, y, self.heart)
         return {"balloons": Balloons, "confetti": Confetti, "fireworks": Fireworks,
                 "rain": Rain, "lasers": Lasers, "sparkles": Sparkles,
                 "spotlights": Spotlights}[name](width, height, x, y)

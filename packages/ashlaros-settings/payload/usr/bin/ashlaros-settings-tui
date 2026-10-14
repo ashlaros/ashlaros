@@ -3973,7 +3973,7 @@ reactions_entry() {
     say "  👍 thumbs up   👎 thumbs down   ✌️ balloons   🤘 horns   🤟 sparkles"
     say "  👌 OK   🤙 shaka   🫶 hearts   🙌 spotlights"
     say "  with both hands of the same: fireworks, rain, confetti; 🤘🤘 lasers"
-    say "Or move: 👋 wave twice, 👏 clap twice."
+    say "Or move: 👋 wave, two swings."
     hint "Your real camera is only opened while something is watching the"
     hint "AshlarOS Camera, so its light still means what it always did."
     echo
