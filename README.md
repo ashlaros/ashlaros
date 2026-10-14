@@ -256,7 +256,7 @@ reactions** installs `ashlaros-reactions` (about 450 MiB, almost all of it
 OpenCV) and turns it on. It adds a camera called **AshlarOS Camera**; pick
 that one in Teams, Meet, Zoom or OBS instead of your real camera.
 
-Hold a pose for half a second; a wave just happens:
+Hold the gesture for half a second:
 
 | Gesture | One hand | Both hands |
 |---|---|---|
@@ -267,13 +267,15 @@ Hold a pose for half a second; a wave just happens:
 | 🤟 I love you | sparkles | lasers |
 | 👌 OK | an OK bubble | an OK bubble |
 | 🤙 shaka | a shaka bubble | a shaka bubble |
+| 🫡 salute, at the brow | a salute bubble | a salute bubble |
 | 🫶 heart hands | | hearts |
-| 🙌 both palms raised, apart | | spotlights |
-| 👋 wave, two swings | a wave bubble | |
+| 👋👋 both palms raised beside your face | | a wave bubble |
 
-Holding a pose longer does not repeat it; lower your hand and raise it
+Holding a gesture longer does not repeat it; lower your hand and raise it
 again for another. An open palm, a fist or a pointing finger do nothing on
-their own, so talking with your hands does not set anything off.
+their own, so talking with your hands does not set anything off. There is
+no clapping or waving in motion: the hand detector loses a moving hand to
+blur in most frames, so held poses are what it can see.
 
 Recognition runs on this machine, with the hand models Google ships for
 MediaPipe, and no frame leaves it. Your real camera is open only while

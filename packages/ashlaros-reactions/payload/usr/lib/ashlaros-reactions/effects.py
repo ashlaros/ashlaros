@@ -169,32 +169,6 @@ class Sparkles(Effect):
             cv2.fillPoly(frame, [np.int32(arms)], colour, cv2.LINE_AA)
 
 
-class Spotlights(Effect):
-    """Two stage lights sweeping across a darkened frame - raise the roof."""
-
-    length = 4.0
-
-    def draw(self, frame, age):
-        level = ramp(age, self.length, 0.4)
-        # the light is a soft mask, so it is drawn at an eighth of the
-        # size and scaled up; full-size, the blur alone cost five frames
-        small = np.zeros((self.height // 8, self.width // 8), np.uint8)
-        for i, origin in enumerate((0.1, 0.9)):
-            top = (round(origin * self.width / 8), -2)
-            swing = math.sin(1.8 * age + i * math.pi)
-            aim = self.width / 8 * (0.5 + 0.35 * swing)
-            spread = self.width / 8 * 0.12
-            bottom = self.height // 8 + 2
-            cone = np.int32([top, (aim - spread, bottom), (aim + spread, bottom)])
-            cv2.fillPoly(small, [cone], 255, cv2.LINE_AA)
-        small = cv2.GaussianBlur(small, (0, 0), 3)
-        # how dark each pixel ends up: 0.65 of the way to black outside
-        # the beams, untouched inside them
-        shade = 255 - (0.65 * level * (255 - small.astype(np.float32))).astype(np.uint8)
-        shade = cv2.resize(shade, (self.width, self.height), interpolation=cv2.INTER_LINEAR)
-        cv2.multiply(frame, cv2.merge([shade, shade, shade]), dst=frame, scale=1 / 255)
-
-
 class Balloons(Effect):
     """Balloons rising from the bottom of the frame."""
 
@@ -350,25 +324,26 @@ class Lasers(Effect):
         cv2.scaleAdd(glow, level, frame, dst=frame)
 
 
-# What each gesture does: SINGLE for one hand (and the two motions),
-# DOUBLE for both hands making the same gesture or one only two hands can
-# make. Keys are gestures.py's names. An open palm, a fist or a raised
-# finger trigger nothing: hands do those anyway while someone talks.
+# What each gesture does: SINGLE for one hand, DOUBLE for both hands
+# making the same gesture or one only two hands can make. Keys are
+# gestures.py's names. An open palm, a fist or a raised finger trigger
+# nothing: hands do those anyway while someone talks.
 # Lasers take both hands, as FaceTime's do: one hand is a 🤘 bubble.
 SINGLE = {
     "Thumb_Up": "thumbs-up", "Thumb_Down": "thumbs-down", "Victory": "balloons",
     "ILoveYou": "sparkles", "Horns": "horns", "OK": "ok", "Shaka": "shaka",
-    "Wave": "wave",
+    "Salute": "salute",
 }
 DOUBLE = {
     "Thumb_Up": "fireworks", "Thumb_Down": "rain", "Victory": "confetti",
     "ILoveYou": "lasers", "Horns": "lasers", "OK": "ok", "Shaka": "shaka",
-    "Heart": "hearts", "Raised_Palms": "spotlights",
+    "Salute": "salute", "Heart": "hearts", "Wave": "wave",
 }
 
 # the emoji a bubble shows, by effect name
 BUBBLES = {"thumbs-up": "\U0001f44d", "thumbs-down": "\U0001f44e", "ok": "\U0001f44c",
-           "shaka": "\U0001f919", "wave": "\U0001f44b", "horns": "\U0001f918"}
+           "shaka": "\U0001f919", "wave": "\U0001f44b", "horns": "\U0001f918",
+           "salute": "\U0001fae1"}
 
 
 class Library:
@@ -385,5 +360,4 @@ class Library:
         if name == "hearts":
             return Hearts(width, height, x, y, self.heart)
         return {"balloons": Balloons, "confetti": Confetti, "fireworks": Fireworks,
-                "rain": Rain, "lasers": Lasers, "sparkles": Sparkles,
-                "spotlights": Spotlights}[name](width, height, x, y)
+                "rain": Rain, "lasers": Lasers, "sparkles": Sparkles}[name](width, height, x, y)

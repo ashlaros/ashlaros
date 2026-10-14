@@ -8,8 +8,15 @@ these are geometry, not another model.
 Every threshold was measured on HaGRID v2's test split: 10,450 images of
 19 gesture classes, run through this pipeline. Each rule's docstring gives
 its recall on its own class and how often it fired on all the others,
-no_gesture included. A wave is a motion HaGRID cannot show, and Motion
-follows it across frames instead.
+no_gesture included. HaGRID has no salute and no raised palms, so those
+two were tuned on a recording from a laptop webcam - salutes with each
+hand, palms raised, and a minute of nothing in particular - and only
+checked against HaGRID for false fires.
+
+Motions are out. A clap and a one-hand wave were both tried, and on the
+same recordings the palm detector found a hand in under a fifth of the
+frames: a hand in motion blur is not what it was trained on, so there was
+nothing for a rule to read. Everything here is a pose held still.
 
 Which fingers are out is read in world landmarks: metres, centred on the
 hand, so neither distance from the camera nor a hand turned sideways
@@ -18,11 +25,10 @@ changes the answer. Contact between fingertips is read in pixels, where
 """
 
 import itertools
-from collections import deque
 
 import numpy as np
 
-WRIST, THUMB_TIP = 0, 4
+WRIST, THUMB_MCP, THUMB_TIP = 0, 2, 4
 INDEX_MCP, INDEX_DIP, INDEX_TIP = 5, 7, 8
 MIDDLE_MCP, MIDDLE_TIP = 9, 12
 RING_MCP, RING_TIP = 13, 16
@@ -67,16 +73,11 @@ def palm_pixels(hand) -> float:
     return float(per_metre * np.linalg.norm(world[INDEX_MCP] - world[PINKY_MCP]))
 
 
-def upright(hand) -> bool:
-    """Fingers pointing up, give or take 35 degrees."""
+def upright(hand, cos_min: float) -> bool:
+    """Fingers pointing up: the wrist-to-knuckles direction within
+    acos(cos_min) of vertical."""
     v = hand.pixels[MIDDLE_MCP] - hand.pixels[WRIST]
-    return bool(-v[1] / (np.linalg.norm(v) + 1e-9) > 0.8)
-
-
-def open_palm(hand) -> bool:
-    w = hand.world
-    return min(_reach(w, INDEX_TIP, INDEX_MCP), _reach(w, MIDDLE_TIP, MIDDLE_MCP),
-               _reach(w, RING_TIP, RING_MCP), _reach(w, PINKY_TIP, PINKY_MCP)) > EXTENDED
+    return bool(-v[1] / (np.linalg.norm(v) + 1e-9) > cos_min)
 
 
 def horns(hand) -> bool:
@@ -129,20 +130,77 @@ def heart_hands(hands) -> bool:
     return False
 
 
-def raised_palms(hands, height: int) -> bool:
-    """🙌 both palms open and upright, wrists in the upper 60% of the
-    frame, and well apart: two palms together are a heart, or a prayer.
-    HaGRID has no class for it; it fired on 0 of the 10,450 images."""
-    up = [h for h in hands
-          if open_palm(h) and upright(h) and h.pixels[WRIST, 1] < 0.6 * height]
-    for a, b in itertools.combinations(up, 2):
-        scale = (palm_pixels(a) + palm_pixels(b)) / 2
-        if np.linalg.norm(a.pixels[MIDDLE_MCP] - b.pixels[MIDDLE_MCP]) / scale > 3.5:
-            return True
-    return False
+def _face_box(faces) -> np.ndarray | None:
+    """The biggest face: the person at the camera, not someone behind."""
+    return max(faces, key=lambda f: f[2] * f[3]) if len(faces) else None
 
 
-def single(hand, min_score: float) -> str | None:
+def _waving(hand, face) -> bool:
+    """One open hand held up beside the face, fingers apart and the thumb
+    out - all five shown, as a 👋 is."""
+    w, px = hand.world, hand.pixels
+    palm = np.linalg.norm(w[INDEX_MCP] - w[PINKY_MCP])
+    fx, fy, fw, fh = face[:4]
+    return bool(min(_reach(w, INDEX_TIP, INDEX_MCP), _reach(w, MIDDLE_TIP, MIDDLE_MCP),
+                    _reach(w, RING_TIP, RING_MCP), _reach(w, PINKY_TIP, PINKY_MCP)) > 1.45
+                and np.linalg.norm(w[INDEX_TIP] - w[PINKY_TIP]) / palm > 1.0
+                and _reach(w, THUMB_TIP, THUMB_MCP) > 1.6
+                and np.linalg.norm(w[THUMB_TIP] - w[INDEX_TIP]) / palm > 0.9
+                and upright(hand, 0.75)
+                and abs(px[MIDDLE_MCP, 0] - (fx + fw / 2)) / fw > 0.7
+                and 0.4 < (px[MIDDLE_MCP, 1] - fy) / fh < 1.2)
+
+
+def wave(hands, faces) -> bool:
+    """👋👋 both palms raised, one either side of the face.
+    Each palm is the one-hand rule that matched 29 of 29 frames of a raised
+    palm on a laptop webcam; with both required, HaGRID: 0 of 10,450. One
+    palm alone could not be told from a `four` or an OK held by the face -
+    2% of HaGRID's other gestures - which is why it takes two."""
+    face = _face_box(faces)
+    if face is None:
+        return False
+    centre = face[0] + face[2] / 2
+    up = [h for h in hands if _waving(h, face)]
+    return any((a.pixels[MIDDLE_MCP, 0] - centre) * (b.pixels[MIDDLE_MCP, 0] - centre) < 0
+               for a, b in itertools.combinations(up, 2))
+
+
+def salute(hand, faces) -> bool:
+    """🫡 a flat hand at the brow: fingers together and straight, their
+    tips at the edge of the forehead, the wrist out to the side and lower,
+    the hand slanting up toward the head.
+    A laptop-webcam recording: 136 of 149 salute frames, either hand, and
+    nothing in the rest of it. HaGRID: 0 of 10,450 - the nearest is a hand
+    over the eyes, which the wrist out to the side rules out."""
+    face = _face_box(faces)
+    if face is None:
+        return False
+    w, px = hand.world, hand.pixels
+    fx, fy, fw, fh = face[:4]
+    if min(_reach(w, INDEX_TIP, INDEX_MCP), _reach(w, MIDDLE_TIP, MIDDLE_MCP),
+           _reach(w, RING_TIP, RING_MCP), _reach(w, PINKY_TIP, PINKY_MCP)) < 1.5:
+        return False
+    # fingers together, where a 👋 spreads them
+    palm = np.linalg.norm(w[INDEX_MCP] - w[PINKY_MCP])
+    spread = np.linalg.norm(w[INDEX_TIP] - w[PINKY_TIP]) / palm
+    tip = px[[INDEX_TIP, MIDDLE_TIP, RING_TIP]].mean(0)
+    if spread > 1.25 or not fy - 0.15 * fh < tip[1] < fy + 0.35 * fh:
+        return False
+    tip_side = (tip[0] - (fx + fw / 2)) / fw
+    wrist_side = (px[WRIST, 0] - (fx + fw / 2)) / fw
+    drop = (px[WRIST, 1] - tip[1]) / fh
+    toward = tip - px[WRIST]
+    toward /= np.linalg.norm(toward) + 1e-9
+    return bool(abs(wrist_side) > 0.8
+                # the tips stop at the brow rather than reaching past it
+                and not (np.sign(tip_side) == np.sign(wrist_side) and abs(tip_side) > 0.45)
+                and 0.25 < drop < 0.9
+                and np.sign(toward[0]) != np.sign(wrist_side)
+                and 0.4 < abs(toward[0]) < 0.98 and toward[1] < -0.15)
+
+
+def single(hand, faces, min_score: float) -> str | None:
     """The one-hand gesture a hand makes, if any.
 
     The rules go first. The classifier calls a shaka a thumbs-up and the
@@ -150,6 +208,8 @@ def single(hand, min_score: float) -> str | None:
     asking it first hid both, and fired a thumbs-up for every shaka. Rules
     first: shaka 22% -> 60%, horns 81% -> 88%, and thumbs-up firing on
     other classes 6.7% -> 0.6%."""
+    if salute(hand, faces):
+        return "Salute"
     for name, rule in (("Horns", horns), ("Shaka", shaka), ("OK", ok_sign)):
         if rule(hand):
             return name
@@ -158,56 +218,10 @@ def single(hand, min_score: float) -> str | None:
     return None
 
 
-def both(hands, height: int) -> str | None:
+def both(hands, faces) -> str | None:
     """A gesture only two hands make together."""
     if heart_hands(hands):
         return "Heart"
-    if raised_palms(hands, height):
-        return "Raised_Palms"
+    if wave(hands, faces):
+        return "Wave"
     return None
-
-
-class Motion:
-    """Waves: a gesture that only exists across frames.
-
-    One open, upright hand whose wrist turns back at least twice within
-    WAVE_WINDOW, each swing at least half a palm wide.
-
-    There is no clap. Measured on a real one, the palm detector found a
-    hand in 47 of 336 frames and both hands in one: palms in motion blur
-    and pressed together edge-on are not what it was trained to see, so
-    there is nothing for a rule on landmarks to read.
-    """
-
-    WAVE_WINDOW = 1.2
-
-    def __init__(self):
-        self.wrists: deque[tuple[float, float, float]] = deque()  # time, x, palm
-
-    def update(self, hands, now: float) -> str | None:
-        waving = [h for h in hands if open_palm(h) and upright(h)]
-        if len(hands) == 1 and waving:
-            self.wrists.append((now, float(waving[0].pixels[WRIST, 0]), palm_pixels(waving[0])))
-        else:
-            self.wrists.clear()
-        while self.wrists and now - self.wrists[0][0] > self.WAVE_WINDOW:
-            self.wrists.popleft()
-
-        if self._waved():
-            self.wrists.clear()
-            return "Wave"
-        return None
-
-    def _waved(self) -> bool:
-        if len(self.wrists) < 6:
-            return False
-        palm = float(np.median([p for _, _, p in self.wrists]))
-        turns, anchor, direction = 0, self.wrists[0][1], 0
-        for _, x, _ in self.wrists:
-            if abs(x - anchor) < 0.5 * palm:
-                continue
-            moving = 1 if x > anchor else -1
-            if direction and moving != direction:
-                turns += 1
-            direction, anchor = moving, x
-        return turns >= 2
