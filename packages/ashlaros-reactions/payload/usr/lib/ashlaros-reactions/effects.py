@@ -378,9 +378,10 @@ class Lasers(Effect):
 # DOUBLE for both hands making the same gesture or one only two hands can
 # make. Keys are gestures.py's names. An open palm, a fist or a raised
 # finger trigger nothing: hands do those anyway while someone talks.
+# Lasers take both hands, as FaceTime's do: one hand is a 🤘 bubble.
 SINGLE = {
     "Thumb_Up": "thumbs-up", "Thumb_Down": "thumbs-down", "Victory": "balloons",
-    "ILoveYou": "sparkles", "Horns": "lasers", "OK": "ok", "Shaka": "shaka",
+    "ILoveYou": "sparkles", "Horns": "horns", "OK": "ok", "Shaka": "shaka",
     "Wave": "wave", "Clap": "applause",
 }
 DOUBLE = {
@@ -391,7 +392,7 @@ DOUBLE = {
 
 # the emoji a bubble shows, by effect name
 BUBBLES = {"thumbs-up": "\U0001f44d", "thumbs-down": "\U0001f44e", "ok": "\U0001f44c",
-           "shaka": "\U0001f919", "wave": "\U0001f44b"}
+           "shaka": "\U0001f919", "wave": "\U0001f44b", "horns": "\U0001f918"}
 
 
 class Library:

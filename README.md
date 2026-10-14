@@ -263,7 +263,7 @@ Hold a pose for half a second; wave and clap just happen:
 | 👍 thumbs up | a thumbs-up bubble | fireworks |
 | 👎 thumbs down | a thumbs-down bubble | rain |
 | ✌️ peace sign | balloons | confetti |
-| 🤘 horns | lasers | lasers |
+| 🤘 horns | a horns bubble | lasers |
 | 🤟 I love you | sparkles | lasers |
 | 👌 OK | an OK bubble | an OK bubble |
 | 🤙 shaka | a shaka bubble | a shaka bubble |
