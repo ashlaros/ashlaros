@@ -3969,9 +3969,11 @@ reactions_entry() {
     fi
     say "  camera: ${camera:+${camera##*/usb-}}${camera:-the first colour camera}"
     echo
-    say "Hold a gesture for half a second:"
-    say "  👍 thumbs up     👎 thumbs down     ✌️ balloons     🤟 hearts"
-    say "  with both hands: fireworks, rain, confetti, lasers"
+    say "Hold a pose for half a second:"
+    say "  👍 thumbs up   👎 thumbs down   ✌️ balloons   🤘 lasers   🤟 sparkles"
+    say "  👌 OK   🤙 shaka   🫶 hearts   🙌 spotlights"
+    say "  with both hands of the same: fireworks, rain, confetti, lasers"
+    say "Or move: 👋 wave twice, 👏 clap twice."
     hint "Your real camera is only opened while something is watching the"
     hint "AshlarOS Camera, so its light still means what it always did."
     echo

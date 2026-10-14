@@ -24,6 +24,7 @@ sys.path.insert(0, "/usr/lib/ashlaros-reactions")
 
 import cv2
 import effects
+import gestures
 import hands
 import loopback
 import numpy as np
@@ -124,27 +125,38 @@ class Recogniser(threading.Thread):
 
 
 class Trigger:
-    """Turns a stream of recognised hands into reactions: a gesture held
-    for HOLD seconds fires once, and fires again only after it was let go."""
+    """Turns a stream of recognised hands into reactions: a pose held for
+    HOLD seconds fires once, and fires again only after it was let go. A
+    wave or a clap is its own proof of intent and fires when it ends."""
 
     def __init__(self):
         self.candidate = None
         self.since = 0.0
         self.spent: dict[str, float] = {}
+        self.motion = gestures.Motion()
+
+    def pose(self, found: list[hands.Hand]) -> tuple[str | None, list[hands.Hand]]:
+        """The reaction the hands ask for this frame, and the hands asking."""
+        together = gestures.both(found, HEIGHT) if len(found) == 2 else None
+        if together:
+            return effects.DOUBLE[together], found
+        named = [(gestures.single(h, MIN_SCORE), h) for h in found]
+        if len(named) == 2 and named[0][0] and named[0][0] == named[1][0]:
+            return effects.DOUBLE[named[0][0]], found
+        # one hand making a gesture, whatever the other is doing
+        for name, hand in named:
+            if name:
+                return effects.SINGLE[name], [hand]
+        return None, []
 
     def update(self, found: list[hands.Hand], now: float):
-        gestures = [h for h in found if h.score >= MIN_SCORE]
-        name = None
-        if len(gestures) == 2 and gestures[0].gesture == gestures[1].gesture:
-            name = effects.DOUBLE.get(gestures[0].gesture)
-        elif gestures:
-            # one hand making a gesture, whatever the other is doing
-            for hand in gestures:
-                if hand.gesture in effects.SINGLE:
-                    name = effects.SINGLE[hand.gesture]
-                    gestures = [hand]
-                    break
+        moved = self.motion.update(found, now)
+        if moved:
+            self.candidate = None
+            x, y = np.concatenate([h.pixels for h in found]).mean(0)
+            return effects.SINGLE[moved], x, y
 
+        name, asking = self.pose(found)
         for spent, last_seen in list(self.spent.items()):
             if spent == name:
                 self.spent[spent] = now
@@ -157,8 +169,7 @@ class Trigger:
         if name is None or name in self.spent or now - self.since < HOLD:
             return None
         self.spent[name] = now
-        points = np.concatenate([h.landmarks[:, :2] for h in gestures])
-        x, y = points.mean(0) * (WIDTH, HEIGHT)
+        x, y = np.concatenate([h.pixels for h in asking]).mean(0)
         return name, x, y
 
 
@@ -253,8 +264,10 @@ def describe(paths: list[str]) -> int:
             return 1
         recogniser.tracked = []
         found = recogniser.process(image)
-        summary = ", ".join(f"{h.gesture} {h.score:.2f}" for h in found) or "no hands"
-        print(f"{path}: {summary}")
+        reaction, _ = Trigger().pose(found)
+        summary = ", ".join(f"{gestures.single(h, MIN_SCORE) or h.gesture} {h.score:.2f}"
+                            for h in found) or "no hands"
+        print(f"{path}: {summary}{f' -> {reaction}' if reaction else ''}")
     return 0
 
 

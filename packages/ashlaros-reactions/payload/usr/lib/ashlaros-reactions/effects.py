@@ -140,6 +140,85 @@ class Hearts(Effect):
             blend(frame, sprite, x, y, max(0.0, min(1.0, 1.8 - t)))
 
 
+class Sparkles(Effect):
+    """Four-pointed stars twinkling out from the hand."""
+
+    length = 2.8
+
+    def __init__(self, width, height, x, y):
+        super().__init__(width, height, x, y)
+        n = 40
+        angle = self.rng.uniform(0, 2 * math.pi, n)
+        distance = self.rng.uniform(40, 260, n) * height / 720
+        self.points = np.stack([x + np.cos(angle) * distance, y + np.sin(angle) * distance], 1)
+        self.born = self.rng.uniform(0, 1.6, n)
+        self.size = self.rng.uniform(8, 22, n) * height / 720
+        self.colour = [PALETTE[i] for i in self.rng.choice([2, 7, 7, 6], n)]
+
+    def draw(self, frame, age):
+        for (x, y), born, size, colour in zip(self.points, self.born, self.size, self.colour,
+                                             strict=True):
+            t = age - born
+            if not 0 < t < 1.0:
+                continue
+            # in and out again: a twinkle, not a fade
+            s = size * math.sin(math.pi * t)
+            arms = np.array([[0, -s], [s * 0.22, -s * 0.22], [s, 0], [s * 0.22, s * 0.22],
+                             [0, s], [-s * 0.22, s * 0.22], [-s, 0], [-s * 0.22, -s * 0.22]])
+            arms += (x, y)
+            cv2.fillPoly(frame, [np.int32(arms)], colour, cv2.LINE_AA)
+
+
+class Spotlights(Effect):
+    """Two stage lights sweeping across a darkened frame - raise the roof."""
+
+    length = 4.0
+
+    def draw(self, frame, age):
+        level = ramp(age, self.length, 0.4)
+        # the light is a soft mask, so it is drawn at an eighth of the
+        # size and scaled up; full-size, the blur alone cost five frames
+        small = np.zeros((self.height // 8, self.width // 8), np.uint8)
+        for i, origin in enumerate((0.1, 0.9)):
+            top = (round(origin * self.width / 8), -2)
+            swing = math.sin(1.8 * age + i * math.pi)
+            aim = self.width / 8 * (0.5 + 0.35 * swing)
+            spread = self.width / 8 * 0.12
+            bottom = self.height // 8 + 2
+            cone = np.int32([top, (aim - spread, bottom), (aim + spread, bottom)])
+            cv2.fillPoly(small, [cone], 255, cv2.LINE_AA)
+        small = cv2.GaussianBlur(small, (0, 0), 3)
+        # how dark each pixel ends up: 0.65 of the way to black outside
+        # the beams, untouched inside them
+        shade = 255 - (0.65 * level * (255 - small.astype(np.float32))).astype(np.uint8)
+        shade = cv2.resize(shade, (self.width, self.height), interpolation=cv2.INTER_LINEAR)
+        cv2.multiply(frame, cv2.merge([shade, shade, shade]), dst=frame, scale=1 / 255)
+
+
+class Applause(Effect):
+    """Clapping hands popping up around the frame."""
+
+    length = 2.6
+
+    def __init__(self, width, height, x, y, sprite):
+        super().__init__(width, height, x, y)
+        n = 9
+        self.sprites = [scaled(sprite, s) for s in self.rng.uniform(0.45, 0.8, n)]
+        self.at = np.stack([self.rng.uniform(0.1, 0.9, n) * width,
+                            self.rng.uniform(0.15, 0.85, n) * height], 1)
+        self.born = np.sort(self.rng.uniform(0, 1.2, n))
+
+    def draw(self, frame, age):
+        for sprite, (x, y), born in zip(self.sprites, self.at, self.born, strict=True):
+            t = age - born
+            if not 0 < t < 1.2:
+                continue
+            # a beat: each pops, shrinks a little, pops again
+            beat = 1 + 0.15 * abs(math.sin(t * 2 * math.pi * 2.5))
+            blend(frame, scaled(sprite, min(1.0, t / 0.12) * beat), x, y - 40 * t,
+                  min(1.0, (1.2 - t) / 0.3))
+
+
 class Balloons(Effect):
     """Balloons rising from the bottom of the frame."""
 
@@ -295,13 +374,24 @@ class Lasers(Effect):
         cv2.scaleAdd(glow, level, frame, dst=frame)
 
 
-# What each gesture does, held up with one hand and with both. The rest of
-# MediaPipe's gestures - an open palm, a fist, a raised finger - are what
-# hands do anyway while someone talks, so they trigger nothing.
-SINGLE = {"Thumb_Up": "thumbs-up", "Thumb_Down": "thumbs-down",
-          "Victory": "balloons", "ILoveYou": "hearts"}
-DOUBLE = {"Thumb_Up": "fireworks", "Thumb_Down": "rain",
-          "Victory": "confetti", "ILoveYou": "lasers"}
+# What each gesture does: SINGLE for one hand (and the two motions),
+# DOUBLE for both hands making the same gesture or one only two hands can
+# make. Keys are gestures.py's names. An open palm, a fist or a raised
+# finger trigger nothing: hands do those anyway while someone talks.
+SINGLE = {
+    "Thumb_Up": "thumbs-up", "Thumb_Down": "thumbs-down", "Victory": "balloons",
+    "ILoveYou": "sparkles", "Horns": "lasers", "OK": "ok", "Shaka": "shaka",
+    "Wave": "wave", "Clap": "applause",
+}
+DOUBLE = {
+    "Thumb_Up": "fireworks", "Thumb_Down": "rain", "Victory": "confetti",
+    "ILoveYou": "lasers", "Horns": "lasers", "OK": "ok", "Shaka": "shaka",
+    "Heart": "hearts", "Raised_Palms": "spotlights",
+}
+
+# the emoji a bubble shows, by effect name
+BUBBLES = {"thumbs-up": "\U0001f44d", "thumbs-down": "\U0001f44e", "ok": "\U0001f44c",
+           "shaka": "\U0001f919", "wave": "\U0001f44b"}
 
 
 class Library:
@@ -309,17 +399,18 @@ class Library:
 
     def __init__(self, cache: Path, height: int):
         size = round(height * 0.16)
-        self.thumbs_up = emoji("\U0001f44d", size, cache)
-        self.thumbs_down = emoji("\U0001f44e", size, cache)
+        self.bubbles = {name: emoji(char, size, cache) for name, char in BUBBLES.items()}
         self.heart = emoji("\u2764\ufe0f", size, cache)
+        self.clap = emoji("\U0001f44f", size, cache)
 
     def make(self, name: str, width: int, height: int, x: float, y: float) -> Effect:
+        if name in self.bubbles:
+            return Bubble(width, height, x, y, self.bubbles[name])
         match name:
-            case "thumbs-up":
-                return Bubble(width, height, x, y, self.thumbs_up)
-            case "thumbs-down":
-                return Bubble(width, height, x, y, self.thumbs_down)
             case "hearts":
                 return Hearts(width, height, x, y, self.heart)
+            case "applause":
+                return Applause(width, height, x, y, self.clap)
         return {"balloons": Balloons, "confetti": Confetti, "fireworks": Fireworks,
-                "rain": Rain, "lasers": Lasers}[name](width, height, x, y)
+                "rain": Rain, "lasers": Lasers, "sparkles": Sparkles,
+                "spotlights": Spotlights}[name](width, height, x, y)

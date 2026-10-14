@@ -256,18 +256,25 @@ reactions** installs `ashlaros-reactions` (about 450 MiB, almost all of it
 OpenCV) and turns it on. It adds a camera called **AshlarOS Camera**; pick
 that one in Teams, Meet, Zoom or OBS instead of your real camera.
 
-Hold the gesture for half a second:
+Hold a pose for half a second; wave and clap just happen:
 
 | Gesture | One hand | Both hands |
 |---|---|---|
 | 👍 thumbs up | a thumbs-up bubble | fireworks |
 | 👎 thumbs down | a thumbs-down bubble | rain |
 | ✌️ peace sign | balloons | confetti |
-| 🤟 rock on | hearts | lasers |
+| 🤘 horns | lasers | lasers |
+| 🤟 I love you | sparkles | lasers |
+| 👌 OK | an OK bubble | an OK bubble |
+| 🤙 shaka | a shaka bubble | a shaka bubble |
+| 🫶 heart hands | | hearts |
+| 🙌 both palms raised, apart | | spotlights |
+| 👋 wave, two swings | a wave bubble | |
+| 👏 clap, twice | | applause |
 
-Holding the gesture longer does not repeat it; lower your hand and raise it
-again for another. An open palm, a fist or a pointing finger do nothing, so
-talking with your hands does not set anything off.
+Holding a pose longer does not repeat it; lower your hand and raise it
+again for another. An open palm, a fist or a pointing finger do nothing on
+their own, so talking with your hands does not set anything off.
 
 Recognition runs on this machine, with the hand models Google ships for
 MediaPipe, and no frame leaves it. Your real camera is open only while

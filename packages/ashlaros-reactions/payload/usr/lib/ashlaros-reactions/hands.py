@@ -50,6 +50,8 @@ class Rect:
 @dataclass
 class Hand:
     landmarks: np.ndarray  # (21, 3): x and y as fractions of the image
+    pixels: np.ndarray  # (21, 2): the same x and y in pixels
+    world: np.ndarray  # (21, 3): metres, centred on the hand
     gesture: str
     score: float
     next_rect: Rect  # where to look for this hand in the next frame
@@ -236,7 +238,8 @@ class Hands:
                           sin * world[:, 0] + cos * world[:, 1], world[:, 2]], 1)
 
         gesture, score = self._gesture(landmarks, world, handedness.item(), width, height)
-        return Hand(landmarks, gesture, score, self._next_rect(landmarks, width, height))
+        return Hand(landmarks, landmarks[:, :2] * (width, height), world, gesture, score,
+                    self._next_rect(landmarks, width, height))
 
     def _gesture(self, landmarks, world, right_score, width, height) -> tuple[str, float]:
         # LandmarksToMatrixCalculator: square pixels first, then the object
