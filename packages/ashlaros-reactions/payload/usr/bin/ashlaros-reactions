@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+"""Gesture reactions on a virtual camera.
+
+Reads the real camera, recognises hand gestures, draws the reaction they
+ask for, and writes the result to the "AshlarOS Camera" loopback device -
+the camera a call or the browser is pointed at instead of the real one.
+
+The real camera is open only while something reads the virtual one:
+v4l2loopback says when readers come and go, and between them this holds
+the device with one black frame and nothing else. So the camera light
+means what it always meant.
+
+    ashlaros-reactions            run, as ashlaros-reactions.service does
+    ashlaros-reactions IMAGE...   print the gestures found in still images
+"""
+
+import os
+import sys
+import threading
+import time
+from pathlib import Path
+
+sys.path.insert(0, "/usr/lib/ashlaros-reactions")
+
+import cv2
+import effects
+import hands
+import loopback
+import numpy as np
+
+MODELS = Path("/usr/share/ashlaros-reactions/models")
+CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "ashlaros-reactions"
+WIDTH, HEIGHT, FPS = 1280, 720, 30
+
+# How long a gesture has to be held before it counts, and how confidently.
+# Half a second is long enough that a hand passing through a thumbs-up on
+# its way somewhere else does not set off fireworks mid-sentence.
+HOLD = 0.5
+MIN_SCORE = 0.6
+# After a reaction, the same gesture must be let go of for this long
+# before it can fire again: holding a thumb up is one thumbs-up.
+RELEASE = 0.6
+
+
+def log(message: str):
+    print(message, file=sys.stderr, flush=True)
+
+
+def pick_camera() -> str | None:
+    """The configured camera, or the first colour one. An infrared camera
+    is never a default: it sees in grey, and a call would get a ghost."""
+    configured = os.environ.get("ASHLAROS_REACTIONS_CAMERA")
+    if configured:
+        return configured
+    for path in sorted(Path("/dev/v4l/by-id").glob("*-video-index0")):
+        if "ir_camera" not in path.name.lower() and "_ir_" not in path.name.lower():
+            return str(path)
+    return None
+
+
+def fit(frame: np.ndarray) -> np.ndarray:
+    """Cropped to 16:9 and scaled to the output size: a 4:3 camera keeps
+    its proportions rather than being stretched."""
+    h, w = frame.shape[:2]
+    if w * HEIGHT > h * WIDTH:
+        cut = (w - h * WIDTH // HEIGHT) // 2
+        frame = frame[:, cut:w - cut]
+    elif w * HEIGHT < h * WIDTH:
+        cut = (h - w * HEIGHT // WIDTH) // 2
+        frame = frame[cut:h - cut]
+    if frame.shape[:2] != (HEIGHT, WIDTH):
+        frame = cv2.resize(frame, (WIDTH, HEIGHT), interpolation=cv2.INTER_AREA)
+    return frame
+
+
+def notice(text: str) -> np.ndarray:
+    """A dark frame with a line of text, for when there is no picture to
+    show: better a reason on the call than a frozen face."""
+    frame = np.full((HEIGHT, WIDTH, 3), 24, np.uint8)
+    font, scale, weight = cv2.FONT_HERSHEY_SIMPLEX, 1.1, 2
+    (tw, th), _ = cv2.getTextSize(text, font, scale, weight)
+    cv2.putText(frame, text, ((WIDTH - tw) // 2, (HEIGHT + th) // 2), font, scale,
+                (200, 200, 200), weight, cv2.LINE_AA)
+    return frame
+
+
+def yuyv(frame: np.ndarray) -> bytes:
+    return cv2.cvtColor(frame, cv2.COLOR_BGR2YUV_YUY2).tobytes()
+
+
+class Recogniser(threading.Thread):
+    """Runs the models on the newest frame whenever it is free. Frames that
+    arrive while it is busy are skipped rather than queued, so the picture
+    never waits on recognition: on a slow machine the reactions get slower
+    to notice, and the video does not stutter."""
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self.hands = hands.Hands(MODELS)
+        self.lock = threading.Condition()
+        self.frame = None
+        self.result: tuple[float, list[hands.Hand]] = (0.0, [])
+
+    def offer(self, frame: np.ndarray):
+        with self.lock:
+            self.frame = frame
+            self.lock.notify()
+
+    def reset(self):
+        with self.lock:
+            self.frame = None
+            self.result = (0.0, [])
+        self.hands.tracked = []
+
+    def run(self):
+        while True:
+            with self.lock:
+                while self.frame is None:
+                    self.lock.wait()
+                frame, self.frame = self.frame, None
+            found = self.hands.process(frame)
+            with self.lock:
+                self.result = (time.monotonic(), found)
+
+
+class Trigger:
+    """Turns a stream of recognised hands into reactions: a gesture held
+    for HOLD seconds fires once, and fires again only after it was let go."""
+
+    def __init__(self):
+        self.candidate = None
+        self.since = 0.0
+        self.spent: dict[str, float] = {}
+
+    def update(self, found: list[hands.Hand], now: float):
+        gestures = [h for h in found if h.score >= MIN_SCORE]
+        name = None
+        if len(gestures) == 2 and gestures[0].gesture == gestures[1].gesture:
+            name = effects.DOUBLE.get(gestures[0].gesture)
+        elif gestures:
+            # one hand making a gesture, whatever the other is doing
+            for hand in gestures:
+                if hand.gesture in effects.SINGLE:
+                    name = effects.SINGLE[hand.gesture]
+                    gestures = [hand]
+                    break
+
+        for spent, last_seen in list(self.spent.items()):
+            if spent == name:
+                self.spent[spent] = now
+            elif now - last_seen > RELEASE:
+                del self.spent[spent]
+
+        if name != self.candidate:
+            self.candidate, self.since = name, now
+            return None
+        if name is None or name in self.spent or now - self.since < HOLD:
+            return None
+        self.spent[name] = now
+        points = np.concatenate([h.landmarks[:, :2] for h in gestures])
+        x, y = points.mean(0) * (WIDTH, HEIGHT)
+        return name, x, y
+
+
+def stream(camera_path: str, out: loopback.Loopback, recogniser: Recogniser,
+           library: effects.Library) -> str | None:
+    """One reading session: the camera is open from here to the return.
+    Returns why it stopped early, or None when the last reader left."""
+    camera = cv2.VideoCapture(camera_path, cv2.CAP_V4L2)
+    if not camera.isOpened():
+        return f"{camera_path} could not be opened"
+    try:
+        # MJPG: on UVC cameras the uncompressed modes top out at a few
+        # frames a second at this size
+        camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc(*"MJPG"))
+        camera.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
+        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
+        camera.set(cv2.CAP_PROP_FPS, FPS)
+
+        trigger = Trigger()
+        playing: list[tuple[effects.Effect, float]] = []
+        handled = 0.0
+        log(f"streaming from {camera_path}")
+        while out.wait(0):
+            ok, frame = camera.read()
+            if not ok:
+                return f"{camera_path} stopped delivering frames"
+            frame = fit(frame)
+            recogniser.offer(frame.copy())
+
+            now = time.monotonic()
+            with recogniser.lock:
+                stamp, found = recogniser.result
+            if stamp > handled:
+                handled = stamp
+                # one reaction at a time, as on a call two at once is noise
+                fired = None if playing else trigger.update(found, now)
+                if fired:
+                    name, x, y = fired
+                    log(f"reaction: {name}")
+                    playing.append((library.make(name, WIDTH, HEIGHT, x, y), now))
+
+            for effect, start in playing:
+                effect.draw(frame, now - start)
+            playing = [(e, s) for e, s in playing if now - s < e.length]
+            out.write(yuyv(frame))
+        return None
+    finally:
+        camera.release()
+        recogniser.reset()
+
+
+def run() -> int:
+    device = loopback.find_device()
+    if device is None:
+        log(f'no "{loopback.CARD_LABEL}" device: is v4l2loopback loaded with '
+            "/etc/modprobe.d/ashlaros-reactions.conf's options?")
+        return 1
+    out = loopback.Loopback(device, WIDTH, HEIGHT, FPS)
+    idle = yuyv(np.zeros((HEIGHT, WIDTH, 3), np.uint8))
+    # one frame makes the device a capture device that applications list;
+    # until then it advertises itself as an output and nothing offers it
+    out.write(idle)
+    log(f"waiting for a reader on {device}")
+
+    recogniser = Recogniser()
+    recogniser.start()
+    library = effects.Library(CACHE, HEIGHT)
+    while True:
+        if not out.wait(None):
+            continue
+        camera = pick_camera()
+        problem = stream(camera, out, recogniser, library) if camera else "no camera found"
+        if problem is None:
+            log("no readers left; camera closed")
+            # the last thing written is what the next reader sees first,
+            # and it must not be a frame of whoever was on the last call
+            out.write(idle)
+            continue
+        log(problem)
+        out.write(yuyv(notice(problem)))
+        # retried while someone is still watching: the camera may be busy
+        # in another application, or unplugged and coming back
+        time.sleep(2)
+
+
+def describe(paths: list[str]) -> int:
+    recogniser = hands.Hands(MODELS)
+    for path in paths:
+        image = cv2.imread(path)
+        if image is None:
+            log(f"{path}: not an image")
+            return 1
+        recogniser.tracked = []
+        found = recogniser.process(image)
+        summary = ", ".join(f"{h.gesture} {h.score:.2f}" for h in found) or "no hands"
+        print(f"{path}: {summary}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(describe(sys.argv[1:]) if len(sys.argv) > 1 else run())

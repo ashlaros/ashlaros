@@ -1,0 +1,26 @@
+# Gesture reactions on the "AshlarOS Camera" virtual camera.
+#
+# Off until Settings -> Camera reactions turns it on: it is a camera
+# filter, and nobody's camera should be filtered by default. Running, it
+# holds the virtual device and nothing else - the real camera is opened
+# only while an application reads the virtual one.
+#
+# default.target rather than the sway session: it needs no display, and a
+# call that outlives a sway restart should not lose its camera.
+[Unit]
+Description=Gesture reactions on the AshlarOS Camera
+
+[Service]
+Type=simple
+# the camera Settings chose, as ASHLAROS_REACTIONS_CAMERA; absent means
+# the first colour camera
+EnvironmentFile=-%E/ashlaros/reactions.conf
+ExecStart=/usr/bin/ashlaros-reactions
+Restart=on-failure
+RestartSec=5
+# below the call it feeds: a frame late is a reaction late, while a
+# starved browser is a frozen call
+Nice=5
+
+[Install]
+WantedBy=default.target

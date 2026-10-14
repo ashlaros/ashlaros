@@ -1,0 +1,64 @@
+# Maintainer: AshlarOS <build@ashlaros.download>
+
+# Gesture reactions on a virtual camera: a thumbs-up, a peace sign or two
+# of them, and the picture a call sees answers with a reaction.
+#
+# Its own package rather than part of ashlaros-settings: python-opencv
+# pulls in 442 MiB - vtk alone is 394 MiB, measured - for something most
+# machines will never turn on. ashlaros-settings names it as an optdepend
+# and its Settings entry offers to install it.
+pkgname=ashlaros-reactions
+pkgver=1
+pkgrel=1
+pkgdesc="Gesture reactions on a virtual camera, recognised on this machine"
+arch=('any')
+url="https://github.com/ashlaros/ashlaros"
+# ours GPL; the models Apache-2.0, from MediaPipe
+license=('GPL-3.0-or-later' 'Apache-2.0')
+depends=(
+    'python'
+    'python-numpy'
+    # runs the palm and landmark networks, reads the camera, draws
+    'python-opencv'
+    # the virtual camera. linux-cachyos and -lts build it in and provide
+    # this; on any other kernel v4l2loopback-dkms is what satisfies it
+    'V4L2LOOPBACK-MODULE'
+    # the reaction emoji are drawn in it, rendered through pango-view
+    'noto-fonts-emoji'
+    'pango'
+)
+makedepends=('libarchive')  # bsdtar, to unpack the model bundle
+# Google's gesture recognizer bundle: the hand detector, the hand landmark
+# model, the gesture embedder and the classifier, all running locally.
+# Version 1 by path, not "latest": a newer bundle could need a different
+# graph than the one hands.py reproduces.
+source=("gesture_recognizer-1.task::https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task")
+b2sums=('e0ac861c1eb68f5ae0721e8f28e825535c646125533b62339bbce4146943624828e24148f964861eda28fad1d0a1627e89b04e596c197fd15aa386c529659c8f')
+noextract=("gesture_recognizer-1.task")
+
+prepare() {
+    # a zip of two zips; the models are the members of the inner ones
+    rm -rf "${srcdir}/models" "${srcdir}/bundle"
+    mkdir -p "${srcdir}/models" "${srcdir}/bundle"
+    bsdtar -xf "${srcdir}/gesture_recognizer-1.task" -C "${srcdir}/bundle"
+    local inner
+    for inner in "${srcdir}/bundle"/*.task; do
+        bsdtar -xf "$inner" -C "${srcdir}/models"
+    done
+}
+
+package() {
+    local payload="${startdir}/payload"
+    install -d "${pkgdir}/etc" "${pkgdir}/usr"
+    cp -a "${payload}/etc/." "${pkgdir}/etc/"
+    cp -a "${payload}/usr/." "${pkgdir}/usr/"
+    find "${pkgdir}" \( -name __pycache__ -o -name .ruff_cache \) -type d -prune -exec rm -rf {} +
+    chmod 755 "${pkgdir}/usr/bin/ashlaros-reactions"
+
+    local model
+    for model in hand_detector hand_landmarks_detector gesture_embedder \
+        canned_gesture_classifier; do
+        install -Dm644 "${srcdir}/models/${model}.tflite" \
+            "${pkgdir}/usr/share/ashlaros-reactions/models/${model}.tflite"
+    done
+}

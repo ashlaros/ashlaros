@@ -153,7 +153,8 @@ know. The menu groups them by what you are looking for:
   nothing needs any more, snapshots
 - **Security:** how the disk unlocks, fingerprint enrolment, face unlock
 - **Accounts** and **Apps:** mail, a calendar, Tailscale and config sync;
-  notes, web apps and a model, the things that do nothing until configured
+  notes, web apps, a model and camera reactions, the things that do
+  nothing until configured
 
 An entry only appears where it can work, so a machine without a
 fingerprint reader has no Fingerprint entry, and a group left empty is not
@@ -246,6 +247,33 @@ either way.
 
 It costs 182 packages to install, which is why nobody who does not want it
 pays for it.
+
+## Camera reactions
+
+Hand gestures that set off a reaction on your video, the way FaceTime's
+do. Not installed, and off even when it is: Settings → **Camera
+reactions** installs `ashlaros-reactions` (about 450 MiB, almost all of it
+OpenCV) and turns it on. It adds a camera called **AshlarOS Camera**; pick
+that one in Teams, Meet, Zoom or OBS instead of your real camera.
+
+Hold the gesture for half a second:
+
+| Gesture | One hand | Both hands |
+|---|---|---|
+| 👍 thumbs up | a thumbs-up bubble | fireworks |
+| 👎 thumbs down | a thumbs-down bubble | rain |
+| ✌️ peace sign | balloons | confetti |
+| 🤟 rock on | hearts | lasers |
+
+Holding the gesture longer does not repeat it; lower your hand and raise it
+again for another. An open palm, a fist or a pointing finger do nothing, so
+talking with your hands does not set anything off.
+
+Recognition runs on this machine, with the hand models Google ships for
+MediaPipe, and no frame leaves it. Your real camera is open only while
+something is showing the AshlarOS Camera, so its light still means what it
+always did. The virtual camera is created at boot: the first time, restart
+or choose "Create the virtual camera now" in the same entry.
 
 ## Notes
 

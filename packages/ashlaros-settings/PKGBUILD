@@ -233,6 +233,9 @@ optdepends=(
     # measuring only: a calibration it made keeps working without it, so
     # nobody pays 50 MB for a speaker they never measure (#92)
     'python-numpy: measure a speaker for Settings -> Speakers'
+    # 442 MiB of OpenCV and vtk, measured, for a camera filter; offered
+    # from Settings -> Camera reactions with that size said first
+    'ashlaros-reactions: gesture reactions on a virtual camera for calls'
 )
 # generated_background.svg is rewritten on every theme apply, and the
 # per-user theme.conf is the file the theme switcher edits

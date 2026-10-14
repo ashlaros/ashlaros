@@ -3880,6 +3880,148 @@ config_sync_entry() {
   done
 }
 
+# 28. CAMERA REACTIONS
+#
+# ashlaros-reactions draws a reaction onto a virtual camera when a hand
+# makes a gesture - a thumbs-up, a peace sign, both hands for the bigger
+# ones. It is an optdepend, offered from here with its size said first:
+# python-opencv brings in vtk, and that is 442 MiB, measured, for
+# something most people never turn on.
+#
+# Off is a disabled user unit, not a mask: nothing enables it at login,
+# so there is no autostart for a disable to lose to. The virtual camera
+# is a kernel module loaded at boot, so a first install needs a reboot
+# or a modprobe before there is anything to write to.
+readonly REACTIONS_UNIT=ashlaros-reactions
+readonly REACTIONS_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/ashlaros/reactions.conf"
+
+reactions_device() {
+  local node
+  for node in /sys/class/video4linux/video*; do
+    [[ $(cat "$node/name" 2>/dev/null) == "AshlarOS Camera" ]] && echo "/dev/${node##*/}" && return 0
+  done
+  return 1
+}
+
+# Colour cameras only, by their stable names: an infrared camera sees in
+# grey, and a call would get a ghost.
+reactions_pick_camera() {
+  local -a cams=() labels=()
+  local c
+  for c in /dev/v4l/by-id/*-video-index0; do
+    [[ -e $c && ${c,,} != *ir_camera* && ${c,,} != *_ir_* ]] || continue
+    cams+=("$c")
+    c=${c##*/usb-}
+    labels+=("${c%-video-index0}")
+  done
+  if ((${#cams[@]} == 0)); then
+    oops "No colour camera found under /dev/v4l/by-id."
+    return 1
+  fi
+  local choice i
+  choice=$(printf '%s\n' "${labels[@]}" | gum choose --header "Which camera?") || return 1
+  for i in "${!labels[@]}"; do
+    if [[ ${labels[$i]} == "$choice" ]]; then
+      conf_line "$REACTIONS_CONF" ASHLAROS_REACTIONS_CAMERA "ASHLAROS_REACTIONS_CAMERA=${cams[$i]}"
+      # a running service reads the file at start
+      systemctl --user try-restart "$REACTIONS_UNIT" >/dev/null 2>&1
+      say "✓ Reactions use $choice."
+      return 0
+    fi
+  done
+  return 1
+}
+
+reactions_install() {
+  screen "Camera reactions"
+  say "Gesture reactions on your camera: hold up a thumb, a peace sign or"
+  say "a rock-on hand, and the picture your call sees answers with one."
+  say "Recognition runs on this machine; no frame leaves it."
+  echo
+  local size
+  size=$(LC_ALL=C pacman -Si python-opencv 2>/dev/null | sed -n 's/^Installed Size *: *//p' | head -1)
+  say "It needs ashlaros-reactions and OpenCV - about 450 MiB with what"
+  say "OpenCV brings along (python-opencv itself is ${size:-11 MiB})."
+  echo
+  gum confirm --affirmative "Install it" --negative "Back" "" || return 1
+  echo
+  sudo pacman -S --needed ashlaros-reactions || { oops "It did not install."; pause; return 1; }
+}
+
+reactions_entry() {
+  command -v ashlaros-reactions >/dev/null || reactions_install || return 0
+
+  local choice
+  while true; do
+    screen "Camera reactions"
+
+    local device="" camera
+    device=$(reactions_device)
+    # the line is KEY=value, which conf_get reads as key and value
+    camera=$(conf_get "$REACTIONS_CONF" ASHLAROS_REACTIONS_CAMERA)
+    if [[ -z $device ]]; then
+      warn "! the virtual camera does not exist yet"
+      say "  it is created at boot; restart once, or load it now below"
+    elif systemctl --user is-active "$REACTIONS_UNIT" >/dev/null 2>&1; then
+      say "✓ on: choose \"AshlarOS Camera\" as the camera in your call"
+    else
+      say "  off"
+    fi
+    say "  camera: ${camera:+${camera##*/usb-}}${camera:-the first colour camera}"
+    echo
+    say "Hold a gesture for half a second:"
+    say "  👍 thumbs up     👎 thumbs down     ✌️ balloons     🤟 hearts"
+    say "  with both hands: fireworks, rain, confetti, lasers"
+    hint "Your real camera is only opened while something is watching the"
+    hint "AshlarOS Camera, so its light still means what it always did."
+    echo
+
+    local -a entries=()
+    if [[ -z $device ]]; then
+      entries+=("Create the virtual camera now")
+    elif systemctl --user is-active "$REACTIONS_UNIT" >/dev/null 2>&1; then
+      entries+=("Turn off")
+    else
+      entries+=("Turn on")
+    fi
+    entries+=("Choose the camera" "Back")
+
+    choice=$(gum choose --header "Camera reactions" "${entries[@]}") || return 0
+    case $choice in
+      "Create the virtual camera now")
+        # the options come from /etc/modprobe.d/ashlaros-reactions.conf;
+        # this is what modules-load.d does at the next boot
+        if root_run modprobe v4l2loopback && reactions_device >/dev/null; then
+          say "✓ Created."
+        else
+          oops "No AshlarOS Camera appeared. If OBS or another tool loaded"
+          oops "v4l2loopback first, it did so without these options; restart."
+        fi
+        pause
+        ;;
+      "Turn on")
+        if systemctl --user enable --now "$REACTIONS_UNIT" >/dev/null 2>&1; then
+          say "✓ On, now and after every login."
+        else
+          oops "It did not start: systemctl --user status $REACTIONS_UNIT"
+        fi
+        pause
+        ;;
+      "Turn off")
+        systemctl --user disable --now "$REACTIONS_UNIT" >/dev/null 2>&1
+        say "Off. The AshlarOS Camera stays listed but shows nothing."
+        pause
+        ;;
+      "Choose the camera")
+        screen "Camera reactions"
+        reactions_pick_camera
+        pause
+        ;;
+      *) return 0 ;;
+    esac
+  done
+}
+
 # The main menu's rows. Each is "key|icon|label|what it is": the key is
 # what main dispatches on, so the label can say anything without
 # breaking the case below. Icons are Nerd Font codepoints, nf-dev first
@@ -4014,6 +4156,10 @@ main() {
     command -v zk >/dev/null && apps+=("$(menu_row notes $'\U000f082e' "Notes" "your zk notebook")")
     command -v firefoxpwa >/dev/null && apps+=("$(menu_row webapps $'\U000f059f' "Web apps" "sites as windows")")
     command -v aichat >/dev/null && apps+=("$(menu_row model $'\U000f06a9' "Model" "aichat's model")")
+    # a camera is the predicate, not the package: the entry is also where
+    # the package is offered
+    [[ -x /usr/share/sway/scripts/hw/webcam ]] && /usr/share/sway/scripts/hw/webcam &&
+      apps+=("$(menu_row reactions $'\U000f0c68' "Camera reactions" "gestures on your video calls")")
 
     # Grouped by what someone is looking for, not by which tool does it.
     # Headings without blank rows between groups: the rule already
@@ -4077,6 +4223,7 @@ main() {
       model) model_entry ;;
       tailscale) tailscale_entry ;;
       sync) config_sync_entry ;;
+      reactions) reactions_entry ;;
       quit) exit 0 ;;
     esac
   done
