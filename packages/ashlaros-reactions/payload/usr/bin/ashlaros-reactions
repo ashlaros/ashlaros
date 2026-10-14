@@ -24,7 +24,6 @@ sys.path.insert(0, "/usr/lib/ashlaros-reactions")
 
 import cv2
 import effects
-import faces
 import gestures
 import hands
 import loopback
@@ -99,10 +98,9 @@ class Recogniser(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         self.hands = hands.Hands(MODELS)
-        self.faces = faces.Faces(MODELS / "face_detection_yunet.onnx")
         self.lock = threading.Condition()
         self.frame = None
-        self.result: tuple[float, list[hands.Hand], list[np.ndarray]] = (0.0, [], [])
+        self.result: tuple[float, list[hands.Hand]] = (0.0, [])
 
     def offer(self, frame: np.ndarray):
         with self.lock:
@@ -112,7 +110,7 @@ class Recogniser(threading.Thread):
     def reset(self):
         with self.lock:
             self.frame = None
-            self.result = (0.0, [], [])
+            self.result = (0.0, [])
         self.hands.tracked = []
 
     def run(self):
@@ -122,10 +120,8 @@ class Recogniser(threading.Thread):
                     self.lock.wait()
                 frame, self.frame = self.frame, None
             found = self.hands.process(frame)
-            # only looked for when there is a hand to place against it
-            heads = self.faces.find(frame) if found else []
             with self.lock:
-                self.result = (time.monotonic(), found, heads)
+                self.result = (time.monotonic(), found)
 
 
 class Trigger:
@@ -137,13 +133,12 @@ class Trigger:
         self.since = 0.0
         self.spent: dict[str, float] = {}
 
-    def pose(self, found: list[hands.Hand], heads: list[np.ndarray]
-             ) -> tuple[str | None, list[hands.Hand]]:
+    def pose(self, found: list[hands.Hand]) -> tuple[str | None, list[hands.Hand]]:
         """The reaction the hands ask for this frame, and the hands asking."""
-        together = gestures.both(found, heads) if len(found) == 2 else None
+        together = gestures.both(found) if len(found) == 2 else None
         if together:
             return effects.DOUBLE[together], found
-        named = [(gestures.single(h, heads, MIN_SCORE), h) for h in found]
+        named = [(gestures.single(h, MIN_SCORE), h) for h in found]
         if len(named) == 2 and named[0][0] and named[0][0] == named[1][0]:
             return effects.DOUBLE[named[0][0]], found
         # one hand making a gesture, whatever the other is doing
@@ -152,8 +147,8 @@ class Trigger:
                 return effects.SINGLE[name], [hand]
         return None, []
 
-    def update(self, found: list[hands.Hand], heads: list[np.ndarray], now: float):
-        name, asking = self.pose(found, heads)
+    def update(self, found: list[hands.Hand], now: float):
+        name, asking = self.pose(found)
         for spent, last_seen in list(self.spent.items()):
             if spent == name:
                 self.spent[spent] = now
@@ -198,11 +193,11 @@ def stream(camera_path: str, out: loopback.Loopback, recogniser: Recogniser,
 
             now = time.monotonic()
             with recogniser.lock:
-                stamp, found, heads = recogniser.result
+                stamp, found = recogniser.result
             if stamp > handled:
                 handled = stamp
                 # one reaction at a time, as on a call two at once is noise
-                fired = None if playing else trigger.update(found, heads, now)
+                fired = None if playing else trigger.update(found, now)
                 if fired:
                     name, x, y = fired
                     log(f"reaction: {name}")
@@ -254,7 +249,6 @@ def run() -> int:
 
 def describe(paths: list[str]) -> int:
     recogniser = hands.Hands(MODELS)
-    finder = faces.Faces(MODELS / "face_detection_yunet.onnx")
     for path in paths:
         image = cv2.imread(path)
         if image is None:
@@ -262,9 +256,8 @@ def describe(paths: list[str]) -> int:
             return 1
         recogniser.tracked = []
         found = recogniser.process(image)
-        heads = finder.find(image)
-        reaction, _ = Trigger().pose(found, heads)
-        summary = ", ".join(f"{gestures.single(h, heads, MIN_SCORE) or h.gesture} {h.score:.2f}"
+        reaction, _ = Trigger().pose(found)
+        summary = ", ".join(f"{gestures.single(h, MIN_SCORE) or h.gesture} {h.score:.2f}"
                             for h in found) or "no hands"
         print(f"{path}: {summary}{f' -> {reaction}' if reaction else ''}")
     return 0

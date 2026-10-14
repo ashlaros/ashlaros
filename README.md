@@ -267,15 +267,14 @@ Hold the gesture for half a second:
 | 🤟 I love you | sparkles | lasers |
 | 👌 OK | an OK bubble | an OK bubble |
 | 🤙 shaka | a shaka bubble | a shaka bubble |
-| 🫡 salute, at the brow | a salute bubble | a salute bubble |
 | 🫶 heart hands | | hearts |
-| 👋👋 both palms raised beside your face | | a wave bubble |
 
 Holding a gesture longer does not repeat it; lower your hand and raise it
 again for another. An open palm, a fist or a pointing finger do nothing on
 their own, so talking with your hands does not set anything off. There is
-no clapping or waving in motion: the hand detector loses a moving hand to
-blur in most frames, so held poses are what it can see.
+no clapping, waving or saluting: the hand detector loses a moving hand to
+blur in most frames, and a salute or a wave beside the face depends on
+where the camera sees your head, which did not work out in practice.
 
 Recognition runs on this machine, with the hand models Google ships for
 MediaPipe, and no frame leaves it. Your real camera is open only while

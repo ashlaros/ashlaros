@@ -332,18 +332,16 @@ class Lasers(Effect):
 SINGLE = {
     "Thumb_Up": "thumbs-up", "Thumb_Down": "thumbs-down", "Victory": "balloons",
     "ILoveYou": "sparkles", "Horns": "horns", "OK": "ok", "Shaka": "shaka",
-    "Salute": "salute",
 }
 DOUBLE = {
     "Thumb_Up": "fireworks", "Thumb_Down": "rain", "Victory": "confetti",
     "ILoveYou": "lasers", "Horns": "lasers", "OK": "ok", "Shaka": "shaka",
-    "Salute": "salute", "Heart": "hearts", "Wave": "wave",
+    "Heart": "hearts",
 }
 
 # the emoji a bubble shows, by effect name
 BUBBLES = {"thumbs-up": "\U0001f44d", "thumbs-down": "\U0001f44e", "ok": "\U0001f44c",
-           "shaka": "\U0001f919", "wave": "\U0001f44b", "horns": "\U0001f918",
-           "salute": "\U0001fae1"}
+           "shaka": "\U0001f919", "horns": "\U0001f918"}
 
 
 class Library:

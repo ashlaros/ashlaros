@@ -3971,7 +3971,7 @@ reactions_entry() {
     echo
     say "Hold a gesture for half a second:"
     say "  👍 thumbs up   👎 thumbs down   ✌️ balloons   🤘 horns   🤟 sparkles"
-    say "  👌 OK   🤙 shaka   🫡 salute   🫶 hearts   👋👋 both palms up: wave"
+    say "  👌 OK   🤙 shaka   🫶 hearts"
     say "  with both hands of the same: fireworks, rain, confetti; 🤘🤘 lasers"
     hint "Your real camera is only opened while something is watching the"
     hint "AshlarOS Camera, so its light still means what it always did."

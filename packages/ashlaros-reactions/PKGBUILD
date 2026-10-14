@@ -12,8 +12,8 @@ pkgver=1
 pkgrel=1
 pkgdesc="Gesture reactions on a virtual camera, recognised on this machine"
 arch=('any')
-# ours GPL; the hand models Apache-2.0, from MediaPipe; the face model MIT
-license=('GPL-3.0-or-later' 'Apache-2.0' 'MIT')
+# ours GPL; the models Apache-2.0, from MediaPipe
+license=('GPL-3.0-or-later' 'Apache-2.0')
 depends=(
     'python'
     'python-numpy'
@@ -31,13 +31,8 @@ makedepends=('libarchive')  # bsdtar, to unpack the model bundle
 # model, the gesture embedder and the classifier, all running locally.
 # Version 1 by path, not "latest": a newer bundle could need a different
 # graph than the one hands.py reproduces.
-#
-# YuNet, from OpenCV's model zoo at a fixed commit: where the face is, for
-# the gestures made against it (faces.py).
-source=("gesture_recognizer-1.task::https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task"
-        "face_detection_yunet_2023mar.onnx::https://github.com/opencv/opencv_zoo/raw/26cc381e4d2594bb9f47a26eb8fd96c94a13660d/models/face_detection_yunet/face_detection_yunet_2023mar.onnx")
-b2sums=('e0ac861c1eb68f5ae0721e8f28e825535c646125533b62339bbce4146943624828e24148f964861eda28fad1d0a1627e89b04e596c197fd15aa386c529659c8f'
-        '1cd8eac1a254b35697f3b4c7d3d35ec8ed0ca2fc3ed39bc391e06713c039602141122858d4c29cf42f54994af967a22d470d39a547657b7c61f58db3733c9b7e')
+source=("gesture_recognizer-1.task::https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task")
+b2sums=('e0ac861c1eb68f5ae0721e8f28e825535c646125533b62339bbce4146943624828e24148f964861eda28fad1d0a1627e89b04e596c197fd15aa386c529659c8f')
 noextract=("gesture_recognizer-1.task")
 
 prepare() {
@@ -65,6 +60,4 @@ package() {
         install -Dm644 "${srcdir}/models/${model}.tflite" \
             "${pkgdir}/usr/share/ashlaros-reactions/models/${model}.tflite"
     done
-    install -Dm644 "${srcdir}/face_detection_yunet_2023mar.onnx" \
-        "${pkgdir}/usr/share/ashlaros-reactions/models/face_detection_yunet.onnx"
 }
