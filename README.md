@@ -276,6 +276,13 @@ no clapping, waving or saluting: the hand detector loses a moving hand to
 blur in most frames, and a salute or a wave beside the face depends on
 where the camera sees your head, which did not work out in practice.
 
+With more than one camera, the first one plugged in from a list is used,
+and the AshlarOS Camera follows it: plug a USB camera in during a call and
+the picture switches to it; unplug it and it falls back to the next, and
+the call never loses its camera. Without a list, a plugged-in camera comes
+before the built-in one. "Put a camera first" in the same entry changes
+the order; the infrared camera of a face-unlock laptop is never used.
+
 Recognition runs on this machine, with the hand models Google ships for
 MediaPipe, and no frame leaves it. Your real camera is open only while
 something is showing the AshlarOS Camera, so its light still means what it

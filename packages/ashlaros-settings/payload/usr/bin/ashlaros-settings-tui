@@ -3903,33 +3903,49 @@ reactions_device() {
   return 1
 }
 
-# Colour cameras only, by their stable names: an infrared camera sees in
-# grey, and a call would get a ghost.
-reactions_pick_camera() {
-  local -a cams=() labels=()
+# The cameras, best first, as the reactions service reads them: a list
+# of stable by-id paths, which may name a camera that is not plugged in
+# right now - the point of a list is that it comes back to the top when
+# it is. Colour cameras only: an infrared camera sees in grey, and a call
+# would get a ghost.
+reactions_order() {
+  local saved
+  saved=$(conf_get "$REACTIONS_CONF" ASHLAROS_REACTIONS_CAMERAS)
+  saved=${saved#\"}
+  printf '%s\n' ${saved%\"}
+}
+
+reactions_label() {
+  local c=${1##*/usb-}
+  printf '%s' "${c%-video-index0}"
+}
+
+reactions_put_first() {
+  local -a known=() labels=()
   local c
+  # the saved order first, then whatever is plugged in that it lacks
+  while read -r c; do [[ -n $c ]] && known+=("$c"); done < <(reactions_order)
   for c in /dev/v4l/by-id/*-video-index0; do
     [[ -e $c && ${c,,} != *ir_camera* && ${c,,} != *_ir_* ]] || continue
-    cams+=("$c")
-    c=${c##*/usb-}
-    labels+=("${c%-video-index0}")
+    [[ " ${known[*]} " == *" $c "* ]] || known+=("$c")
   done
-  if ((${#cams[@]} == 0)); then
+  if ((${#known[@]} == 0)); then
     oops "No colour camera found under /dev/v4l/by-id."
     return 1
   fi
-  local choice i
-  choice=$(printf '%s\n' "${labels[@]}" | gum choose --header "Which camera?") || return 1
+  for c in "${known[@]}"; do labels+=("$(reactions_label "$c")"); done
+  local choice i first=""
+  choice=$(printf '%s\n' "${labels[@]}" | gum choose --header "Which camera first?") || return 1
   for i in "${!labels[@]}"; do
-    if [[ ${labels[$i]} == "$choice" ]]; then
-      conf_line "$REACTIONS_CONF" ASHLAROS_REACTIONS_CAMERA "ASHLAROS_REACTIONS_CAMERA=${cams[$i]}"
-      # a running service reads the file at start
-      systemctl --user try-restart "$REACTIONS_UNIT" >/dev/null 2>&1
-      say "✓ Reactions use $choice."
-      return 0
-    fi
+    [[ ${labels[$i]} == "$choice" ]] && first=${known[$i]} && break
   done
-  return 1
+  [[ -n $first ]] || return 1
+  local -a order=("$first")
+  for c in "${known[@]}"; do [[ $c == "$first" ]] || order+=("$c"); done
+  conf_line "$REACTIONS_CONF" ASHLAROS_REACTIONS_CAMERAS "ASHLAROS_REACTIONS_CAMERAS=\"${order[*]}\""
+  # a running service reads the file at start
+  systemctl --user try-restart "$REACTIONS_UNIT" >/dev/null 2>&1
+  say "✓ $choice first, whenever it is plugged in."
 }
 
 reactions_install() {
@@ -3955,10 +3971,8 @@ reactions_entry() {
   while true; do
     screen "Camera reactions"
 
-    local device="" camera
+    local device="" c
     device=$(reactions_device)
-    # the line is KEY=value, which conf_get reads as key and value
-    camera=$(conf_get "$REACTIONS_CONF" ASHLAROS_REACTIONS_CAMERA)
     if [[ -z $device ]]; then
       warn "! the virtual camera does not exist yet"
       say "  it is created at boot; restart once, or load it now below"
@@ -3967,7 +3981,25 @@ reactions_entry() {
     else
       say "  off"
     fi
-    say "  camera: ${camera:+${camera##*/usb-}}${camera:-the first colour camera}"
+    echo
+    local -a order=()
+    while read -r c; do [[ -n $c ]] && order+=("$c"); done < <(reactions_order)
+    if ((${#order[@]})); then
+      say "Cameras, first one plugged in is used:"
+      local n=0
+      for c in "${order[@]}"; do
+        n=$((n + 1))
+        if [[ -e $c ]]; then
+          say "  $n. $(reactions_label "$c")"
+        else
+          hint "  $n. $(reactions_label "$c")   (not plugged in)"
+        fi
+      done
+    else
+      say "Cameras: automatic - a plugged-in camera, else the built-in one."
+    fi
+    hint "Plugging in a camera higher up switches to it mid-call; unplugging"
+    hint "it falls back to the next, and the call keeps its camera."
     echo
     say "Hold a gesture for half a second:"
     say "  👍 thumbs up   👎 thumbs down   ✌️ balloons   🤘 horns   🤟 sparkles"
@@ -3985,7 +4017,9 @@ reactions_entry() {
     else
       entries+=("Turn on")
     fi
-    entries+=("Choose the camera" "Back")
+    entries+=("Put a camera first")
+    ((${#order[@]})) && entries+=("Back to automatic")
+    entries+=("Back")
 
     choice=$(gum choose --header "Camera reactions" "${entries[@]}") || return 0
     case $choice in
@@ -4013,9 +4047,15 @@ reactions_entry() {
         say "Off. The AshlarOS Camera stays listed but shows nothing."
         pause
         ;;
-      "Choose the camera")
+      "Put a camera first")
         screen "Camera reactions"
-        reactions_pick_camera
+        reactions_put_first
+        pause
+        ;;
+      "Back to automatic")
+        conf_line "$REACTIONS_CONF" ASHLAROS_REACTIONS_CAMERAS "ASHLAROS_REACTIONS_CAMERAS="
+        systemctl --user try-restart "$REACTIONS_UNIT" >/dev/null 2>&1
+        say "✓ Automatic: a plugged-in camera, else the built-in one."
         pause
         ;;
       *) return 0 ;;

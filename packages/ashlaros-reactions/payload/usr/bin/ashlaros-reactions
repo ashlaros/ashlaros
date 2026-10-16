@@ -10,6 +10,10 @@ v4l2loopback says when readers come and go, and between them this holds
 the device with one black frame and nothing else. So the camera light
 means what it always meant.
 
+Which real camera is a priority list: the first one plugged in wins, a
+better one plugged in mid-call takes over, and unplugging it falls back
+to the next - the call keeps the same virtual camera throughout.
+
     ashlaros-reactions            run, as ashlaros-reactions.service does
     ashlaros-reactions IMAGE...   print the gestures found in still images
 """
@@ -32,6 +36,14 @@ import numpy as np
 MODELS = Path("/usr/share/ashlaros-reactions/models")
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "ashlaros-reactions"
 WIDTH, HEIGHT, FPS = 1280, 720, 30
+# how often a running stream looks for a camera it would rather be using
+RECHECK = 1.0
+# a camera that would not open is not tried again for this long, or a
+# preferred camera busy in another application would have the stream
+# hop to it and back every RECHECK
+COOLDOWN = 15.0
+# what stream() returns when a better camera has turned up
+SWITCH = "switch"
 
 # How long a gesture has to be held before it counts, and how confidently.
 # Half a second is long enough that a hand passing through a thumbs-up on
@@ -47,16 +59,33 @@ def log(message: str):
     print(message, file=sys.stderr, flush=True)
 
 
-def pick_camera() -> str | None:
-    """The configured camera, or the first colour one. An infrared camera
-    is never a default: it sees in grey, and a call would get a ghost."""
-    configured = os.environ.get("ASHLAROS_REACTIONS_CAMERA")
-    if configured:
-        return configured
-    for path in sorted(Path("/dev/v4l/by-id").glob("*-video-index0")):
-        if "ir_camera" not in path.name.lower() and "_ir_" not in path.name.lower():
-            return str(path)
-    return None
+def _external(path: Path) -> bool:
+    """Whether the camera is a plug-in one. The USB device's `removable`
+    comes from the firmware's description of the port: a laptop's own
+    camera sits on a port marked fixed, anything plugged in does not."""
+    node = Path("/sys/class/video4linux") / path.resolve().name / "device"
+    try:
+        removable = (node.resolve().parent / "removable").read_text().strip()
+    except OSError:
+        return True
+    return removable != "fixed"
+
+
+def cameras() -> list[str]:
+    """The colour cameras plugged in now, best first.
+
+    ASHLAROS_REACTIONS_CAMERAS lists by-id paths in the order Settings was
+    given; cameras it does not name follow, plug-in ones before built-in,
+    so with nothing configured an external camera is preferred while it
+    is there. An infrared camera is never used: it sees in grey, and a
+    call would get a ghost."""
+    present = [p for p in sorted(Path("/dev/v4l/by-id").glob("*-video-index0"))
+               if "ir_camera" not in p.name.lower() and "_ir_" not in p.name.lower()]
+    order = os.environ.get("ASHLAROS_REACTIONS_CAMERAS", "").split()
+    present.sort(key=lambda p: (str(p) not in order,
+                                order.index(str(p)) if str(p) in order else 0,
+                                not _external(p)))
+    return [str(p) for p in present]
 
 
 def fit(frame: np.ndarray) -> np.ndarray:
@@ -166,9 +195,10 @@ class Trigger:
 
 
 def stream(camera_path: str, out: loopback.Loopback, recogniser: Recogniser,
-           library: effects.Library) -> str | None:
+           library: effects.Library, preferred) -> str | None:
     """One reading session: the camera is open from here to the return.
-    Returns why it stopped early, or None when the last reader left."""
+    Returns None when the last reader left, SWITCH when preferred() names
+    a better camera than this one, or why the camera failed."""
     camera = cv2.VideoCapture(camera_path, cv2.CAP_V4L2)
     if not camera.isOpened():
         return f"{camera_path} could not be opened"
@@ -183,6 +213,7 @@ def stream(camera_path: str, out: loopback.Loopback, recogniser: Recogniser,
         trigger = Trigger()
         playing: list[tuple[effects.Effect, float]] = []
         handled = 0.0
+        checked = time.monotonic()
         log(f"streaming from {camera_path}")
         while out.wait(0):
             ok, frame = camera.read()
@@ -192,6 +223,12 @@ def stream(camera_path: str, out: loopback.Loopback, recogniser: Recogniser,
             recogniser.offer(frame.copy())
 
             now = time.monotonic()
+            if now - checked > RECHECK:
+                checked = now
+                best = preferred()
+                if best and best != camera_path:
+                    log(f"{best} is preferred; switching to it")
+                    return SWITCH
             with recogniser.lock:
                 stamp, found = recogniser.result
             if stamp > handled:
@@ -229,22 +266,41 @@ def run() -> int:
     recogniser = Recogniser()
     recogniser.start()
     library = effects.Library(CACHE, HEIGHT)
+    failed: dict[str, float] = {}
+
+    def usable() -> list[str]:
+        now = time.monotonic()
+        return [c for c in cameras() if now - failed.get(c, -COOLDOWN) >= COOLDOWN]
+
+    def preferred() -> str | None:
+        return next(iter(usable()), None)
+
     while True:
-        if not out.wait(None):
+        # wait(0) first: blocking would sleep through a reader who is
+        # already there, waiting for one to arrive
+        if not (out.wait(0) or out.wait(None)):
             continue
-        camera = pick_camera()
-        problem = stream(camera, out, recogniser, library) if camera else "no camera found"
-        if problem is None:
+        problem = "no camera found"
+        # down the list until one streams: an unplugged or busy camera
+        # falls through to the next without the reader seeing a gap
+        for camera in usable():
+            outcome = stream(camera, out, recogniser, library, preferred)
+            if outcome in (None, SWITCH):
+                break
+            problem = outcome
+            failed[camera] = time.monotonic()
+            log(problem)
+        else:
+            out.write(yuyv(notice(problem)))
+            # tried again while someone is still watching: a camera may be
+            # busy in another application, or about to be plugged in
+            time.sleep(2)
+            continue
+        if outcome is None:
             log("no readers left; camera closed")
             # the last thing written is what the next reader sees first,
             # and it must not be a frame of whoever was on the last call
             out.write(idle)
-            continue
-        log(problem)
-        out.write(yuyv(notice(problem)))
-        # retried while someone is still watching: the camera may be busy
-        # in another application, or unplugged and coming back
-        time.sleep(2)
 
 
 def describe(paths: list[str]) -> int:

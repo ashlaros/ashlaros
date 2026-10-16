@@ -12,8 +12,8 @@ Description=Gesture reactions on the AshlarOS Camera
 
 [Service]
 Type=simple
-# the camera Settings chose, as ASHLAROS_REACTIONS_CAMERA; absent means
-# the first colour camera
+# the cameras Settings put in order, as ASHLAROS_REACTIONS_CAMERAS; the
+# first one plugged in is used, and absent means plug-in before built-in
 EnvironmentFile=-%E/ashlaros/reactions.conf
 ExecStart=/usr/bin/ashlaros-reactions
 Restart=on-failure
