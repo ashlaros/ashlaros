@@ -1766,9 +1766,9 @@ model_entry() {
 # 13. ORPHANS
 #
 # The hook (95-ashlaros-orphans.hook) reports after every transaction and
-# deliberately suggests nothing destructive. This is where the destructive
-# half lives: a checklist of the orphans, all ticked, and the full list of
-# what pacman would take shown before a confirm.
+# prints a named `pacman -Rns` line that pacman itself confirms. This is
+# the guided half: a checklist of the orphans, all ticked, and the full
+# list of what pacman would take shown before a confirm.
 #
 # `pacman -Qtdq | pacman -Rns -` is the command the upstream hook prints
 # and it is a footgun - not because it removes several at once, but
