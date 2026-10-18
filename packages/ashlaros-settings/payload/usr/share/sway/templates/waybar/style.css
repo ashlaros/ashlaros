@@ -47,6 +47,7 @@ window#waybar {
 
 /* Each module */
 #custom-pacman,
+#custom-herdr,
 #custom-more,
 #custom-menu,
 #custom-help,
@@ -93,6 +94,17 @@ window#waybar {
  * urgency hint. Swap the background only; the foreground is inherited. */
 #custom-scratchpad.urgent {
     background-color: @error_color;
+}
+
+/* An agent waiting for an answer is work stopped until you look; a done
+ * one can wait, and keeps the plain text colour. */
+#custom-herdr.blocked {
+    color: @theme_base_color;
+    background-color: @warning_color;
+}
+
+#custom-herdr.unreachable {
+    color: @error_color;
 }
 
 #battery {

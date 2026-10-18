@@ -236,6 +236,9 @@ optdepends=(
     # 442 MiB of OpenCV and vtk, measured, for a camera filter; offered
     # from Settings -> Camera reactions with that size said first
     'ashlaros-reactions: gesture reactions on a virtual camera for calls'
+    # the bar's agent module, hidden without it; AUR only, and its own
+    # tool rather than part of the desktop
+    'herdr: coding agents waiting on you, in the bar'
 )
 # generated_background.svg is rewritten on every theme apply, and the
 # per-user theme.conf is the file the theme switcher edits

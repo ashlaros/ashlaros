@@ -629,6 +629,22 @@ One limitation worth knowing: `COLORTERM` does not survive the link, so
 programs that detect 24-bit colour from that variable rather than from
 terminfo will fall back to 256 colours. Truecolor itself works.
 
+### Agents on other machines
+
+With [herdr](https://herdr.dev) installed (`herdr-bin` from the AUR), the
+bar shows coding agents that are waiting on you: `●2` for two stopped at
+an approval prompt or a question, `✓1` for one that finished and that
+nobody has looked at yet. It reads the local herdr server and every
+machine saved with `herdr machine add <ssh-host>`, so agents running on a
+workstation show up on the laptop. Clicking jumps to the first one waiting
+and raises the herdr window; while nothing needs you, the module is not
+there at all. A `?` means a saved machine did not answer, and the tooltip
+names it.
+
+Saved machines are reached the way herdr itself reaches them: your ssh
+config and keys, never a password prompt. A key with a passphrase needs
+`ssh-add` first.
+
 ## Contributing
 
 Building the ISO and the packages, how versions are derived, and what the

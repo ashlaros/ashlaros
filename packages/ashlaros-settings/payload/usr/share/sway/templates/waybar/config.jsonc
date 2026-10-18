@@ -28,6 +28,7 @@
     // indicators read now and then sit in group/more, behind a chevron
     // that slides them out while the pointer is over it.
     "modules-right": [
+        "custom/herdr",
         "custom/github",
         "group/more",
         // "temperature",
@@ -291,6 +292,19 @@
         "on-click": "xdg-open https://github.com/notifications && sleep 30 && waybar-signal github",
         "on-click-right": "waybar-signal github",
         "signal": 4
+    },
+    "custom/herdr": {
+        // agents waiting on you, local and on every saved herdr machine;
+        // empty, and so hidden, while none is
+        "interval": 10,
+        "tooltip": true,
+        "return-type": "json",
+        "format": "󰚩 {}",
+        "exec": "/usr/share/sway/scripts/herdr.sh status",
+        "exec-if": "/usr/share/sway/scripts/herdr.sh check",
+        "on-click": "/usr/share/sway/scripts/herdr.sh focus; waybar-signal herdr",
+        "on-click-right": "waybar-signal herdr",
+        "signal": 19
     },
     "custom/playerctl": {
         "interval": "once",
