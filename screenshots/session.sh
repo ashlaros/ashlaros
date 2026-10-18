@@ -110,9 +110,12 @@ raw = re.sub(r'^\s*//.*$', '', open(src).read(), flags=re.M)
 config = json.loads(raw)
 bars = config if isinstance(config, list) else [config]
 for bar in bars:
-    for side in ('modules-left', 'modules-center', 'modules-right'):
-        if side in bar:
-            bar[side] = [m for m in bar[side] if m != 'bluetooth']
+    # the side lists and every group's modules, since bluetooth sits in
+    # the drawer and a group starts its children like the bar does
+    lists = [bar[side] for side in ('modules-left', 'modules-center', 'modules-right') if side in bar]
+    lists += [v['modules'] for k, v in bar.items() if k.startswith('group/') and 'modules' in v]
+    for modules in lists:
+        modules[:] = [m for m in modules if m != 'bluetooth']
     bar.pop('bluetooth', None)
 target = os.path.expanduser('~/.config/waybar')
 os.makedirs(target, exist_ok=True)

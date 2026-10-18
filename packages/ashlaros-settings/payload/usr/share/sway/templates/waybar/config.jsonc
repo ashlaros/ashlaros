@@ -24,33 +24,49 @@
         "sway/mode",
         "custom/weather"
     ],
+    // What reports a count or a level stays on the bar; toggles and
+    // indicators read now and then sit in group/more, behind a chevron
+    // that slides them out while the pointer is over it.
     "modules-right": [
-        // informational
-        "sway/language",
         "custom/github",
-        "custom/clipboard",
-        "cpu",
+        "group/more",
         // "temperature",
         // "memory",
+        "network",
+        "pulseaudio",
         "battery",
         "custom/power-profile",
-        // connecting
-        "network",
-        "bluetooth",
-        // media
-        "custom/playerctl",
-        "custom/idle_inhibitor",
-        "custom/dnd",
-        "pulseaudio",
-        "backlight",
-        // system
-        "custom/theme",
-        "custom/adaptive-light",
-        "custom/sunset",
         "custom/pacman",
         "tray",
         "clock"
     ],
+    "group/more": {
+        "orientation": "inherit",
+        "drawer": {
+            "transition-duration": 300,
+            "children-class": "drawer-child",
+            // the chevron stays put on the right, the rest opens to its left
+            "transition-left-to-right": false
+        },
+        "modules": [
+            "custom/more",
+            "sway/language",
+            "custom/clipboard",
+            "cpu",
+            "bluetooth",
+            "custom/playerctl",
+            "custom/idle_inhibitor",
+            "custom/dnd",
+            "backlight",
+            "custom/theme",
+            "custom/adaptive-light",
+            "custom/sunset"
+        ]
+    },
+    "custom/more": {
+        "format": "",
+        "tooltip": false
+    },
     // -------------------------------------------------------------------------
     // Modules
     // -------------------------------------------------------------------------

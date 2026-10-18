@@ -145,8 +145,9 @@ know. The menu groups them by what you are looking for:
   brightness, when the screen dims, locks and sleeps, whether it stays on
   while media plays, the night light's warmth and hours, power profiles
 - **Appearance:** the day and night theme, the wallpaper, focus flashing,
-  automatic tiling, gaps and borders. The sun or moon in the bar switches
-  between the two; right-click it to have it follow sunrise and sunset.
+  automatic tiling, gaps and borders. The sun or moon in the bar (behind
+  its `‹`, which opens the bar's toggles on hover) switches between the
+  two; right-click it to have it follow sunrise and sunset.
   Right-clicking an image in the file manager offers Set as Background,
   which keeps it across theme switches and logins like the picker does
 - **Software:** kernel variants, hardware profiles, packages, packages
