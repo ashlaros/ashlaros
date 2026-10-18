@@ -295,7 +295,9 @@
     },
     "custom/herdr": {
         // agents waiting on you, local and on every saved herdr machine;
-        // empty, and so hidden, while none is
+        // hide-empty-text drops the icon too while none is, which an empty
+        // {} alone does not: the format string is never empty
+        "hide-empty-text": true,
         "interval": 10,
         "tooltip": true,
         "return-type": "json",
