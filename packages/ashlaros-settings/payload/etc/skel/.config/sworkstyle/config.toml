@@ -63,6 +63,11 @@
 # "com.microsoft.VSCode" on Wayland, its desktop file's StartupWMClass.
 # Upstream knows only 'Code' and 'code-oss', and matching is exact.
 'com.microsoft.VSCode' = ''
+# Vesktop (vesktop-bin) reports app_id "vesktop". Upstream has an entry,
+# but its icon is U+F392, Font Awesome 5's Discord codepoint, which Nerd
+# Fonts does not carry - the workspace showed a missing glyph. Nerd Fonts
+# has no dev or fae Discord icon, so fa-discord (U+F1FF).
+'vesktop' = ''
 # A foot window running tmux, zellij or herdr. None of them names itself in
 # the terminal title, so skel's .zshrc sets this app_id through foot's
 # OSC 176 while one runs and resets it at the next prompt. dev-tmux (U+E94C).
