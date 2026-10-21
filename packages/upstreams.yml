@@ -200,6 +200,8 @@ packages:
     arch: both
   wluma:
     upstream: https://aur.archlinux.org/wluma.git
+    # carries wluma-clamp-target.patch, so an upstream bump of pkgver or
+    # source=/b2sums= is expected to conflict with our additions there.
     arch: both
   # Arch's own vdirsyncer plus one unmerged upstream patch, not an AUR or
   # GitHub package - Arch packaging lives on gitlab.archlinux.org, which

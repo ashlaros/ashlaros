@@ -1,9 +1,16 @@
 # Maintainer: torculus <20175597+torculus@users.noreply.github.com>
 # Contributor: Maxim Baz <archlinux at maximbaz dot com>
 
+# Vendored from the AUR with one change: wluma-clamp-target.patch clamps a
+# predicted brightness to the device's current range before transitioning.
+# A value learned while max_brightness was higher (amdgpu_bl1 went 400000 ->
+# 65535 between boots) otherwise became a target set() can never reach, and
+# wluma retried it every 16ms forever - each write a backlight uevent that
+# waybar 0.15's battery module redraws on, starving its tooltips.
+
 pkgname=wluma
 pkgver=5.0.4
-pkgrel=1
+pkgrel=2
 license=('ISC')
 pkgdesc='Automatic brightness adjustment based on screen contents and ALS'
 url='https://github.com/maximbaz/wluma'
@@ -13,14 +20,17 @@ optdepends=('vulkan-driver: for using capturer=wlroots in config.toml'
             'wayland: for using capturer=wlroots in config.toml')
 makedepends=('cargo' 'clang' 'systemd' 'go-md2man')
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/max-baz/${pkgname}/archive/${pkgver}.tar.gz"
-        "https://github.com/max-baz/${pkgname}/releases/download/${pkgver}/${pkgname}-${pkgver}.tar.gz.asc")
+        "https://github.com/max-baz/${pkgname}/releases/download/${pkgver}/${pkgname}-${pkgver}.tar.gz.asc"
+        "wluma-clamp-target.patch")
 b2sums=('d6525cc63c46230717d6e2d684183160f83f14312339b07277cd2f7c23c2d05f67a5703398b546fa51f92d34a877ff9a47b9cf275700334ec25017acf46fd94c'
-	'db673d5ee6d0cd8345ad429467e8c9ce4c7d10c01efb148f01f4b94b13042d03908ae471fe6f16be18b6741f6ac12f27bf15b2468f493149ce0f729bc89ec22f')
+	'db673d5ee6d0cd8345ad429467e8c9ce4c7d10c01efb148f01f4b94b13042d03908ae471fe6f16be18b6741f6ac12f27bf15b2468f493149ce0f729bc89ec22f'
+	'bb1dcd93f84b15494d6dfd9e57d7096a2e99f0a8140d8902f0150d255016602c9618bcec594b1f8e2dd9baff337c1c63ac119b2b618458c0d293cdc949010dcc')
 validpgpkeys=('56C3E775E72B0C8B1C0C1BD0B5DB77409B11B601')
 options=(!lto)
 
 prepare() {
     cd ${pkgname}-${pkgver}
+    patch -Np1 -i "$srcdir/wluma-clamp-target.patch"
     export RUSTUP_TOOLCHAIN=stable
     cargo fetch --locked --target host-tuple
 }

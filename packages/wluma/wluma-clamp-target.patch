@@ -1,0 +1,102 @@
+diff --git a/src/brightness/controller.rs b/src/brightness/controller.rs
+index c6617dd..04d1554 100644
+--- a/src/brightness/controller.rs
++++ b/src/brightness/controller.rs
+@@ -395,6 +395,10 @@ impl Controller {
+     }
+ 
+     fn update_target(&mut self, desired: u64) {
++        // A learned value can exceed what the device accepts now, e.g. after
++        // max_brightness changed between boots. Unclamped, the transition
++        // retries a target that set() can never reach, every step, forever.
++        let desired = desired.clamp(self.brightness.min(), self.brightness.max());
+         match (&self.target, self.current) {
+             (Some(old_target), _) if old_target.desired == desired => (),
+             (_, Some(current))
+@@ -456,10 +460,15 @@ mod tests {
+     }
+ 
+     fn brightness_mock(get: Vec<u64>, set: Vec<u64>) -> Brightness {
++        brightness_mock_with_max(get, set, 100)
++    }
++
++    fn brightness_mock_with_max(get: Vec<u64>, set: Vec<u64>, max: u64) -> Brightness {
+         Brightness::Mock {
+             get,
+             set,
+             change_threshold: 1,
++            max,
+         }
+     }
+ 
+@@ -573,6 +582,7 @@ mod tests {
+             get: vec![],
+             set: vec![],
+             change_threshold: 20,
++            max: 65535,
+         };
+         let mut controller = Controller::new(brightness, user_tx, prediction_rx);
+         controller.current = Some(10000);
+@@ -588,7 +598,7 @@ mod tests {
+ 
+     #[test]
+     fn test_update_target_finds_minimal_step_that_reaches_target_within_transition_duration() {
+-        let (mut controller, _, _) = setup(brightness_mock(vec![], vec![]));
++        let (mut controller, _, _) = setup(brightness_mock_with_max(vec![], vec![], 65535));
+ 
+         let test_cases = vec![
+             (0, 1, 1),
+@@ -613,6 +623,32 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn test_update_target_clamps_desired_to_device_range() {
++        let (mut controller, _, _) = setup(brightness_mock(vec![], vec![]));
++        controller.current = Some(90);
++
++        // a value learned when the device accepted more than it does now
++        controller.update_target(377);
++
++        assert_eq!(Some(target(100, 1)), controller.target);
++    }
++
++    #[apply(test!)]
++    async fn test_transition_ends_at_device_max_for_unreachable_prediction() {
++        let (mut controller, _, _) = setup(brightness_mock(vec![], vec![100]));
++        controller.current = Some(99);
++
++        controller.update_target(377);
++        controller.transition().await;
++        // set() clamps to max, so an unclamped target would never be reached
++        controller.transition().await;
++
++        assert_eq!(Some(100), controller.current);
++        assert_eq!(None, controller.target);
++        assert!(is_brightness_spent(&controller.brightness));
++    }
++
+     #[apply(test!)]
+     async fn test_transition_reset_target_when_reached() {
+         let (mut controller, _, _) = setup(brightness_mock(vec![], vec![]));
+diff --git a/src/brightness/mod.rs b/src/brightness/mod.rs
+index 375bb46..a2d1280 100644
+--- a/src/brightness/mod.rs
++++ b/src/brightness/mod.rs
+@@ -17,6 +17,7 @@ pub enum Brightness {
+         get: Vec<u64>,
+         set: Vec<u64>,
+         change_threshold: u64,
++        max: u64,
+     },
+ }
+ 
+@@ -60,7 +61,7 @@ impl Brightness {
+             Brightness::Backlight(b) => b.max(),
+ 
+             #[cfg(test)]
+-            Brightness::Mock { .. } => 100,
++            Brightness::Mock { max, .. } => *max,
+         }
+     }
+ 
