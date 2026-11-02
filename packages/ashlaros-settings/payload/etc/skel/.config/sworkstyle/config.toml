@@ -73,6 +73,10 @@
 # Upstream has no entry under any name. Nerd Fonts has no dev or fae
 # YouTube icon, so fa-youtube_play (U+F16A).
 'com.github.th-ch.youtube-music' = ''
+# Teams for Linux (teams-for-linux) reports app_id "teams-for-linux".
+# Upstream has no entry under any name. Nerd Fonts has no dev, fae or fa
+# Teams icon, so md-microsoft_teams (U+F02BB).
+'teams-for-linux' = '󰊻'
 # A foot window running tmux, zellij or herdr. None of them names itself in
 # the terminal title, so skel's .zshrc sets this app_id through foot's
 # OSC 176 while one runs and resets it at the next prompt. dev-tmux (U+E94C).
