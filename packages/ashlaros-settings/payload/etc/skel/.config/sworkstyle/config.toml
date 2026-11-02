@@ -77,6 +77,56 @@
 # Upstream has no entry under any name. Nerd Fonts has no dev, fae or fa
 # Teams icon, so md-microsoft_teams (U+F02BB).
 'teams-for-linux' = '󰊻'
+# The names below were read off real windows - each application launched
+# on a headless sway - not taken from desktop files, which disagree with
+# the window for photocraft, C3, Open RTS, OpenRA and the arcade. None has
+# an entry upstream, or only under a different case.
+# Chromium on Wayland reports "chromium"; upstream knows only 'Chromium'.
+'chromium' = ''
+# ONLYOFFICE runs under XWayland with class "ONLYOFFICE". fa-file_text.
+'ONLYOFFICE' = ''
+'proton-pass' = ''
+# ntfy Desktop. fa-bell.
+'moe.emmaexe.ntfyDesktop' = ''
+# Gear Lever, the AppImage manager. fa-cube.
+'it.mijorus.gearlever' = ''
+# Tabularis, a database client. dev-database.
+'tabularis' = ''
+'lxqt-archiver' = ''
+# Storyteller's craft suite, one icon per tool. GridCraft and WordCraft run
+# under XWayland and report these as their class; the rest as app_id.
+'ai.storyteller.artcraft-launcher' = ''
+'ai.storyteller.effectcraft' = '󱜗'
+'ai.storyteller.filmcraft' = ''
+'ai.storyteller.gridcraft' = ''
+'ai.storyteller.pdfcraft' = ''
+'ai.storyteller.vectorcraft' = ''
+'ai.storyteller.wordcraft' = '󰈬'
+'ai.storyteller.photocraft' = ''
+# Agent Moshpit, an office for coding agents. fa-robot.
+'agent-moshpit' = ''
+# C3, agent orchestration. fa-sitemap.
+'c3-desktop' = ''
+# Games. The arcade (ashlaros-arcade) is raylib under XWayland and its
+# class is its window title. All three OpenRA mods share class "OpenRA".
+# Open RTS reports class "g2-client".
+'AshlarOS Arcade' = ''
+'OpenRA' = '󰴺'
+'g2-client' = '󰞇'
+# Settings and hardware tools.
+'system-config-printer' = ''
+'kvantummanager' = '󰢵'
+'qt5ct' = ''
+'qt6ct' = ''
+# lstopo (hwloc) runs under XWayland with class "lstopo". fa-microchip.
+'lstopo' = ''
+# Not read off a window: qv4l2 and qvidcap would not start headless, and
+# gpsd's xgps and xgpsspeed need python-cairo. Qt and GTK fall back to the
+# binary name for app_id when an application sets none, and these set none.
+'qv4l2' = ''
+'qvidcap' = ''
+'xgps' = ''
+'xgpsspeed' = '󰓅'
 # A foot window running tmux, zellij or herdr. None of them names itself in
 # the terminal title, so skel's .zshrc sets this app_id through foot's
 # OSC 176 while one runs and resets it at the next prompt. dev-tmux (U+E94C).
