@@ -68,6 +68,11 @@
 # Fonts does not carry - the workspace showed a missing glyph. Nerd Fonts
 # has no dev or fae Discord icon, so fa-discord (U+F1FF).
 'vesktop' = ''
+# Pear Desktop (pear-desktop, formerly th-ch/youtube-music) reports app_id
+# "com.github.th-ch.youtube-music", its desktop file's StartupWMClass.
+# Upstream has no entry under any name. Nerd Fonts has no dev or fae
+# YouTube icon, so fa-youtube_play (U+F16A).
+'com.github.th-ch.youtube-music' = ''
 # A foot window running tmux, zellij or herdr. None of them names itself in
 # the terminal title, so skel's .zshrc sets this app_id through foot's
 # OSC 176 while one runs and resets it at the next prompt. dev-tmux (U+E94C).
