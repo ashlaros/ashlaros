@@ -42,16 +42,23 @@ jobs:
         # include the other architecture a player might be running. The
         # wasm check above says nothing about it: aarch64 is a third code
         # generator, and the one shipped in the ARM package.
+        #
+        # qemu-user, not qemu-user-static: ubuntu-latest moved to Ubuntu
+        # 26.04 in October 2026, where qemu-user-static is a virtual
+        # package - apt stops at it with exit 100 and installs nothing -
+        # and the emulator is qemu-aarch64 without the -static suffix.
+        # qemu-user ships that name on 24.04 as well, so both lines below
+        # work on either image while the label straddles the two.
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user-static
+          sudo apt-get install -y gcc-aarch64-linux-gnu qemu-user
           rustup target add aarch64-unknown-linux-gnu
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
             cargo test --release --manifest-path core/Cargo.toml \
             --target aarch64-unknown-linux-gnu --no-run
           binary=$(find core/target/aarch64-unknown-linux-gnu/release/deps \
             -name 'cross_target-*' -type f -executable | head -1)
-          QEMU_LD_PREFIX=/usr/aarch64-linux-gnu qemu-aarch64-static "$binary"
+          QEMU_LD_PREFIX=/usr/aarch64-linux-gnu qemu-aarch64 "$binary"
           diff /tmp/x86_64-results.txt core/target/native-results.txt \
             && echo "aarch64 and x86_64 agree" 
 
