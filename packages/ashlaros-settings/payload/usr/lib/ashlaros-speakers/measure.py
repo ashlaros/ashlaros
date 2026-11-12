@@ -290,6 +290,14 @@ context.modules = [
         node.dont-fallback = true
         node.linger = true
         media.role = "DSP"
+        # this stream's target is filter.smart.target above and nothing
+        # else: a target restored from stream state can name this
+        # filter's own sink, canLink rejects it for the shared
+        # link-group, and dont-fallback then stops the linking event
+        # instead of falling back - the filter never reaches the
+        # speaker and every app plays into silence
+        state.restore-target = false
+        node.dont-move = true
       }}
     }}
   }}
@@ -327,6 +335,23 @@ def selftest():
         print(f"trial {trial}: {len(faults)} fault(s), deviation {before:.2f} dB -> "
               f"{after:.2f} dB with {len(filters)} filter(s)")
     print(f"worst remaining ratio {worst:.2f}")
+
+    # The guards in playback.props, checked here because the drop-in is
+    # this file's product and the failure they prevent is silent: without
+    # them WirePlumber restores a persisted target for the playback
+    # stream, a stale one naming this filter's own sink is rejected by
+    # canLink, and dont-fallback then stops the linking event instead of
+    # falling back - apps play into the filter and no sound comes out.
+    drop = dropin("alsa_output.pci-0000_00_1f.3.HiFi__Speaker__sink", "Speaker",
+                  ["FL", "FR"], [[(1000.0, -3.0, 1.0)], [(1000.0, -3.0, 1.0)]],
+                  "deviation 0.0 dB -> 0.0 dB")
+    block = drop.split("playback.props = {", 1)
+    assert len(block) == 2, "the drop-in has no playback.props block"
+    body = block[1].split("}", 1)[0]
+    assert "state.restore-target = false" in body, \
+        "playback stream could restore a target from stream state"
+    assert "node.dont-move = true" in body, \
+        "playback stream could be moved off its speaker"
 
 
 def sweep_file(path, channels, index):

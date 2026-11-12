@@ -125,10 +125,13 @@ jobs:
           python3 scripts/generate_gallery.py --check
       - name: the speaker fit flattens synthetic speakers
         # measure.py's own selftest: known faults in, a delay and noise on
-        # top, and it must find and flatten them. The only check of the
-        # DSP that needs no speaker and no room (#92). numpy is installed
-        # here rather than in requirements.txt: it is the package's
-        # optdepend, and no script under scripts/ imports it.
+        # top, and it must find and flatten them. It also asserts the
+        # drop-in it writes keeps the playback stream's target guards,
+        # whose absence disconnects the filter from its speaker with
+        # nothing to see but silence. The only checks of #92 that need
+        # no speaker and no room. numpy is installed here rather than in
+        # requirements.txt: it is the package's optdepend, and no script
+        # under scripts/ imports it.
         run: |
           uv pip install --system numpy
           python3 packages/ashlaros-settings/payload/usr/lib/ashlaros-speakers/measure.py selftest
