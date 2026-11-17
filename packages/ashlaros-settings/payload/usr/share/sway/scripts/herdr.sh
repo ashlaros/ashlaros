@@ -6,9 +6,11 @@
 #   done     finished, and nobody has looked at it yet            ✓N
 #
 # check:  whether herdr is installed, for exec-if
-# status: the JSON waybar renders; empty when nothing needs you
+# status: the JSON waybar renders; empty when nothing needs you and
+#         sounds are on
 # focus:  focus the first blocked agent (else the first done one) on its
 #         server, which also marks it seen, and raise a herdr window
+# sound:  turn herdr's sounds off, or back on
 #
 # Remote machines are read through `herdr --machine <id> api snapshot`,
 # herdr's own forwarding: the SSH target, session and remote binary are
@@ -21,6 +23,55 @@
 # herdr's event subscription would push changes instead of polling, but
 # it is per pane and per server: it misses panes created later, and would
 # hold one stream open per machine.
+#
+# Sounds play in the herdr client, from [ui.sound] enabled in the local
+# config.toml, and only the server a client is showing can tell it to
+# reload. So `sound` reloads the local server and every saved machine:
+# whichever one the client shows passes the reload on.
+
+config_file() {
+    echo "${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}"
+}
+
+# herdr's default is on; only an explicit `enabled = false` in [ui.sound]
+# ([ui.sound.agents] is a different table) turns it off.
+sound_enabled() {
+    local file
+    file=$(config_file)
+    [ -f "$file" ] || return 0
+    awk '
+        /^[[:space:]]*\[/ { s = $0 ~ /^[[:space:]]*\[ui\.sound\][[:space:]]*(#.*)?$/ }
+        s && /^[[:space:]]*enabled[[:space:]]*=/ {
+            v = $0
+            sub(/^[^=]*=[[:space:]]*/, "", v)
+            sub(/[[:space:]]*(#.*)?$/, "", v)
+            e = v
+        }
+        END { exit e == "false" }
+    ' "$file"
+}
+
+# Rewrites only the enabled line: any old one in [ui.sound] goes, a new one
+# follows the header, and a config without the table gets it appended.
+toggle_sound() {
+    local file tmp value=false id
+    file=$(config_file)
+    sound_enabled || value=true
+    mkdir -p "$(dirname "$file")"
+    tmp=$(mktemp "$file.XXXXXX") || exit 1
+    { [ -f "$file" ] && cat "$file"; } | awk -v v="$value" '
+        /^[[:space:]]*\[/ { s = $0 ~ /^[[:space:]]*\[ui\.sound\][[:space:]]*(#.*)?$/ }
+        s && /^[[:space:]]*enabled[[:space:]]*=/ { next }
+        { print }
+        s && /^[[:space:]]*\[/ && !found { print "enabled = " v; found = 1 }
+        END { if (!found) printf "%s[ui.sound]\nenabled = %s\n", (NR ? "\n" : ""), v }
+    ' >"$tmp" && cat "$tmp" >"$file"
+    rm -f "$tmp"
+    herdr server reload-config </dev/null >/dev/null 2>&1
+    while IFS=$'\t' read -r id _; do
+        [ -n "$id" ] && herdr --machine "$id" server reload-config </dev/null >/dev/null 2>&1
+    done < <(machines)
+}
 
 machines() {
     herdr machine list --json 2>/dev/null |
@@ -65,17 +116,24 @@ collect() {
 }
 
 status() {
-    collect | jq -c '
+    local muted=false
+    sound_enabled || muted=true
+    collect | jq -c --argjson muted "$muted" '
         def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
         (.agents | map(select(.s == "blocked")) | length) as $b
         | (.agents | map(select(.s == "done")) | length) as $d
         # name the server on each line unless everything is local
         | (.agents | map(.server) | unique | . != [] and . != ["local"]) as $named
-        | if $b + $d == 0 and (.unreachable | length) == 0 then {text: ""}
+        | if $b + $d == 0 and (.unreachable | length) == 0 then
+            # muted stays visible: a silent bar should not look like a quiet one
+            if $muted then {text: "󰖁", class: "muted",
+                            tooltip: "herdr sounds are off\n\nmiddle-click: sounds on"}
+            else {text: ""} end
           else {
             text: ([if $b > 0 then "●\($b)" else empty end,
                     if $d > 0 then "✓\($d)" else empty end,
-                    if (.unreachable | length) > 0 then "?" else empty end] | join(" ")),
+                    if (.unreachable | length) > 0 then "?" else empty end,
+                    if $muted then "󰖁" else empty end] | join(" ")),
             class: (if $b > 0 then "blocked" elif $d > 0 then "done" else "unreachable" end),
             tooltip: (
                 (.agents | sort_by(.s != "blocked") | map(
@@ -87,8 +145,10 @@ status() {
                    "●N  blocked: waiting for your approval or answer",
                    "✓N  done: finished, not looked at yet",
                    "?   a saved machine did not answer",
-                   "hidden while every agent is idle or working",
-                   "click: jump to the first blocked (else done) agent"]
+                   "󰖁   herdr sounds are off",
+                   "hidden while every agent is idle or working and sounds are on",
+                   "click: jump to the first blocked (else done) agent",
+                   "middle-click: sounds " + (if $muted then "on" else "off" end)]
                 | join("\n") | esc)
           } end'
 }
@@ -114,8 +174,9 @@ case $1 in
     check) command -v herdr >/dev/null ;;
     status) status ;;
     focus) focus ;;
+    sound) toggle_sound ;;
     *)
-        echo "usage: $0 check|status|focus" >&2
+        echo "usage: $0 check|status|focus|sound" >&2
         exit 2
         ;;
 esac

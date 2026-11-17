@@ -296,7 +296,8 @@
     "custom/herdr": {
         // agents waiting on you, local and on every saved herdr machine;
         // hide-empty-text drops the icon too while none is, which an empty
-        // {} alone does not: the format string is never empty
+        // {} alone does not: the format string is never empty. Middle-click
+        // mutes herdr's sounds; muted, the module stays to say so
         "hide-empty-text": true,
         "interval": 10,
         "tooltip": true,
@@ -305,6 +306,7 @@
         "exec": "/usr/share/sway/scripts/herdr.sh status",
         "exec-if": "/usr/share/sway/scripts/herdr.sh check",
         "on-click": "/usr/share/sway/scripts/herdr.sh focus; waybar-signal herdr",
+        "on-click-middle": "/usr/share/sway/scripts/herdr.sh sound; waybar-signal herdr",
         "on-click-right": "waybar-signal herdr",
         "signal": 19
     },
