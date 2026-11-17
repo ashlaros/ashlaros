@@ -107,6 +107,11 @@
 'agent-moshpit' = ''
 # C3, agent orchestration. fa-sitemap.
 'c3-desktop' = ''
+# herdr-app, the herdr GUI client: the window the waybar herdr module
+# reports its agents in, reports app_id "herdr-app", which upstream's
+# compiled table has no entry for. The same glyph as that module.
+# md-robot (U+F06A9).
+'herdr-app' = '󰚩'
 # Games. The arcade (ashlaros-arcade) is raylib under XWayland and its
 # class is its window title. All three OpenRA mods share class "OpenRA".
 # Open RTS reports class "g2-client".
